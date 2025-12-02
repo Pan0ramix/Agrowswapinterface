@@ -47,7 +47,12 @@ export default async function fetchTokenList({
     }
     urls = uriToHttpUrls(`${translatedUri}${parsedENS.ensPath ?? ''}`)
   } else {
-    urls = uriToHttpUrls(listUrl)
+    // Handle relative paths starting with '/' (e.g., files in public folder)
+    if (listUrl.startsWith('/') && typeof window !== 'undefined') {
+      urls = [`${window.location.origin}${listUrl}`]
+    } else {
+      urls = uriToHttpUrls(listUrl)
+    }
   }
 
   if (urls.length === 0) {

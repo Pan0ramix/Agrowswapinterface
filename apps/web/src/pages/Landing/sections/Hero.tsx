@@ -62,7 +62,7 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
         } else {
           return (
             <Fragment key={`${index}-${word}`}>
-              <RiseInText delay={index * 0.1}>{word}</RiseInText>{' '}
+              <RiseInText $delay={index * 0.1}>{word}</RiseInText>{' '}
             </Fragment>
           )
         }
@@ -112,7 +112,7 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
           </Text>
         </Flex>
 
-        <RiseIn delay={0.4}>
+        <RiseIn $delay={0.4}>
           <Flex
             pointerEvents="auto"
             width={480}
@@ -134,7 +134,7 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
           </Flex>
         </RiseIn>
 
-        <RiseIn delay={0.3}>
+        <RiseIn $delay={0.3}>
           <Text variant="body1" textAlign="center" maxWidth={430} color="$neutral2" $short={{ variant: 'body2' }}>
             <Trans i18nKey="hero.subtitle" values={{ amount: chains.length }} />
           </Text>
@@ -152,7 +152,7 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
         style={{ transform: `translate(0px, ${translateY}px)`, opacity: opacityY }}
         $lgHeight={{ display: 'none' }}
       >
-        <RiseIn delay={0.3}>
+        <RiseIn $delay={0.3}>
           <Flex
             alignItems="center"
             justifyContent="flex-start"

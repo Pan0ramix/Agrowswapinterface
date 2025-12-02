@@ -256,7 +256,11 @@ export const routes: RouteDefinition[] = [
   // Refreshed pool routes
   createRouteDefinition({
     path: '/positions/create',
-    getElement: () => <CreatePosition />,
+    getElement: () => (
+      <Suspense fallback={null}>
+        <CreatePosition />
+      </Suspense>
+    ),
     getTitle: getPositionPageTitle,
     getDescription: getPositionPageDescription,
     nestedPaths: [':protocolVersion'],

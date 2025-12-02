@@ -28,9 +28,9 @@ export default function Updater(): null {
       return
     }
     DEFAULT_INACTIVE_LIST_URLS.forEach((url) => {
-      fetchList(url, false).catch((error) =>
-        logger.debug('lists/updater', 'Updater', 'interval list fetching error', error),
-      )
+      fetchList(url, true).catch((error) => {
+        logger.debug('lists/updater', 'Updater', 'interval list fetching error', error)
+      })
     })
   }, [fetchList, isWindowVisible])
 
@@ -45,7 +45,7 @@ export default function Updater(): null {
     // whenever a list is not loaded and not loading, try again to load it
     Object.keys(lists).forEach((listUrl) => {
       const list = lists[listUrl]
-      if (!list.current && !list.loadingRequestId && !list.error) {
+      if (list && !list.current && !list.loadingRequestId && !list.error) {
         fetchList(listUrl).catch((error) =>
           logger.debug('lists/updater', 'Updater', 'list added fetching error', error),
         )
@@ -53,10 +53,14 @@ export default function Updater(): null {
     })
     DEFAULT_INACTIVE_LIST_URLS.forEach((listUrl) => {
       const list = lists[listUrl]
-      if (!list.current && !list.loadingRequestId && !list.error) {
-        fetchList(listUrl, /* isUnsupportedList= */ true).catch((error) =>
-          logger.debug('lists/updater', 'Updater', 'list added fetching error', error),
-        )
+      if (list && !list.current && !list.loadingRequestId && !list.error) {
+        // Skip validation for inactive lists to avoid validation errors
+        fetchList(listUrl, true)
+          .then((tokenList) => {})
+          .catch((error) => {
+            logger.debug('lists/updater', 'Updater', 'list added fetching error', error)
+          })
+      } else if (list.current) {
       }
     })
   }, [fetchList, lists, rehydrated])
@@ -69,7 +73,7 @@ export default function Updater(): null {
 
     Object.keys(lists).forEach((listUrl) => {
       const list = lists[listUrl]
-      if (list.current && list.pendingUpdate) {
+      if (list && list.current && list.pendingUpdate) {
         const bump = getVersionUpgrade(list.current.version, list.pendingUpdate.version)
         switch (bump) {
           case VersionUpgrade.NONE:

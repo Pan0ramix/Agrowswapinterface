@@ -1,5 +1,8 @@
 import { toContractInput } from 'appGraphql/data/util'
-import { MULTICALL_ADDRESSES, NONFUNGIBLE_POSITION_MANAGER_ADDRESSES as V3NFT_ADDRESSES } from '@uniswap/sdk-core'
+import {
+  MULTICALL_ADDRESSES as SDK_MULTICALL_ADDRESSES,
+  NONFUNGIBLE_POSITION_MANAGER_ADDRESSES as SDK_V3NFT_ADDRESSES,
+} from '@uniswap/sdk-core'
 import MulticallJSON from '@uniswap/v3-periphery/artifacts/contracts/lens/UniswapInterfaceMulticall.sol/UniswapInterfaceMulticall.json'
 import NFTPositionManagerJSON from '@uniswap/v3-periphery/artifacts/contracts/NonfungiblePositionManager.sol/NonfungiblePositionManager.json'
 import { GraphQLApi } from '@universe/api'
@@ -10,6 +13,10 @@ import { BaseContract } from 'ethers/lib/ethers'
 import { useAccount } from 'hooks/useAccount'
 import { useMemo } from 'react'
 import { NonfungiblePositionManager, UniswapInterfaceMulticall } from 'uniswap/src/abis/types/v3'
+import {
+  AGROSWAP_MULTICALL_ADDRESSES,
+  AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES,
+} from 'uniswap/src/constants/agroswapAddresses'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { useIsSupportedChainIdCallback } from 'uniswap/src/features/chains/hooks/useSupportedChainId'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
@@ -58,16 +65,27 @@ function useContractMultichain<T extends BaseContract>({
 }
 
 export function useV3ManagerContracts(chainIds: UniverseChainId[]): ContractMap<NonfungiblePositionManager> {
+  // Use Agroswap addresses for Base Sepolia, otherwise use SDK addresses
+  const addressMap = { ...SDK_V3NFT_ADDRESSES }
+  if (chainIds.includes(UniverseChainId.BaseSepolia)) {
+    addressMap[UniverseChainId.BaseSepolia] =
+      AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[UniverseChainId.BaseSepolia]
+  }
   return useContractMultichain<NonfungiblePositionManager>({
-    addressMap: V3NFT_ADDRESSES,
+    addressMap,
     ABI: NFTPositionManagerJSON.abi,
     chainIds,
   })
 }
 
 export function useInterfaceMulticallContracts(chainIds: UniverseChainId[]): ContractMap<UniswapInterfaceMulticall> {
+  // Use Agroswap addresses for Base Sepolia, otherwise use SDK addresses
+  const addressMap = { ...SDK_MULTICALL_ADDRESSES }
+  if (chainIds.includes(UniverseChainId.BaseSepolia)) {
+    addressMap[UniverseChainId.BaseSepolia] = AGROSWAP_MULTICALL_ADDRESSES[UniverseChainId.BaseSepolia]
+  }
   return useContractMultichain<UniswapInterfaceMulticall>({
-    addressMap: MULTICALL_ADDRESSES,
+    addressMap,
     ABI: MulticallJSON.abi,
     chainIds,
   })

@@ -47,16 +47,15 @@ export const AmountInput = forwardRef<Input, Props>(function _AmountInput(
 
   const handleChange = useCallback(
     (val: string) => {
-      onChangeText?.(
-        parseValue({
-          value: val,
-          decimalSeparator,
-          groupingSeparator,
-          showSoftInputOnFocus,
-          nativeKeyboardDecimalSeparator,
-          maxDecimals,
-        }),
-      )
+      const parsedValue = parseValue({
+        value: val,
+        decimalSeparator,
+        groupingSeparator,
+        showSoftInputOnFocus,
+        nativeKeyboardDecimalSeparator,
+        maxDecimals,
+      })
+      onChangeText?.(parsedValue)
     },
     [
       decimalSeparator,

@@ -75,6 +75,8 @@ export function fromGraphQLChain(chain: GraphQLApi.Chain | string | undefined): 
       return UniverseChainId.Avalanche
     case GraphQLApi.Chain.Base:
       return UniverseChainId.Base
+    case GraphQLApi.Chain.BaseSepolia:
+      return UniverseChainId.BaseSepolia
     case GraphQLApi.Chain.Bnb:
       return UniverseChainId.Bnb
     case GraphQLApi.Chain.Blast:
@@ -124,6 +126,8 @@ export function fromUniswapWebAppLink(network: string | null): UniverseChainId {
       return UniverseChainId.Avalanche
     case GraphQLApi.Chain.Base.toLowerCase():
       return UniverseChainId.Base
+    case GraphQLApi.Chain.BaseSepolia.toLowerCase():
+      return UniverseChainId.BaseSepolia
     case GraphQLApi.Chain.Blast.toLowerCase():
       return UniverseChainId.Blast
     case GraphQLApi.Chain.Bnb.toLowerCase():
@@ -167,6 +171,8 @@ export function toUniswapWebAppLink(chainId: UniverseChainId): string | null {
       return GraphQLApi.Chain.Avalanche.toLowerCase()
     case UniverseChainId.Base:
       return GraphQLApi.Chain.Base.toLowerCase()
+    case UniverseChainId.BaseSepolia:
+      return GraphQLApi.Chain.BaseSepolia.toLowerCase()
     case UniverseChainId.Blast:
       return GraphQLApi.Chain.Blast.toLowerCase()
     case UniverseChainId.Bnb:

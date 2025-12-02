@@ -270,8 +270,28 @@ function CreatePositionContent({
   )
 }
 
-export default function CreatePosition() {
-  // URL format is `/positions/create/:protocolVersion`, with possible searchParams `?currencyA=...&currencyB=...&chain=...&feeTier=...&hook=...`
+// Wrapper to ensure NuqsAdapter context is available before rendering
+function CreatePositionWrapper() {
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    // Use requestAnimationFrame to ensure React has finished rendering the context tree
+    // This ensures NuqsAdapter context is available before we try to use useQueryState
+    const frameId = requestAnimationFrame(() => {
+      setIsMounted(true)
+    })
+    return () => {
+      cancelAnimationFrame(frameId)
+    }
+  }, [])
+
+  if (!isMounted) {
+    return null
+  }
+  return <CreatePositionMain />
+}
+
+function CreatePositionMain() {
   const { protocolVersion } = useParams<{
     protocolVersion: string
   }>()
@@ -281,6 +301,8 @@ export default function CreatePosition() {
     version: paramsProtocolVersion,
   })
 
+  // useLiquidityUrlState requires NuqsAdapter context which is provided at the root level
+  // The wrapper ensures the context is available before this component renders
   const initialInputs = useLiquidityUrlState()
 
   if (initialInputs.loading) {
@@ -295,3 +317,6 @@ export default function CreatePosition() {
     />
   )
 }
+
+// Export wrapper to ensure NuqsAdapter context is available
+export default CreatePositionWrapper

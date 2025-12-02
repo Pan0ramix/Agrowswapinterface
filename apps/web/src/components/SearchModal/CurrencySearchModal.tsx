@@ -1,7 +1,7 @@
 import { Currency } from '@uniswap/sdk-core'
 import { SwitchNetworkAction } from 'components/Popups/types'
 import { CurrencySearch } from 'components/SearchModal/CurrencySearch'
-import { memo } from 'react'
+import { memo, useEffect } from 'react'
 import { Modal } from 'uniswap/src/components/modals/Modal'
 import {
   TOKEN_SELECTOR_WEB_MAX_WIDTH,
@@ -32,7 +32,15 @@ export default memo(function CurrencySearchModal({
   switchNetworkAction,
   chainIds,
   variation,
+  selectedCurrency,
+  otherSelectedCurrency,
 }: CurrencySearchModalProps) {
+  useEffect(() => {
+    if (isOpen) {
+    } else {
+    }
+  }, [isOpen])
+
   return (
     <Modal
       isModalOpen={isOpen}
@@ -51,6 +59,8 @@ export default memo(function CurrencySearchModal({
         onDismiss={onDismiss}
         chainIds={chainIds}
         variation={variation}
+        selectedCurrency={selectedCurrency}
+        otherSelectedCurrency={otherSelectedCurrency}
       />
     </Modal>
   )

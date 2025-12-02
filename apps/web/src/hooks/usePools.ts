@@ -1,8 +1,14 @@
-import { BigintIsh, Currency, Token, V3_CORE_FACTORY_ADDRESSES } from '@uniswap/sdk-core'
+import {
+  BigintIsh,
+  Currency,
+  V3_CORE_FACTORY_ADDRESSES as SDK_V3_CORE_FACTORY_ADDRESSES,
+  Token,
+} from '@uniswap/sdk-core'
 import { computePoolAddress, FeeAmount, Pool } from '@uniswap/v3-sdk'
 import JSBI from 'jsbi'
 import { useMemo } from 'react'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
+import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { logger } from 'utilities/src/logger/logger'
 import { assume0xAddress } from 'utils/wagmi'
 import { useReadContracts } from 'wagmi'
@@ -125,21 +131,26 @@ export function usePools(
   }, [chainId, poolKeys])
 
   const poolAddresses: (string | undefined)[] = useMemo(() => {
-    const v3CoreFactoryAddress = chainId && V3_CORE_FACTORY_ADDRESSES[chainId]
+    // Use Agroswap addresses for Base Sepolia, otherwise use SDK addresses
+    const factoryAddresses =
+      chainId === UniverseChainId.BaseSepolia ? AGROSWAP_V3_CORE_FACTORY_ADDRESSES : SDK_V3_CORE_FACTORY_ADDRESSES
+    const v3CoreFactoryAddress = chainId
+      ? (factoryAddresses[chainId as keyof typeof factoryAddresses] as string | undefined)
+      : undefined
     if (!v3CoreFactoryAddress) {
       return Array(poolTokens.length).fill(undefined)
     }
 
-    return poolTokens.map(
-      (value) =>
-        value &&
-        PoolCache.getPoolAddress({
-          factoryAddress: v3CoreFactoryAddress,
-          tokenA: value[0],
-          tokenB: value[1],
-          fee: value[2],
-          chainId,
-        }),
+    return poolTokens.map((value) =>
+      value && chainId && v3CoreFactoryAddress
+        ? PoolCache.getPoolAddress({
+            factoryAddress: v3CoreFactoryAddress,
+            tokenA: value[0],
+            tokenB: value[1],
+            fee: value[2],
+            chainId,
+          })
+        : undefined,
     )
   }, [chainId, poolTokens])
 

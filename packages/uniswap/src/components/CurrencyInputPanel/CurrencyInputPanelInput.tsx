@@ -203,8 +203,12 @@ export const CurrencyInputPanelInput = memo(
                   showSoftInputOnFocus={showSoftInputOnFocus}
                   testID={isOutput ? TestID.AmountInputOut : TestID.AmountInputIn}
                   value={value}
-                  onChangeText={onSetExactAmount}
-                  onPressIn={onPressIn}
+                  onChangeText={(newValue) => {
+                    onSetExactAmount(newValue)
+                  }}
+                  onPressIn={() => {
+                    onPressIn?.()
+                  }}
                   onSelectionChange={onSelectionChange}
                 />
               </Flex>

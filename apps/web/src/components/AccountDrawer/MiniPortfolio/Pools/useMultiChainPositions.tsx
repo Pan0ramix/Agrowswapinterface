@@ -1,5 +1,5 @@
 import { BigNumber } from '@ethersproject/bignumber'
-import { CurrencyAmount, Token, V3_CORE_FACTORY_ADDRESSES } from '@uniswap/sdk-core'
+import { CurrencyAmount, V3_CORE_FACTORY_ADDRESSES as SDK_V3_CORE_FACTORY_ADDRESSES, Token } from '@uniswap/sdk-core'
 import IUniswapV3PoolStateJSON from '@uniswap/v3-core/artifacts/contracts/interfaces/pool/IUniswapV3PoolState.sol/IUniswapV3PoolState.json'
 import { computePoolAddress, Pool, Position } from '@uniswap/v3-sdk'
 import {
@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PositionDetails } from 'types/position'
 import { NonfungiblePositionManager, UniswapInterfaceMulticall } from 'uniswap/src/abis/types/v3'
 import { UniswapV3PoolInterface } from 'uniswap/src/abis/types/v3/UniswapV3Pool'
+import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { logger } from 'utilities/src/logger/logger'
@@ -148,7 +149,13 @@ export default function useMultiChainPositions(account: string): UseMultiChainPo
 
         let poolAddress = poolAddressCache.get(details, chainId)
         if (!poolAddress) {
-          const factoryAddress = V3_CORE_FACTORY_ADDRESSES[chainId]
+          // Use Agroswap addresses for Base Sepolia, otherwise use SDK addresses
+          const factoryAddresses =
+            chainId === UniverseChainId.BaseSepolia ? AGROSWAP_V3_CORE_FACTORY_ADDRESSES : SDK_V3_CORE_FACTORY_ADDRESSES
+          const factoryAddress = factoryAddresses[chainId as keyof typeof factoryAddresses] as string | undefined
+          if (!factoryAddress) {
+            throw new Error(`Factory address not found for chain ${chainId}`)
+          }
           poolAddress = computePoolAddress({
             factoryAddress,
             tokenA,

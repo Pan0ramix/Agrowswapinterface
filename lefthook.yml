@@ -13,7 +13,11 @@ pre-commit:
       env:
         CI: "true"
         FORCE_COLOR: "0"
-      run: TERM=dumb bun g:pre-commit-checks
+      run: |
+        export TERM=dumb
+        # Add common bun installation paths to PATH
+        export PATH="$HOME/.bun/bin:/opt/homebrew/bin:$PATH"
+        bun g:pre-commit-checks
 
     git-secrets:
       run: |
@@ -41,5 +45,7 @@ post-checkout:
       files: git diff --name-only {1} {2}
       glob: "packages/biome-config/**"
       run: |
+        # Add common bun installation paths to PATH
+        export PATH="$HOME/.bun/bin:/opt/homebrew/bin:$PATH"
         echo "Biome config files changed, regenerating config..."
         bun biome-config prepare

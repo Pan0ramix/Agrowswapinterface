@@ -116,6 +116,7 @@ const CHAIN_THEME_LIGHT: Record<UniverseChainId, ChainTheme> = {
   [UniverseChainId.ArbitrumOne]: { bgColor: '#00A3FF33', textColor: '#00A3FF' },
   [UniverseChainId.Avalanche]: { bgColor: '#E8414233', textColor: '#E84142' },
   [UniverseChainId.Base]: { bgColor: '#0052FF33', textColor: '#0052FF' },
+  [UniverseChainId.BaseSepolia]: { bgColor: '#0052FF33', textColor: '#0052FF' },
   [UniverseChainId.Blast]: { bgColor: 'rgba(252, 252, 3, 0.16)', textColor: 'rgba(17, 20, 12, 1)' },
   [UniverseChainId.Bnb]: { bgColor: '#EAB20033', textColor: '#EAB200' },
   [UniverseChainId.Celo]: { bgColor: '#FCFF5233', textColor: '#FCFF52' },

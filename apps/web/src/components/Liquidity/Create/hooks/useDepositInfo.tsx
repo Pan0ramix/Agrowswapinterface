@@ -164,7 +164,7 @@ export function useDepositInfo(state: UseDepositInfoProps): DepositInfo {
     token1?.symbol,
   ])
 
-  return useMemo(
+  const result = useMemo(
     () => ({
       currencyBalances: { [PositionField.TOKEN0]: token0Balance, [PositionField.TOKEN1]: token1Balance },
       formattedAmounts: { [exactField]: exactAmounts[exactField], [dependentField]: dependentAmount?.toExact() },
@@ -185,4 +185,6 @@ export function useDepositInfo(state: UseDepositInfoProps): DepositInfo {
       error,
     ],
   )
+
+  return result
 }

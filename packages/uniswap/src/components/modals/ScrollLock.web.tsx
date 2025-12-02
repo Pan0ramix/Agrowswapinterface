@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import { logger } from 'utilities/src/logger/logger'
 
 /**
  * These utils are used to lock the scroll position when a modal is open.
@@ -11,11 +10,8 @@ let currentScrollY = 0
 
 export function initializeScrollWatcher(): void {
   if (isInitialized) {
-    logger.warn(
-      'ScrollLock.web.tsx',
-      'initializeScrollWatcher',
-      '`ScrollWatcher` already initialized. You should only call `initializeScrollWatcher` once.',
-    )
+    // Silently return if already initialized (idempotent)
+    // This prevents warnings in React Strict Mode which double-invokes effects
     return
   }
   window.addEventListener('scroll', () => (currentScrollY = window.scrollY))
@@ -24,12 +20,8 @@ export function initializeScrollWatcher(): void {
 
 export function updateScrollLock({ isModalOpen }: { isModalOpen: boolean }): void {
   if (!isInitialized) {
-    logger.warn(
-      'ScrollLock.web.tsx',
-      'updateScrollLock',
-      'Invalid call to `updateScrollLock` before calling `initializeScrollWatcher`',
-    )
-    return
+    // Auto-initialize if not already done (defensive programming)
+    initializeScrollWatcher()
   }
 
   if (isModalOpen) {

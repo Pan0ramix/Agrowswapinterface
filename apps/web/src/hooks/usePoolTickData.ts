@@ -1,6 +1,6 @@
 import { TickData, Ticks } from 'appGraphql/data/AllV3TicksQuery'
 import { ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
-import { Currency, Token, V3_CORE_FACTORY_ADDRESSES } from '@uniswap/sdk-core'
+import { Currency, V3_CORE_FACTORY_ADDRESSES as SDK_V3_CORE_FACTORY_ADDRESSES, Token } from '@uniswap/sdk-core'
 import { FeeAmount, TICK_SPACINGS, tickToPrice as tickToPriceV3, Pool as V3Pool } from '@uniswap/v3-sdk'
 import { tickToPrice as tickToPriceV4, Pool as V4Pool } from '@uniswap/v4-sdk'
 import { GraphQLApi } from '@universe/api'
@@ -11,6 +11,7 @@ import ms from 'ms'
 import { useEffect, useMemo, useState } from 'react'
 import { useMultichainContext } from 'state/multichain/useMultichainContext'
 import { PositionField } from 'types/position'
+import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 import { ZERO_ADDRESS } from 'uniswap/src/constants/misc'
 import { useGetPoolsByTokens } from 'uniswap/src/data/rest/getPools'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
@@ -121,7 +122,18 @@ function useAllPoolTicks({
     const { TOKEN0, TOKEN1 } = sdkCurrencies
     const v3PoolAddress =
       TOKEN0 && TOKEN1 && feeAmount && version === ProtocolVersion.V3
-        ? V3Pool.getAddress(TOKEN0.wrapped, TOKEN1.wrapped, feeAmount, undefined, V3_CORE_FACTORY_ADDRESSES[chainId])
+        ? (() => {
+            // Use Agroswap addresses for Base Sepolia, otherwise use SDK addresses
+            const factoryAddresses =
+              chainId === UniverseChainId.BaseSepolia
+                ? AGROSWAP_V3_CORE_FACTORY_ADDRESSES
+                : SDK_V3_CORE_FACTORY_ADDRESSES
+            const factoryAddress = factoryAddresses[chainId as keyof typeof factoryAddresses] as string | undefined
+            if (!factoryAddress) {
+              return undefined
+            }
+            return V3Pool.getAddress(TOKEN0.wrapped, TOKEN1.wrapped, feeAmount, undefined, factoryAddress)
+          })()
         : undefined
 
     const v4PoolId =

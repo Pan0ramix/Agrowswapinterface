@@ -1,8 +1,8 @@
 import { Contract } from '@ethersproject/contracts'
 import {
   CHAIN_TO_ADDRESSES_MAP,
-  MULTICALL_ADDRESSES,
-  NONFUNGIBLE_POSITION_MANAGER_ADDRESSES,
+  MULTICALL_ADDRESSES as SDK_MULTICALL_ADDRESSES,
+  NONFUNGIBLE_POSITION_MANAGER_ADDRESSES as SDK_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES,
   V3_MIGRATOR_ADDRESSES,
 } from '@uniswap/sdk-core'
 import IUniswapV2PairJson from '@uniswap/v2-core/build/IUniswapV2Pair.json'
@@ -17,6 +17,10 @@ import { Erc20, Erc721, Weth } from 'uniswap/src/abis/types'
 import { NonfungiblePositionManager, UniswapInterfaceMulticall } from 'uniswap/src/abis/types/v3'
 import { V3Migrator } from 'uniswap/src/abis/types/v3/V3Migrator'
 import WETH_ABI from 'uniswap/src/abis/weth.json'
+import {
+  AGROSWAP_MULTICALL_ADDRESSES,
+  AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES,
+} from 'uniswap/src/constants/agroswapAddresses'
 import { WRAPPED_NATIVE_CURRENCY } from 'uniswap/src/constants/tokens'
 import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { InterfaceEventName } from 'uniswap/src/features/telemetry/constants'
@@ -108,8 +112,13 @@ export function usePairContract(pairAddress?: string, withSignerIfPossible?: boo
 export function useInterfaceMulticall(chainId?: UniverseChainId) {
   const account = useAccount()
   const chain = chainId ?? account.chainId
+  // Use Agroswap addresses for Base Sepolia, otherwise use SDK addresses
+  // Note: Base Sepolia uses Multicall3 (0xcA11bde05977b3631167028862bE2a173976CA11)
+  // which is backward compatible with Multicall2 and supports the multicall() method
+  const multicallAddresses =
+    chain === UniverseChainId.BaseSepolia ? AGROSWAP_MULTICALL_ADDRESSES : SDK_MULTICALL_ADDRESSES
   return useContract<UniswapInterfaceMulticall>({
-    address: chain ? MULTICALL_ADDRESSES[chain] : undefined,
+    address: chain ? (multicallAddresses[chain as keyof typeof multicallAddresses] as string | undefined) : undefined,
     ABI: MulticallABI,
     withSignerIfPossible: false,
     chainId: chain,
@@ -122,8 +131,15 @@ export function useV3NFTPositionManagerContract(
 ): NonfungiblePositionManager | null {
   const account = useAccount()
   const chainIdToUse = chainId ?? account.chainId
+  // Use Agroswap addresses for Base Sepolia, otherwise use SDK addresses
+  const positionManagerAddresses =
+    chainIdToUse === UniverseChainId.BaseSepolia
+      ? AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES
+      : SDK_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES
   const contract = useContract<NonfungiblePositionManager>({
-    address: chainIdToUse ? NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[chainIdToUse] : undefined,
+    address: chainIdToUse
+      ? (positionManagerAddresses[chainIdToUse as keyof typeof positionManagerAddresses] as string | undefined)
+      : undefined,
     ABI: NFTPositionManagerABI,
     withSignerIfPossible,
     chainId: chainIdToUse,

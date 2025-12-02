@@ -15,6 +15,7 @@ export enum UniverseChainId {
   ArbitrumOne = UniswapSDKChainId.ARBITRUM_ONE,
   Avalanche = UniswapSDKChainId.AVALANCHE,
   Base = UniswapSDKChainId.BASE,
+  BaseSepolia = UniswapSDKChainId.BASE_SEPOLIA,
   Blast = UniswapSDKChainId.BLAST,
   Bnb = UniswapSDKChainId.BNB,
   Celo = UniswapSDKChainId.CELO,

@@ -239,6 +239,9 @@ export function SelectTokensStep({
   const token0 = currencyInputs.tokenA
   const token1 = currencyInputs.tokenB
   const [currencySearchInputState, setCurrencySearchInputState] = useState<'tokenA' | 'tokenB' | undefined>(undefined)
+
+  // Log when currencySearchInputState changes
+  useEffect(() => {}, [])
   const [isShowMoreFeeTiersEnabled, toggleShowMoreFeeTiersEnabled] = useReducer((state) => !state, false)
 
   const isToken0Unsupported = isUnsupportedLPChain(token0?.chainId, protocolVersion)
@@ -258,7 +261,6 @@ export function SelectTokensStep({
       const otherCurrency = currencyInputs[otherInputState]
       const wrappedCurrencyNew = currency.isNative ? currency.wrapped : currency
       const wrappedCurrencyOther = otherCurrency?.isNative ? otherCurrency.wrapped : otherCurrency
-
       setSelectedChainId(currency.chainId)
 
       // If the tokens change, we want to reset the default fee tier (mostUsedFeeTier) in the useEffect below.
@@ -350,13 +352,16 @@ export function SelectTokensStep({
     }
   }, [mostUsedFeeTier, fee, setPositionState, trace])
 
-  const { chains } = useEnabledChains({ platform: Platform.EVM })
+  const { chains } = useEnabledChains({ platform: Platform.EVM, includeTestnets: true })
   const supportedChains = useMemo(() => {
-    return protocolVersion === ProtocolVersion.V4
-      ? chains.filter((chain) => !isV4UnsupportedChain(chain))
-      : protocolVersion === ProtocolVersion.V2
-        ? chains.filter((chain) => SUPPORTED_V2POOL_CHAIN_IDS.includes(chain))
-        : undefined
+    const result =
+      protocolVersion === ProtocolVersion.V4
+        ? chains.filter((chain) => !isV4UnsupportedChain(chain))
+        : protocolVersion === ProtocolVersion.V2
+          ? chains.filter((chain) => SUPPORTED_V2POOL_CHAIN_IDS.includes(chain))
+          : undefined
+
+    return result
   }, [protocolVersion, chains])
 
   const handleOnContinue = () => {
@@ -483,14 +488,18 @@ export function SelectTokensStep({
                     <CurrencySelector
                       loading={loadingA}
                       currencyInfo={token0CurrencyInfo}
-                      onPress={() => setCurrencySearchInputState('tokenA')}
+                      onPress={() => {
+                        setCurrencySearchInputState('tokenA')
+                      }}
                     />
                   </Flex>
                   <Flex row flex={1} flexBasis={0} $md={{ flexBasis: 'auto' }}>
                     <CurrencySelector
                       loading={loadingB}
                       currencyInfo={token1CurrencyInfo}
-                      onPress={() => setCurrencySearchInputState('tokenB')}
+                      onPress={() => {
+                        setCurrencySearchInputState('tokenB')
+                      }}
                     />
                   </Flex>
                 </Flex>
@@ -732,7 +741,9 @@ export function SelectTokensStep({
 
         <CurrencySearchModal
           isOpen={currencySearchInputState !== undefined}
-          onDismiss={() => setCurrencySearchInputState(undefined)}
+          onDismiss={() => {
+            setCurrencySearchInputState(undefined)
+          }}
           switchNetworkAction={SwitchNetworkAction.LP}
           onCurrencySelect={handleCurrencySelect}
           chainIds={supportedChains}

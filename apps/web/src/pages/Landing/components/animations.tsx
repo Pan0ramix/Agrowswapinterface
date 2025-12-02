@@ -17,22 +17,22 @@ const riseInAnimation = keyframes`
   }
 `
 
-const RiseInStyles = css<{ count?: number; delay?: number }>`
+const RiseInStyles = css<{ count?: number; $delay?: number }>`
   opacity: 0;
   animation-name: ${riseInAnimation};
   animation-fill-mode: forwards;
   animation-duration: 1000ms;
   animation-iteration-count: 1;
   animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
-  animation-delay: ${(props) => 1000 * (props.delay ?? 0)}ms;
+  animation-delay: ${(props) => 1000 * (props.$delay ?? 0)}ms;
 `
 
-export const RiseInText = styled.span<{ delay?: number }>`
+export const RiseInText = styled.span<{ $delay?: number }>`
   display: inline-flex;
   ${RiseInStyles}
 `
 
-export const RiseIn = styled.span<{ delay?: number }>`
+export const RiseIn = styled.span<{ $delay?: number }>`
   display: flex;
   width: 100%;
   flex: none;

@@ -13,6 +13,7 @@ import {
   DAI_OPTIMISM,
   DAI_POLYGON,
   ETH_BSC,
+  EURC_BASE_SEPOLIA,
   nativeOnChain,
   OP,
   PORTAL_ETH_CELO,
@@ -20,6 +21,7 @@ import {
   USDC_ARBITRUM,
   USDC_AVALANCHE,
   USDC_BASE,
+  USDC_BASE_SEPOLIA,
   USDC_BSC,
   USDC_CELO,
   USDC_MAINNET,
@@ -36,6 +38,7 @@ import {
   USDT,
   USDT_ARBITRUM_ONE,
   USDT_AVALANCHE,
+  USDT_BASE_SEPOLIA,
   USDT_BSC,
   USDT_MONAD_TESTNET,
   USDT_OPTIMISM,
@@ -147,6 +150,14 @@ export const COMMON_BASES: ChainCurrencyList = {
     WRAPPED_NATIVE_CURRENCY[UniverseChainId.Sepolia] as Token,
     USDC_SEPOLIA,
     UNI[UniverseChainId.Sepolia],
+  ].map(buildPartialCurrencyInfo),
+
+  [UniverseChainId.BaseSepolia]: [
+    nativeOnChain(UniverseChainId.BaseSepolia),
+    WRAPPED_NATIVE_CURRENCY[UniverseChainId.BaseSepolia] as Token,
+    USDC_BASE_SEPOLIA,
+    USDT_BASE_SEPOLIA,
+    EURC_BASE_SEPOLIA,
   ].map(buildPartialCurrencyInfo),
 
   [UniverseChainId.Soneium]: [

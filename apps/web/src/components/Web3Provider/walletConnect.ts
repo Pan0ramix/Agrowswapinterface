@@ -31,12 +31,20 @@ export function walletTypeToAmplitudeWalletType(connectionType?: string): string
   }
 }
 
+// Use dynamic URL for dev environments, fallback to production URL
+const getAppUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    return window.location.origin || 'https://app.uniswap.org'
+  }
+  return 'https://app.uniswap.org'
+}
+
 export const WC_PARAMS = {
   projectId: WALLET_CONNECT_PROJECT_ID,
   metadata: {
     name: 'Uniswap',
     description: 'Uniswap Interface',
-    url: 'https://app.uniswap.org',
+    url: getAppUrl(),
     icons: ['https://app.uniswap.org/favicon.png'],
   },
   qrModalOptions: {

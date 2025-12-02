@@ -110,6 +110,8 @@ export function useUniversalRouterSwapCallback({
         fee: options.feeOptions,
         flatFee: options.flatFeeOptions,
       })
+      // Universal Router SDK supports Base Sepolia (84532) - returns official UR address
+      // For Agroswap, UR will route through Agroswap v3 pools via the factory
       const tx = {
         from: account.address,
         to: UNIVERSAL_ROUTER_ADDRESS(UniversalRouterVersion.V1_2, chainId),

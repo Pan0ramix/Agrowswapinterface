@@ -39,6 +39,8 @@ export const DepositStep = () => {
   const { TOKEN0, TOKEN1 } = currencies.display
   const { exactField } = depositState
 
+  useEffect(() => {}, [])
+
   const { price: defaultInitialPrice } = useDefaultInitialPrice({
     currencies: {
       [PositionField.TOKEN0]: currencies.display.TOKEN0,

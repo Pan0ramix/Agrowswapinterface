@@ -3,6 +3,7 @@ import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
 import { ARBITRUM_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/arbitrum'
 import { AVALANCHE_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/avalanche'
 import { BASE_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/base'
+import { BASE_SEPOLIA_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/base-sepolia'
 import { BLAST_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/blast'
 import { BNB_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/bnb'
 import { CELO_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/celo'
@@ -59,6 +60,12 @@ export const WBTC_OPTIMISM = new Token(
 )
 
 export const { USDC: USDC_BASE } = BASE_CHAIN_INFO.tokens
+
+export const {
+  USDC: USDC_BASE_SEPOLIA,
+  USDT: USDT_BASE_SEPOLIA,
+  EURC: EURC_BASE_SEPOLIA,
+} = BASE_SEPOLIA_CHAIN_INFO.tokens
 
 export const BTC_BSC = new Token(UniverseChainId.Bnb, '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c', 18, 'BTCB', 'BTCB')
 
@@ -247,6 +254,13 @@ export const WRAPPED_NATIVE_CURRENCY: { [chainId: number]: Token | undefined } =
   [UniverseChainId.Base]: new Token(
     UniverseChainId.Base,
     '0x4200000000000000000000000000000000000006',
+    18,
+    'WETH',
+    'Wrapped Ether',
+  ),
+  [UniverseChainId.BaseSepolia]: new Token(
+    UniverseChainId.BaseSepolia,
+    '0xE6acF4D03Fb173e590645Cc2432F2943c438A57A',
     18,
     'WETH',
     'Wrapped Ether',

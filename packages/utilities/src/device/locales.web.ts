@@ -1,18 +1,30 @@
-import { getChromeWithThrow } from 'utilities/src/chrome/chrome'
+import { getChrome } from 'utilities/src/chrome/chrome'
 import { DEFAULT_LANGUAGE_CODE, DEFAULT_LANGUAGE_TAG, DeviceLocale } from 'utilities/src/device/constants'
 import { logger } from 'utilities/src/logger/logger'
 
 export function getDeviceLocales(): DeviceLocale[] {
   try {
-    const chrome = getChromeWithThrow()
-    const language = chrome.i18n.getUILanguage()
-    return [{ languageCode: language, languageTag: language }]
+    // Safely access chrome.i18n if available (extension context)
+    // Otherwise fall back to navigator.language (web browser context)
+    const chrome = getChrome()
+    if (chrome?.i18n.getUILanguage) {
+      const language = chrome.i18n.getUILanguage()
+      if (language) {
+        return [{ languageCode: language, languageTag: language }]
+      }
+    }
+    // Fallback to navigator language
+    const navigatorLanguage = navigator.language || navigator.languages[0]
+    if (navigatorLanguage) {
+      return [{ languageCode: navigatorLanguage, languageTag: navigatorLanguage }]
+    }
   } catch (e) {
     logger.error(e, {
       level: 'warn',
-      tags: { file: 'utils.ts', function: 'getDeviceLocales' },
+      tags: { file: 'locales.web.ts', function: 'getDeviceLocales' },
     })
   }
+  // Final fallback to default
   return [
     {
       languageCode: DEFAULT_LANGUAGE_CODE,

@@ -84,28 +84,28 @@ export function useCurrencyInfo(
   }, [processedAddress, skip, currencyInfo])
 }
 
-function useCurrencyInfoWithLoading(
+export function useCurrencyInfoWithLoading(
   currency?: Currency,
   chainId?: UniverseChainId,
   skip?: boolean,
-): { currencyInfo: Maybe<CurrencyInfo>; loading: boolean }
-function useCurrencyInfoWithLoading(
+): { currencyInfo: Maybe<CurrencyInfo>; loading: boolean; error?: Error }
+export function useCurrencyInfoWithLoading(
   address?: string,
   chainId?: UniverseChainId,
   skip?: boolean,
-): { currencyInfo: Maybe<CurrencyInfo>; loading: boolean }
+): { currencyInfo: Maybe<CurrencyInfo>; loading: boolean; error?: Error }
 // eslint-disable-next-line max-params
-function useCurrencyInfoWithLoading(
+export function useCurrencyInfoWithLoading(
   addressOrCurrency?: string | Currency,
   chainId?: UniverseChainId,
   skip?: boolean,
-): { currencyInfo: Maybe<CurrencyInfo>; loading: boolean } {
+): { currencyInfo: Maybe<CurrencyInfo>; loading: boolean; error?: Error } {
   const {
     currencyId,
     shouldSkip,
     addressOrCurrency: processedAddress,
   } = useCurrencyPreprocessing({ addressOrCurrency, chainId, skip })
-  const { currencyInfo, loading } = useUniswapCurrencyInfoWithLoading(currencyId, { skip: shouldSkip })
+  const { currencyInfo, loading, error } = useUniswapCurrencyInfoWithLoading(currencyId, { skip: shouldSkip })
 
   const finalCurrencyInfo = useMemo(() => {
     if (!currencyInfo || !processedAddress || skip) {
@@ -114,7 +114,7 @@ function useCurrencyInfoWithLoading(
     return currencyInfo
   }, [processedAddress, skip, currencyInfo])
 
-  return { currencyInfo: finalCurrencyInfo, loading }
+  return { currencyInfo: finalCurrencyInfo, loading, error }
 }
 
 export function checkIsNative(addressOrCurrency?: string | Currency): boolean {

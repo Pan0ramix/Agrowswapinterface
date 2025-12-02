@@ -362,7 +362,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
       upperTick: tickUpper,
     })
 
-    return {
+    const props = {
       protocolVersion,
       poolOrPair,
       address: account?.address,
@@ -374,6 +374,8 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
       exactAmounts: depositState.exactAmounts,
       skipDependentAmount: protocolVersion === ProtocolVersion.V2 ? false : outOfRange || invalidRange,
     }
+
+    return props
   }, [TOKEN0, TOKEN1, exactField, ticks, poolOrPair, depositState, account?.address, protocolVersion, invalidRange])
 
   const {
@@ -416,10 +418,25 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   })
 
   if (approvalError) {
-    const message = parseErrorMessageTitle(approvalError, { defaultTitle: 'unknown CheckLpApprovalQuery' })
-    logger.error(message, {
-      tags: { file: 'CreatePositionTxContext', function: 'useEffect' },
-    })
+    try {
+      const message =
+        parseErrorMessageTitle(approvalError, { defaultTitle: 'unknown CheckLpApprovalQuery' }) ||
+        'unknown CheckLpApprovalQuery'
+      const errorToLog =
+        approvalError instanceof Error
+          ? approvalError
+          : new Error(typeof message === 'string' ? message : 'unknown CheckLpApprovalQuery', { cause: approvalError })
+      logger.error(errorToLog, {
+        tags: { file: 'CreatePositionTxContext', function: 'useEffect' },
+      })
+    } catch (error) {
+      // Fallback error logging if parseErrorMessageTitle fails
+      const fallbackError =
+        error instanceof Error ? error : new Error('Failed to parse approval error', { cause: approvalError })
+      logger.error(fallbackError, {
+        tags: { file: 'CreatePositionTxContext', function: 'useEffect' },
+      })
+    }
   }
 
   const gasFeeToken0USD = useUSDCurrencyAmountOfGasFee(poolOrPair?.chainId, approvalCalldata?.gasFeeToken0Approval)
@@ -500,15 +517,32 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   }, [approvalError, createError])
 
   if (createError) {
-    const message = parseErrorMessageTitle(createError, { defaultTitle: 'unknown CreateLpPositionCalldataQuery' })
-    logger.error(message, {
-      tags: { file: 'CreatePositionTxContext', function: 'useEffect' },
-    })
+    try {
+      const message =
+        parseErrorMessageTitle(createError, { defaultTitle: 'unknown CreateLpPositionCalldataQuery' }) ||
+        'unknown CreateLpPositionCalldataQuery'
+      const errorToLog =
+        createError instanceof Error
+          ? createError
+          : new Error(typeof message === 'string' ? message : 'unknown CreateLpPositionCalldataQuery', {
+              cause: createError,
+            })
+      logger.error(errorToLog, {
+        tags: { file: 'CreatePositionTxContext', function: 'useEffect' },
+      })
 
-    if (createCalldataQueryParams) {
-      sendAnalyticsEvent(InterfaceEventName.CreatePositionFailed, {
-        message,
-        ...createCalldataQueryParams,
+      if (createCalldataQueryParams && typeof message === 'string') {
+        sendAnalyticsEvent(InterfaceEventName.CreatePositionFailed, {
+          message,
+          ...createCalldataQueryParams,
+        })
+      }
+    } catch (error) {
+      // Fallback error logging if parseErrorMessageTitle fails
+      const fallbackError =
+        error instanceof Error ? error : new Error('Failed to parse create error', { cause: createError })
+      logger.error(fallbackError, {
+        tags: { file: 'CreatePositionTxContext', function: 'useEffect' },
       })
     }
   }
@@ -547,7 +581,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   }, [gasFeeToken0USD, gasFeeToken1USD, increaseGasFeeUsd, gasFeeToken0PermitUSD, gasFeeToken1PermitUSD])
 
   const txInfo = useMemo(() => {
-    return generateCreatePositionTxRequest({
+    const result = generateCreatePositionTxRequest({
       protocolVersion,
       approvalCalldata,
       createCalldata,
@@ -556,6 +590,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
       poolOrPair: protocolVersion === ProtocolVersion.V2 ? poolOrPair : undefined,
       canBatchTransactions,
     })
+    return result
   }, [
     approvalCalldata,
     createCalldata,

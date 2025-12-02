@@ -16,7 +16,7 @@ import {
   DEFAULT_PRICE_RANGE_STATE,
   useCreateLiquidityContext,
 } from 'pages/CreatePosition/CreateLiquidityContextProvider'
-import { Dispatch, SetStateAction, useMemo } from 'react'
+import { Dispatch, SetStateAction, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, Flex, HeightAnimator, Text, useMedia } from 'ui/src'
 import { Chevron } from 'ui/src/components/icons/Chevron'
@@ -46,6 +46,18 @@ export function FormStepsWrapper({
   onSelectTokensContinue: () => void
 }) {
   const { step } = useCreateLiquidityContext()
+
+  useEffect(() => {}, [])
+
+  useEffect(() => {
+    if (step === PositionFlowStep.SELECT_TOKENS_AND_FEE_TIER) {
+    }
+  }, [step])
+
+  useEffect(() => {
+    if (step === PositionFlowStep.DEPOSIT && !isMigration) {
+    }
+  }, [step, isMigration])
 
   return (
     <>

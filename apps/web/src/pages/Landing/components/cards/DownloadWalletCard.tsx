@@ -2,30 +2,49 @@ import { Alignment, Fit, Layout, useRive } from '@rive-app/react-canvas'
 import { PillButton } from 'pages/Landing/components/cards/PillButton'
 import ValuePropCard from 'pages/Landing/components/cards/ValuePropCard'
 import { Wallet } from 'pages/Landing/components/Icons'
+import { useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useIsDarkMode } from 'theme/components/ThemeToggle'
 import { Flex, useSporeColors } from 'ui/src'
 import { Star } from 'ui/src/components/icons/Star'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
 
-export function DownloadWalletCard() {
+function DownloadWalletCardInner() {
   const theme = useSporeColors()
   const isDarkMode = useIsDarkMode()
   const { t } = useTranslation()
+  const [riveInitialized, setRiveInitialized] = useState(false)
 
-  const { rive: lightAnimation, RiveComponent: LightAnimation } = useRive({
+  // Ensure React is available before initializing Rive
+  useEffect(() => {
+    // Small delay to ensure React context is fully initialized
+    const timer = setTimeout(() => {
+      setRiveInitialized(true)
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Initialize Rive hooks - these must be called unconditionally
+  const lightRive = useRive({
     src: '/rive/landing-page.riv',
     artboard: 'Mobile-Light',
     stateMachines: 'Animation',
     layout: new Layout({ fit: Fit.Contain, alignment: Alignment.BottomCenter }),
+    autoplay: false,
   })
 
-  const { rive: darkAnimation, RiveComponent: DarkAnimation } = useRive({
+  const darkRive = useRive({
     src: '/rive/landing-page.riv',
     artboard: 'Mobile-Dark',
     stateMachines: 'Animation',
     layout: new Layout({ fit: Fit.Contain, alignment: Alignment.BottomCenter }),
+    autoplay: false,
   })
+
+  const lightAnimation = lightRive.rive
+  const LightAnimation = lightRive.RiveComponent
+  const darkAnimation = darkRive.rive
+  const DarkAnimation = darkRive.RiveComponent
 
   return (
     <ValuePropCard
@@ -63,13 +82,21 @@ export function DownloadWalletCard() {
         minHeight: 540,
       }}
     >
-      <Flex width="100%" height="60%" position="absolute" m="auto" bottom={0} zIndex={1}>
-        {isDarkMode ? (
-          <DarkAnimation onMouseEnter={() => darkAnimation?.play()} />
-        ) : (
-          <LightAnimation onMouseEnter={() => lightAnimation?.play()} />
-        )}
-      </Flex>
+      {riveInitialized && (
+        <Flex width="100%" height="60%" position="absolute" m="auto" bottom={0} zIndex={1}>
+          {isDarkMode && DarkAnimation ? (
+            <DarkAnimation onMouseEnter={() => darkAnimation?.play()} />
+          ) : LightAnimation ? (
+            <LightAnimation onMouseEnter={() => lightAnimation?.play()} />
+          ) : null}
+        </Flex>
+      )}
     </ValuePropCard>
   )
 }
+
+// Export as default for lazy loading
+export default DownloadWalletCardInner
+
+// Also export as named for direct imports (backwards compatibility)
+export const DownloadWalletCard = DownloadWalletCardInner

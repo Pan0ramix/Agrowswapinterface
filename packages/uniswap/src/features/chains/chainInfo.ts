@@ -1,6 +1,7 @@
 import { ARBITRUM_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/arbitrum'
 import { AVALANCHE_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/avalanche'
 import { BASE_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/base'
+import { BASE_SEPOLIA_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/base-sepolia'
 import { BLAST_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/blast'
 import { BNB_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/bnb'
 import { CELO_CHAIN_INFO } from 'uniswap/src/features/chains/evm/info/celo'
@@ -40,6 +41,7 @@ export const ORDERED_CHAINS = [
   ZORA_CHAIN_INFO,
   ZKSYNC_CHAIN_INFO,
   SEPOLIA_CHAIN_INFO,
+  BASE_SEPOLIA_CHAIN_INFO,
   UNICHAIN_SEPOLIA_CHAIN_INFO,
   MONAD_TESTNET_CHAIN_INFO,
 ] as const satisfies UniverseChainInfo[]
@@ -89,6 +91,7 @@ export const UNIVERSE_CHAIN_INFO = {
   // TESTNET
   [UniverseChainId.MonadTestnet]: MONAD_TESTNET_CHAIN_INFO,
   [UniverseChainId.Sepolia]: SEPOLIA_CHAIN_INFO,
+  [UniverseChainId.BaseSepolia]: BASE_SEPOLIA_CHAIN_INFO,
   [UniverseChainId.UnichainSepolia]: UNICHAIN_SEPOLIA_CHAIN_INFO,
 
   // SVM

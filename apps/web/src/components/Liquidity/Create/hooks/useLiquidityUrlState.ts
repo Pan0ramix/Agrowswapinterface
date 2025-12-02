@@ -146,15 +146,17 @@ export function useLiquidityUrlState() {
 
       const hookAddress = data.positionState.hook ? assume0xAddress(data.positionState.hook) : undefined
 
-      setReplaceState({
-        currencyA: tokenAAddress,
-        currencyB: tokenBAddress,
-        chain: data.currencyInputs.tokenA?.chainId ?? data.currencyInputs.tokenB?.chainId,
-        fee: data.positionState.fee,
-        hook: hookAddress,
-        priceRangeState: data.priceRangeState,
-        depositState: data.depositState,
-      })
+      if (setReplaceState) {
+        setReplaceState({
+          currencyA: tokenAAddress,
+          currencyB: tokenBAddress,
+          chain: data.currencyInputs.tokenA?.chainId ?? data.currencyInputs.tokenB?.chainId,
+          fee: data.positionState.fee,
+          hook: hookAddress,
+          priceRangeState: data.priceRangeState,
+          depositState: data.depositState,
+        })
+      }
     },
     [setReplaceState, isMigrated],
   )

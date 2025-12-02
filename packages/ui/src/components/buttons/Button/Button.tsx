@@ -25,6 +25,7 @@ const ButtonComponent = forwardRef<TamaguiElement, ButtonProps>(function Button(
     iconPosition: propIconPosition = 'before',
     isDisabled: propDisabled,
     onPress,
+    onDisabledPress,
     ...props
   },
   ref,
@@ -34,12 +35,18 @@ const ButtonComponent = forwardRef<TamaguiElement, ButtonProps>(function Button(
   // This is responsible for the disabled UI state of the button
   // If `onDisabledPress` is provided, though, the button will be interactive even when disabled
   const isDisabled = getIsButtonDisabled({ isDisabled: propDisabled, loading })
-  const handleOnPress = isDisabled ? (props.onDisabledPress ? props.onDisabledPress : undefined) : onPress
   const iconPosition = getIconPosition(propIconPosition)
 
   // We need to check if the children is a string, a Trans tag, or a custom component that likely renders a Trans tag, in which case we will pass it as a child to the `CustomButtonText` component
   const isStringOrTransTag = useIsStringOrTransTag(children)
   const customBackgroundColor = props.backgroundColor
+
+  // Extract dd-action-name to prevent it from being passed to DOM
+  const { 'dd-action-name': _ddActionName, ...restProps } = props
+
+  // Handle onPress - never pass null, use undefined instead
+  // If disabled and onDisabledPress exists, use it; otherwise use onPress (or undefined)
+  const handleOnPress = isDisabled ? (onDisabledPress ?? undefined) : (onPress ?? undefined)
 
   return (
     <CustomButtonFrame
@@ -51,10 +58,11 @@ const ButtonComponent = forwardRef<TamaguiElement, ButtonProps>(function Button(
       size={size}
       iconPosition={iconPosition}
       isDisabled={isDisabled}
-      disabled={props.onDisabledPress ? false : isDisabled}
+      disabled={onDisabledPress ? false : isDisabled}
       custom-background-color={customBackgroundColor}
       dd-action-name={props['dd-action-name'] ?? (typeof children === 'string' ? children : undefined)}
-      {...props}
+      {...(onDisabledPress ? { onDisabledPress: onDisabledPress as unknown as () => void } : {})}
+      {...restProps}
       onPress={handleOnPress}
     >
       <ThemedIcon

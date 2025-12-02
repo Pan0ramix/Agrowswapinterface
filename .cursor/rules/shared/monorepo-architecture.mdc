@@ -1,0 +1,220 @@
+---
+description: Monorepo architecture and cross-package dependency rules
+globs: packages/**/*.ts*,apps/**/*.ts*
+alwaysApply: false
+---
+
+# Monorepo Architecture and Cross-Package Rules
+
+## Package Boundaries
+
+### Strict Rule: Packages Cannot Import from Apps
+
+**CRITICAL**: Packages in `packages/` directory must NEVER import from `apps/` directory.
+
+**Why**: Packages are shared code that must remain platform-agnostic. Apps contain platform-specific implementations.
+
+#### ❌ Incorrect:
+```typescript
+// In packages/uniswap/src/...
+import { useEthersProvider } from 'apps/web/src/hooks/useEthersProvider'
+import { useContract } from 'apps/web/src/hooks/useContract'
+```
+
+#### ✅ Correct Approaches:
+
+1. **Pass dependencies as parameters**:
+```typescript
+// In packages/uniswap/src/components/TokenSelector/hooks/useOnChainTokenByAddress.ts
+export function useOnChainTokenByAddress({
+  address,
+  chainId,
+  multicall,  // Passed from consuming component
+  enabled,
+}: {
+  address: string | null
+  chainId: UniverseChainId | null
+  multicall: UniswapInterfaceMulticall | null  // From consuming component
+  enabled: boolean
+})
+```
+
+2. **Use platform-agnostic utilities**:
+```typescript
+// Use utilities from packages/uniswap/src/features/providers/
+import { createEthersProvider } from 'uniswap/src/features/providers/createEthersProvider'
+```
+
+3. **Create platform-specific wrapper files**:
+```typescript
+// apps/web/src/components/TokenSelector/hooks/useTokenSectionsForSearchResults.web.ts
+import { useInterfaceMulticall } from 'hooks/useContract'  // OK - this is in apps/web
+// Then export a wrapper that packages can use
+```
+
+## Adding New Chain IDs
+
+When adding a new chain ID (e.g., Base Sepolia, chain ID 84532), you MUST update:
+
+### 1. Theme Colors (`packages/ui/src/theme/color/colors.ts`)
+
+Add entries for both light and dark themes:
+```typescript
+export const colorsLight = {
+  // ... existing colors
+  chain_84532: networkColors.base.light,  // Add testnet color
+  // ... rest
+}
+
+export const colorsDark = {
+  // ... existing colors
+  chain_84532: networkColors.base.dark,  // Add testnet color
+  // ... rest
+}
+```
+
+### 2. App-Specific Theme Files
+
+If using app-specific theme files (e.g., `apps/web/src/theme/colors.ts`):
+```typescript
+const CHAIN_THEME_LIGHT: Record<UniverseChainId, ChainTheme> = {
+  // ... existing chains
+  [UniverseChainId.BaseSepolia]: { bgColor: '#0052FF33', textColor: '#0052FF' },
+  // ... rest
+}
+```
+
+### 3. Address Maps
+
+When adding chain-specific contract addresses, ensure proper typing:
+
+```typescript
+// ✅ Correct: Use type assertion for indexing
+const factoryAddress = factoryAddresses[chainId as keyof typeof factoryAddresses] as string | undefined
+if (!factoryAddress) {
+  throw new Error(`Factory address not found for chain ${chainId}`)
+}
+
+// ❌ Incorrect: Direct indexing without type safety
+const factoryAddress = factoryAddresses[chainId]  // May error if chainId not in type
+```
+
+### 4. Chain-Specific Constants
+
+Update any chain-specific mappings:
+- Contract addresses (multicall, position managers, etc.)
+- RPC URLs
+- Block explorers
+- Gas configurations
+
+## Type Safety with Address Maps
+
+### Problem
+
+When using address maps that don't include all chain IDs, TypeScript will error on indexing.
+
+### Solution
+
+Always use type-safe indexing patterns:
+
+```typescript
+// ✅ Correct: Type-safe indexing
+const addressMap = chainId === UniverseChainId.BaseSepolia 
+  ? AGROSWAP_MULTICALL_ADDRESSES 
+  : SDK_MULTICALL_ADDRESSES
+
+const address = chainId 
+  ? (addressMap[chainId as keyof typeof addressMap] as string | undefined)
+  : undefined
+
+// ✅ Correct: Guard against undefined
+if (!address) {
+  throw new Error(`Address not found for chain ${chainId}`)
+}
+```
+
+## Function Overload Handling
+
+When using functions with overloads, handle undefined values explicitly:
+
+```typescript
+// ❌ Incorrect: May fail overload matching
+useCurrencyInfoWithLoading(selectedCurrency, selectedCurrency?.chainId)
+
+// ✅ Correct: Explicit undefined handling
+useCurrencyInfoWithLoading(
+  selectedCurrency ?? undefined,
+  selectedCurrency?.chainId
+)
+```
+
+## Enum Value Existence
+
+When using enum values, verify they exist:
+
+```typescript
+// ❌ Incorrect: Enum value doesn't exist
+variation={TokenSelectorVariation.LpTokens}  // Error: doesn't exist
+
+// ✅ Correct: Use existing enum value
+variation={TokenSelectorVariation.SwapInput}  // Valid enum member
+```
+
+## Context Property Access
+
+When accessing context properties, verify they exist in the context type:
+
+```typescript
+// ❌ Incorrect: Property doesn't exist on context
+const { currencyInputs } = useCreateLiquidityContext()  // Error: property doesn't exist
+
+// ✅ Correct: Use available properties or pass as props
+const { setCurrencyInputs, protocolVersion } = useCreateLiquidityContext()
+const currencyInputs = useMemo(() => ({ tokenA: token0, tokenB: token1 }), [token0, token1])
+```
+
+## Currency Type Handling
+
+### Converting CurrencyInfo to TradeableAsset
+
+When passing `CurrencyInfo` where `TradeableAsset` is expected:
+
+```typescript
+// ✅ Correct: Use utility function
+import { currencyToAsset } from 'uniswap/src/features/transactions/swap/utils/asset'
+
+input={currencyToAsset(currencyInfo?.currency) ?? undefined}
+```
+
+### Accessing Currency Address
+
+Always check if currency is a token before accessing `.address`:
+
+```typescript
+// ❌ Incorrect: NativeCurrency doesn't have address
+const address = currency.address.toLowerCase()
+
+// ✅ Correct: Check currency type
+const address = currency.isToken 
+  ? currency.address 
+  : getNativeAddress(currency.chainId)
+
+// ✅ Or use utility function
+import { currencyAddress } from 'uniswap/src/utils/currencyId'
+const address = currencyAddress(currency)
+```
+
+## Pre-Commit Checklist
+
+Before committing code, ensure:
+
+1. ✅ No cross-package imports from `apps/` to `packages/`
+2. ✅ New chain IDs have theme colors added
+3. ✅ Address maps use type-safe indexing
+4. ✅ All enum values exist
+5. ✅ Context properties are verified
+6. ✅ Undefined values handled in overloads
+7. ✅ Currency types properly converted/accessed
+8. ✅ TypeScript typecheck passes: `bun g:typecheck`
+9. ✅ Linting passes: `bun g:lint:fix`
+10. ✅ Tests pass: `bun g:test`

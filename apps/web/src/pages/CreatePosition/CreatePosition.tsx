@@ -255,7 +255,7 @@ function CreatePositionContent({
             defaultInitialToken={initialInputs.defaultInitialToken}
             initialPriceRangeState={initialInputs.priceRangeState}
             initialDepositState={initialInputs.depositState}
-            initialFlowStep={initialInputs.flowStep}
+            initialFlowStep={initialInputs.flowStep ?? PositionFlowStep.SELECT_TOKENS_AND_FEE_TIER}
           >
             <CreatePositionTxContextProvider>
               <FormWrapper toolbar={<Toolbar />}>

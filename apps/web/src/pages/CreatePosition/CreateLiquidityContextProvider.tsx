@@ -278,51 +278,75 @@ export function CreateLiquidityContextProvider({
 
   const isNativeTokenAOnly = Boolean(currencyInputs.tokenA?.isNative && !currencyInputs.tokenB)
 
-  const value: CreateLiquidityContextType = {
-    // State
-    ...protocolSpecificValues,
-    poolId: derivedPositionInfo.poolId,
-    poolOrPairLoading: derivedPositionInfo.poolOrPairLoading,
-    creatingPoolOrPair: derivedPositionInfo.creatingPoolOrPair,
-    price: derivedPriceRangeInfo?.price,
-    ticks:
-      derivedPriceRangeInfo?.protocolVersion === ProtocolVersion.V2 || !derivedPriceRangeInfo
-        ? [undefined, undefined]
-        : derivedPriceRangeInfo.ticks,
-    ticksAtLimit:
-      derivedPriceRangeInfo?.protocolVersion === ProtocolVersion.V2 || !derivedPriceRangeInfo
-        ? [false, false]
-        : derivedPriceRangeInfo.ticksAtLimit,
-    pricesAtTicks:
-      derivedPriceRangeInfo?.protocolVersion === ProtocolVersion.V2 || !derivedPriceRangeInfo
-        ? [undefined, undefined]
-        : derivedPriceRangeInfo.pricesAtTicks,
-    isNativeTokenAOnly,
-    positionState,
-    step,
-    currentTransactionStep,
-    feeTierSearchModalOpen,
-    dynamicFeeTierSpeedbumpData,
-    priceRangeState,
-    depositState,
-    // Transaction info
-    refetch,
-    // Setters
-    setPositionState,
-    setStep: setHistoryState,
-    setCurrentTransactionStep,
-    setFeeTierSearchModalOpen,
-    setDynamicFeeTierSpeedbumpData,
-    setPriceRangeState,
-    setDepositState,
-    setCurrencyInputs,
-    setRefetch,
-    refetchPoolData: derivedPositionInfo.refetchPoolData,
-    // Reset functions
-    reset,
-    resetPriceRange,
-    resetDeposit,
-  }
+  const value: CreateLiquidityContextType = useMemo(
+    () => ({
+      // State
+      ...protocolSpecificValues,
+      poolId: derivedPositionInfo.poolId,
+      poolOrPairLoading: derivedPositionInfo.poolOrPairLoading,
+      creatingPoolOrPair: derivedPositionInfo.creatingPoolOrPair,
+      price: derivedPriceRangeInfo?.price,
+      ticks:
+        derivedPriceRangeInfo?.protocolVersion === ProtocolVersion.V2 || !derivedPriceRangeInfo
+          ? [undefined, undefined]
+          : derivedPriceRangeInfo.ticks,
+      ticksAtLimit:
+        derivedPriceRangeInfo?.protocolVersion === ProtocolVersion.V2 || !derivedPriceRangeInfo
+          ? [false, false]
+          : derivedPriceRangeInfo.ticksAtLimit,
+      pricesAtTicks:
+        derivedPriceRangeInfo?.protocolVersion === ProtocolVersion.V2 || !derivedPriceRangeInfo
+          ? [undefined, undefined]
+          : derivedPriceRangeInfo.pricesAtTicks,
+      isNativeTokenAOnly,
+      positionState,
+      step,
+      currentTransactionStep,
+      feeTierSearchModalOpen,
+      dynamicFeeTierSpeedbumpData,
+      priceRangeState,
+      depositState,
+      // Transaction info
+      refetch,
+      // Setters
+      setPositionState,
+      setStep: setHistoryState,
+      setCurrentTransactionStep,
+      setFeeTierSearchModalOpen,
+      setDynamicFeeTierSpeedbumpData,
+      setPriceRangeState,
+      setDepositState,
+      setCurrencyInputs,
+      setRefetch,
+      refetchPoolData: derivedPositionInfo.refetchPoolData,
+      // Reset functions
+      reset,
+      resetPriceRange,
+      resetDeposit,
+    }),
+    [
+      protocolSpecificValues,
+      derivedPositionInfo.poolId,
+      derivedPositionInfo.poolOrPairLoading,
+      derivedPositionInfo.creatingPoolOrPair,
+      derivedPositionInfo.refetchPoolData,
+      derivedPriceRangeInfo,
+      isNativeTokenAOnly,
+      positionState,
+      step,
+      currentTransactionStep,
+      feeTierSearchModalOpen,
+      dynamicFeeTierSpeedbumpData,
+      priceRangeState,
+      depositState,
+      refetch,
+      setHistoryState,
+      setCurrencyInputs,
+      reset,
+      resetPriceRange,
+      resetDeposit,
+    ],
+  )
 
   return <CreateLiquidityContext.Provider value={value}>{children}</CreateLiquidityContext.Provider>
 }

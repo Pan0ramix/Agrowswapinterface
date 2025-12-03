@@ -37,7 +37,37 @@ export function createNotificationsApiClient(ctx: NotificationsClientContext): N
         body: JSON.stringify(params ?? {}),
       })
 
-      return GetNotificationsResponseMessage.fromJson(response)
+      try {
+        return GetNotificationsResponseMessage.fromJson(response)
+      } catch (decodeError) {
+        // Handle decode errors (e.g., unknown platformType for unsupported chains)
+        const errorMessage =
+          decodeError instanceof Error
+            ? decodeError.message
+            : String(decodeError)
+        
+        // Check if this is a decode error related to unsupported chains
+        // (decode errors with platformType or unknown fields typically indicate unsupported chain)
+        const isUnsupportedChainError =
+          errorMessage.includes('decode') ||
+          errorMessage.includes('platformType') ||
+          errorMessage.includes('unknown')
+        
+        if (isUnsupportedChainError) {
+          // Return empty response for unsupported chains instead of throwing
+          // This prevents crashes when notifications service encounters unsupported chains
+          try {
+            return GetNotificationsResponseMessage.fromJson({ notifications: [] })
+          } catch {
+            // If creating empty response also fails, return a minimal empty response
+            // by creating a new instance with default values
+            return new GetNotificationsResponseMessage()
+          }
+        }
+        
+        // Re-throw other decode errors as they indicate real issues on supported chains
+        throw decodeError
+      }
     } catch (error) {
       throw new Error(`Failed to fetch notifications: ${error instanceof Error ? error.message : String(error)}`, {
         cause: error,

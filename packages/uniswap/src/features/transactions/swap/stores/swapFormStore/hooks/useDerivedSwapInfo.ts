@@ -1,9 +1,10 @@
-import { TradeType } from '@uniswap/sdk-core'
+import { Percent, TradeType } from '@uniswap/sdk-core'
+import { FeeAmount, Route } from '@uniswap/v3-sdk'
 import { FeatureFlags, useFeatureFlag } from '@universe/gating'
 import { useMemo } from 'react'
 import { useUniswapContextSelector } from 'uniswap/src/contexts/UniswapContext'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
-import { UniverseChainId } from 'uniswap/src/features/chains/types'
+import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { useOnChainCurrencyBalance } from 'uniswap/src/features/portfolio/api'
 import { getCurrencyAmount, ValueType } from 'uniswap/src/features/tokens/getCurrencyAmount'
 import { useCurrencyInfo } from 'uniswap/src/features/tokens/useCurrencyInfo'
@@ -11,6 +12,8 @@ import { useTransactionSettingsStore } from 'uniswap/src/features/transactions/c
 import { useUSDCValue } from 'uniswap/src/features/transactions/hooks/useUSDCPrice'
 import { usePriceUXEnabled } from 'uniswap/src/features/transactions/swap/hooks/usePriceUXEnabled'
 import { useTrade } from 'uniswap/src/features/transactions/swap/hooks/useTrade'
+import { useV3OnChainSwapQuote } from 'uniswap/src/features/transactions/swap/hooks/useV3OnChainSwapQuote'
+import { shouldUseV3OnChainQuote } from 'uniswap/src/features/transactions/swap/utils/v3OnChainTradeAdapter'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import { getWrapType } from 'uniswap/src/features/transactions/swap/utils/wrap'
 import type { TransactionState } from 'uniswap/src/features/transactions/types/transactionState'
@@ -95,6 +98,40 @@ export function useDerivedSwapInfo({
     return ctx.getCanSignPermits?.(chainId) && !ctx.getSwapDelegationInfo?.(chainId).delegationAddress
   })
 
+  // Determine if we should use on-chain quotes (for Base Sepolia single-pool V3 swaps)
+  const useOnChainQuote = useMemo(() => {
+    return (
+      isExactIn &&
+      shouldUseV3OnChainQuote({
+        chainId: chainId as number | undefined,
+        tokenIn: currencyIn,
+        tokenOut: currencyOut,
+        amountIn: amountSpecified,
+      })
+    )
+  }, [isExactIn, chainId, currencyIn, currencyOut, amountSpecified])
+
+  // Get slippage tolerance
+  const slippageTolerance = useMemo(() => {
+    if (customSlippageTolerance !== undefined) {
+      return new Percent(customSlippageTolerance * 100, 10000)
+    }
+    return new Percent(50, 10000) // Default 0.5%
+  }, [customSlippageTolerance])
+
+  // Use on-chain quote for eligible swaps
+  const onChainQuote = useV3OnChainSwapQuote({
+    tokenIn: currencyIn,
+    tokenOut: currencyOut,
+    amountIn: amountSpecified,
+    fee: FeeAmount.MEDIUM, // TODO: Determine fee from pool or user selection
+    slippageTolerance,
+    chainId: chainId as EVMUniverseChainId | undefined,
+    recipient: account?.address,
+    enabled: useOnChainQuote && !!amountSpecified && !!currencyIn && !!currencyOut,
+  })
+
+  // Use existing Trading API trade hook (skip if using on-chain)
   const trade = useTrade({
     account,
     amountSpecified,
@@ -108,7 +145,52 @@ export function useDerivedSwapInfo({
     isV4HookPoolsEnabled,
   })
 
-  const displayableTrade = trade.trade ?? trade.indicativeTrade
+  // Merge on-chain quote with trade results
+  const mergedTrade = useMemo(() => {
+    // If we have a successful on-chain quote, create a trade-like object
+    if (useOnChainQuote && onChainQuote.txPayload && onChainQuote.quoteAmountOut && onChainQuote.pool) {
+      // Create a Route from the pool
+      const route = new Route([onChainQuote.pool], currencyIn!, currencyOut!)
+
+      // Create execution price
+      const executionPrice = onChainQuote.quoteAmountOut.divide(amountSpecified!)
+
+      // Return a trade-like object that works with existing UI
+      return {
+        ...trade,
+        trade: {
+          inputAmount: amountSpecified!,
+          outputAmount: onChainQuote.quoteAmountOut,
+          executionPrice,
+          priceImpact: onChainQuote.priceImpact,
+          route,
+          // Store on-chain data for transaction building
+          onChainTxPayload: onChainQuote.txPayload,
+          onChainPool: onChainQuote.pool,
+        } as any, // Type assertion needed for compatibility
+        isLoading: onChainQuote.isLoading,
+        isFetching: onChainQuote.isLoading,
+        error: onChainQuote.error,
+      }
+    }
+
+    // Otherwise, use the regular trade
+    return trade
+  }, [
+    useOnChainQuote,
+    onChainQuote.txPayload,
+    onChainQuote.quoteAmountOut,
+    onChainQuote.pool,
+    onChainQuote.isLoading,
+    onChainQuote.error,
+    onChainQuote.priceImpact,
+    currencyIn,
+    currencyOut,
+    amountSpecified,
+    trade,
+  ])
+
+  const displayableTrade = mergedTrade.trade ?? mergedTrade.indicativeTrade
 
   const priceUXEnabled = usePriceUXEnabled()
   const displayableTradeOutputAmount = priceUXEnabled
@@ -149,7 +231,7 @@ export function useDerivedSwapInfo({
       currencyAmounts,
       currencyAmountsUSDValue,
       currencyBalances,
-      trade,
+      trade: mergedTrade,
       exactAmountToken,
       exactAmountFiat,
       exactCurrencyField,
@@ -158,6 +240,8 @@ export function useDerivedSwapInfo({
       selectingCurrencyField,
       txId,
       outputAmountUserWillReceive: displayableTrade?.quoteOutputAmountUserWillReceive,
+      // Store on-chain quote data for transaction building
+      onChainQuote: useOnChainQuote && onChainQuote.txPayload ? onChainQuote : undefined,
     }
   }, [
     chainId,
@@ -170,9 +254,11 @@ export function useDerivedSwapInfo({
     exactCurrencyField,
     focusOnCurrencyField,
     selectingCurrencyField,
-    trade,
+    mergedTrade,
     txId,
     wrapType,
     displayableTrade,
+    useOnChainQuote,
+    onChainQuote,
   ])
 }

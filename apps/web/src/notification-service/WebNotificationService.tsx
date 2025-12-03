@@ -26,6 +26,7 @@ import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import store from 'state'
 import { useIsDarkMode } from 'ui/src'
+import { useAccount } from 'hooks/useAccount'
 import { mapLocaleToBackendLocale } from 'uniswap/src/features/language/constants'
 import { getLocale } from 'uniswap/src/features/language/hooks'
 import { selectCurrentLanguage } from 'uniswap/src/features/settings/selectors'
@@ -41,6 +42,7 @@ function provideWebNotificationService(ctx: {
   getIsDarkMode: () => boolean
   navigate: (path: string) => void
   getIsApiDataSourceEnabled: () => boolean
+  getChainId: () => number | undefined
 }): NotificationService {
   const notifApiBaseUrl = getEntryGatewayUrl()
 
@@ -73,6 +75,7 @@ function provideWebNotificationService(ctx: {
   const queryOptions = getNotificationQueryOptions({
     apiClient,
     pollIntervalMs: 120000, // Poll every 2 minutes
+    chainId: ctx.getChainId(),
   })
 
   const backendDataSource = createPollingNotificationDataSource({
@@ -148,6 +151,7 @@ function getNotificationServiceQueryOptions(ctx: {
   navigate: (path: string) => void
   getIsEnabled: () => boolean
   getIsApiDataSourceEnabled: () => boolean
+  getChainId: () => number | undefined
 }): QueryOptionsResult<NotificationService, Error, NotificationService, [ReactQueryCacheKey.NotificationService]> {
   return queryOptions({
     queryKey: [ReactQueryCacheKey.NotificationService],
@@ -164,6 +168,7 @@ export function WebNotificationServiceManager(): JSX.Element | null {
   const isApiDataSourceEnabledFlag = useFeatureFlag(FeatureFlags.NotificationApiDataSource)
   const location = useLocation()
   const navigate = useNavigate()
+  const account = useAccount()
 
   // Don't show notifications on the landing page
   const shouldRenderNotifications = location.pathname !== '/'
@@ -177,6 +182,7 @@ export function WebNotificationServiceManager(): JSX.Element | null {
       navigate: (path: string) => navigate(path),
       getIsEnabled: () => isNotificationServiceEnabled,
       getIsApiDataSourceEnabled: () => isApiDataSourceEnabledFlag,
+      getChainId: () => account.chainId,
     }),
   )
 

@@ -1,5 +1,6 @@
 /* eslint-disable max-lines */
 import { ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
+import { getProtocolVersionLabel } from 'components/Liquidity/utils/protocolVersion'
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
 import { Pair } from '@uniswap/v2-sdk'
 import { Pool as V3Pool } from '@uniswap/v3-sdk'
@@ -27,7 +28,12 @@ import { PositionField } from 'types/position'
 import { useUniswapContextSelector } from 'uniswap/src/contexts/UniswapContext'
 import { useCheckLpApprovalQuery } from 'uniswap/src/data/apiClients/tradingApi/useCheckLpApprovalQuery'
 import { useCreateLpPositionCalldataQuery } from 'uniswap/src/data/apiClients/tradingApi/useCreateLpPositionCalldataQuery'
+import { useV3MintPosition } from 'uniswap/src/features/transactions/liquidity/hooks/useV3MintPosition'
+import { shouldUseV3OnChainLp, convertFeeToFeeAmount, convertOnChainTxToCreateLpResponse } from 'uniswap/src/features/transactions/liquidity/utils/v3OnChainIntegration'
+import { FeeAmount } from '@uniswap/v3-sdk'
+import { Percent } from '@uniswap/sdk-core'
 import { toSupportedChainId } from 'uniswap/src/features/chains/utils'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { useTransactionGasFee, useUSDCurrencyAmountOfGasFee } from 'uniswap/src/features/gas/hooks'
 import { InterfaceEventName } from 'uniswap/src/features/telemetry/constants'
 import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
@@ -395,6 +401,29 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
 
   const [transactionError, setTransactionError] = useState<string | boolean>(false)
 
+  // Determine if we should use on-chain V3 operations (check early to skip Trading API calls)
+  const useOnChainV3 = useMemo(() => {
+    const chainId = TOKEN0?.chainId
+    // Use getProtocolVersionLabel to convert ProtocolVersion enum to string ('v2', 'v3', 'v4')
+    const protocolVersionStr = getProtocolVersionLabel(protocolVersion) ?? protocolVersion.toString()
+    const result = shouldUseV3OnChainLp({
+      chainId,
+      protocolVersion: protocolVersionStr,
+    })
+    console.log('[CreatePositionTxContext] useOnChainV3 check', {
+      chainId,
+      chainIdType: typeof chainId,
+      chainIdEquals84532: chainId === 84532,
+      protocolVersion: protocolVersionStr,
+      protocolVersionType: typeof protocolVersionStr,
+      protocolVersionEqualsV3: protocolVersionStr === 'V3' || protocolVersionStr === 'v3',
+      useOnChainV3: result,
+      TOKEN0: TOKEN0 ? { chainId: TOKEN0.chainId, symbol: TOKEN0.symbol } : null,
+      protocolVersionEnum: protocolVersion,
+    })
+    return result
+  }, [TOKEN0?.chainId, protocolVersion])
+
   const addLiquidityApprovalParams = useMemo(() => {
     return generateAddLiquidityApprovalParams({
       address: account?.address,
@@ -405,19 +434,36 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     })
   }, [account?.address, protocolVersion, currencies.display, currencyAmounts, canBatchTransactions])
 
+  // Skip Trading API approval check for on-chain V3 operations
+  const approvalQueryEnabled = !useOnChainV3 && !!addLiquidityApprovalParams && !inputError && !transactionError && !invalidRange
+  console.log('[CreatePositionTxContext] Approval query enabled check', {
+    useOnChainV3,
+    hasApprovalParams: !!addLiquidityApprovalParams,
+    inputError,
+    transactionError,
+    invalidRange,
+    enabled: approvalQueryEnabled,
+    TOKEN0ChainId: TOKEN0?.chainId,
+    protocolVersion: protocolVersion.toString(),
+  })
+  
   const {
     data: approvalCalldata,
     error: approvalError,
     isLoading: approvalLoading,
     refetch: approvalRefetch,
   } = useCheckLpApprovalQuery({
-    params: addLiquidityApprovalParams,
+    params: useOnChainV3 ? undefined : addLiquidityApprovalParams, // Pass undefined to prevent query execution
     staleTime: 5 * ONE_SECOND_MS,
     retry: false,
-    enabled: !!addLiquidityApprovalParams && !inputError && !transactionError && !invalidRange,
+    enabled: approvalQueryEnabled,
+    // Add additional safeguards
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   })
 
-  if (approvalError) {
+  // Only log approval errors if we're using Trading API (not on-chain)
+  if (approvalError && !useOnChainV3) {
     try {
       const message =
         parseErrorMessageTitle(approvalError, { defaultTitle: 'unknown CheckLpApprovalQuery' }) ||
@@ -476,56 +522,135 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     currentTransactionStep?.step.type === TransactionStepType.IncreasePositionTransaction ||
     currentTransactionStep?.step.type === TransactionStepType.IncreasePositionTransactionAsync
 
+  // For on-chain operations, we don't need approvalCalldata from Trading API
+  // For Trading API operations, we still need approvalCalldata
   const isQueryEnabled =
     !isUserCommittedToCreate &&
     !inputError &&
     !transactionError &&
-    !approvalLoading &&
-    !approvalError &&
     !invalidRange &&
-    Boolean(approvalCalldata) &&
-    Boolean(createCalldataQueryParams)
+    (useOnChainV3 || (!approvalLoading && !approvalError && Boolean(approvalCalldata))) &&
+    (useOnChainV3 || Boolean(createCalldataQueryParams))
 
+  // Get fee amount for on-chain operations
+  const feeAmount = useMemo(() => {
+    if (!useOnChainV3 || !positionState.fee) {
+      return undefined
+    }
+    return convertFeeToFeeAmount(positionState.fee.feeAmount)
+  }, [useOnChainV3, positionState.fee])
+
+  // Get slippage tolerance - use Uniswap's standard helper pattern
+  const slippageTolerancePercent = useMemo(() => {
+    if (customSlippageTolerance !== undefined) {
+      // customSlippageTolerance is a number (e.g., 0.5 for 0.5%)
+      // Convert to basis points and create Percent instance
+      const basisPoints = Math.round(customSlippageTolerance * 100)
+      return new Percent(basisPoints, 10_000)
+    }
+    return new Percent(50, 10_000) // Default 0.5%
+  }, [customSlippageTolerance])
+
+  // Use on-chain V3 mint position hook for eligible positions
+  const onChainMintPosition = useV3MintPosition({
+    token0: TOKEN0,
+    token1: TOKEN1,
+    fee: feeAmount,
+    tickLower: ticks[0] ?? undefined,
+    tickUpper: ticks[1] ?? undefined,
+    amount0Desired: currencyAmounts?.TOKEN0,
+    amount1Desired: currencyAmounts?.TOKEN1,
+    slippageTolerance: slippageTolerancePercent,
+    chainId: TOKEN0?.chainId as EVMUniverseChainId | undefined,
+    recipient: account?.address,
+    enabled: useOnChainV3 && isQueryEnabled && !!feeAmount && ticks[0] !== undefined && ticks[1] !== undefined,
+  })
+
+  // Hard guard: completely disable Trading API when using on-chain path
+  const disableTradingApi = useOnChainV3
+
+  // Use Trading API query (fallback or for non-V3)
+  // When useOnChainV3 is true, completely disable Trading API:
+  // - Pass undefined params to prevent query execution
+  // - Pass undefined for deadlineInMinutes
+  // - Disable all refetch mechanisms
+  // - Force enabled: false
   const {
     data: createCalldata,
     error: createError,
     refetch: createRefetch,
   } = useCreateLpPositionCalldataQuery({
-    params: createCalldataQueryParams,
-    deadlineInMinutes: customDeadline,
-    refetchInterval: transactionError ? false : 5 * ONE_SECOND_MS,
+    params: disableTradingApi ? undefined : createCalldataQueryParams,
+    deadlineInMinutes: disableTradingApi ? undefined : customDeadline,
+    enabled: isQueryEnabled && !disableTradingApi,
+    refetchInterval: false, // Always disable refetch interval
     retry: false,
-    enabled: isQueryEnabled,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   })
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: +createCalldataQueryParams, +addLiquidityApprovalParams
+  // Merge on-chain and Trading API results
+  const finalCreateCalldata = useMemo(() => {
+    if (useOnChainV3) {
+      // When using on-chain path, ONLY use on-chain data
+      // Never fall back to Trading API data (even if cached) to prevent silent fallback
+      if (onChainMintPosition.txPayload && TOKEN0?.chainId) {
+        // Convert on-chain payload to Trading API response format for compatibility
+        return convertOnChainTxToCreateLpResponse(
+          onChainMintPosition.txPayload,
+          TOKEN0.chainId as EVMUniverseChainId,
+        ) as any
+      }
+      // Return undefined if on-chain fails - don't use Trading API fallback
+      return undefined
+    }
+    // Only use Trading API when NOT using on-chain path
+    return createCalldata
+  }, [useOnChainV3, onChainMintPosition.txPayload, createCalldata, TOKEN0?.chainId])
+
+  // Merge errors
+  const finalCreateError = useMemo(() => {
+    if (useOnChainV3) {
+      return onChainMintPosition.error || createError
+    }
+    return createError
+  }, [useOnChainV3, onChainMintPosition.error, createError])
+
+  // Hard guard: prevent refetch from triggering Trading API when on-chain is active
   useEffect(() => {
-    setRefetch(() => (approvalError ? approvalRefetch : createError ? createRefetch : undefined)) // this must set it as a function otherwise it will actually call createRefetch immediately
+    if (useOnChainV3) {
+      setRefetch(undefined)
+      return
+    }
+
+    setRefetch(() =>
+      approvalError ? approvalRefetch : finalCreateError ? createRefetch : undefined,
+    )
   }, [
+    useOnChainV3,
     approvalError,
-    createError,
-    createCalldataQueryParams,
-    addLiquidityApprovalParams,
-    setTransactionError,
-    setRefetch,
-    createRefetch,
     approvalRefetch,
+    finalCreateError,
+    createRefetch,
+    setRefetch,
   ])
 
   useEffect(() => {
-    setTransactionError(getErrorMessageToDisplay({ approvalError, calldataError: createError }))
-  }, [approvalError, createError])
+    // For on-chain operations, ignore Trading API approval errors
+    const effectiveApprovalError = useOnChainV3 ? undefined : approvalError
+    setTransactionError(getErrorMessageToDisplay({ approvalError: effectiveApprovalError, calldataError: finalCreateError }))
+  }, [approvalError, finalCreateError, useOnChainV3])
 
-  if (createError) {
+  if (finalCreateError) {
     try {
       const message =
-        parseErrorMessageTitle(createError, { defaultTitle: 'unknown CreateLpPositionCalldataQuery' }) ||
+        parseErrorMessageTitle(finalCreateError, { defaultTitle: 'unknown CreateLpPositionCalldataQuery' }) ||
         'unknown CreateLpPositionCalldataQuery'
       const errorToLog =
-        createError instanceof Error
-          ? createError
+        finalCreateError instanceof Error
+          ? finalCreateError
           : new Error(typeof message === 'string' ? message : 'unknown CreateLpPositionCalldataQuery', {
-              cause: createError,
+              cause: finalCreateError,
             })
       logger.error(errorToLog, {
         tags: { file: 'CreatePositionTxContext', function: 'useEffect' },
@@ -540,7 +665,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     } catch (error) {
       // Fallback error logging if parseErrorMessageTitle fails
       const fallbackError =
-        error instanceof Error ? error : new Error('Failed to parse create error', { cause: createError })
+        error instanceof Error ? error : new Error('Failed to parse create error', { cause: finalCreateError })
       logger.error(fallbackError, {
         tags: { file: 'CreatePositionTxContext', function: 'useEffect' },
       })
@@ -549,10 +674,10 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
 
   const dependentAmountFallback = useCreatePositionDependentAmountFallback(
     createCalldataQueryParams,
-    isQueryEnabled && Boolean(createError),
+    isQueryEnabled && Boolean(finalCreateError),
   )
 
-  const actualGasFee = createCalldata?.gasFee
+  const actualGasFee = finalCreateCalldata?.gasFee
   const needsApprovals = !!(
     approvalCalldata?.token0Approval ||
     approvalCalldata?.token1Approval ||
@@ -562,11 +687,11 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     approvalCalldata?.token1PermitTransaction
   )
   const { value: calculatedGasFee } = useTransactionGasFee({
-    tx: createCalldata?.create,
+    tx: finalCreateCalldata?.create,
     skip: !!actualGasFee || needsApprovals,
   })
   const increaseGasFeeUsd = useUSDCurrencyAmountOfGasFee(
-    toSupportedChainId(createCalldata?.create?.chainId) ?? undefined,
+    toSupportedChainId(finalCreateCalldata?.create?.chainId) ?? undefined,
     actualGasFee || calculatedGasFee,
   )
 
@@ -584,7 +709,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     const result = generateCreatePositionTxRequest({
       protocolVersion,
       approvalCalldata,
-      createCalldata,
+      createCalldata: finalCreateCalldata, // Use merged calldata (on-chain or Trading API)
       createCalldataQueryParams,
       currencyAmounts,
       poolOrPair: protocolVersion === ProtocolVersion.V2 ? poolOrPair : undefined,
@@ -593,7 +718,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     return result
   }, [
     approvalCalldata,
-    createCalldata,
+    finalCreateCalldata,
     createCalldataQueryParams,
     currencyAmounts,
     poolOrPair,

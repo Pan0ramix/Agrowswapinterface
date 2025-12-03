@@ -1,17 +1,18 @@
-import { Contract } from '@ethersproject/contracts'
 import { useQuery } from '@tanstack/react-query'
 import { Token } from '@uniswap/sdk-core'
 import { GqlResult } from '@universe/api'
+import { PublicClient, erc20Abi } from 'viem'
+import { useChainId } from 'wagmi'
 import { getTokensAsync } from 'components/AccountDrawer/MiniPortfolio/Pools/getTokensAsync'
 import { useAccount } from 'hooks/useAccount'
 import { useInterfaceMulticall } from 'hooks/useContract'
-import { useEthersProvider } from 'hooks/useEthersProvider'
 import { useMemo } from 'react'
-import ERC20_ABI from 'uniswap/src/abis/erc20.json'
-import { UniverseChainId } from 'uniswap/src/features/chains/types'
+import { RPCType, UniverseChainId } from 'uniswap/src/features/chains/types'
+import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { useSearchTokens } from 'uniswap/src/features/dataApi/searchTokens'
 import { CurrencyInfo } from 'uniswap/src/features/dataApi/types'
 import { buildCurrency, buildCurrencyInfo } from 'uniswap/src/features/dataApi/utils/buildCurrency'
+import { Platform } from 'uniswap/src/features/platforms/types/Platform'
 import { isEVMChain } from 'uniswap/src/features/platforms/utils/chains'
 import { getValidAddress } from 'uniswap/src/utils/addresses'
 import { currencyId } from 'uniswap/src/utils/currencyId'
@@ -20,25 +21,35 @@ import { DEFAULT_ERC20_DECIMALS } from 'utilities/src/tokens/constants'
 const _LOG_PREFIX = '[useSearchTokensWithFallback]'
 
 /**
- * Fetch token metadata directly from blockchain using RPC calls (fallback when multicall is unavailable)
+ * Fetch token metadata directly from blockchain using viem PublicClient (fallback when multicall is unavailable)
  */
 async function fetchTokenDirectlyFromRPC({
   address,
   chainId,
-  provider,
+  publicClient,
 }: {
   address: string
   chainId: UniverseChainId
-  provider: any
+  publicClient: PublicClient
 }): Promise<Token | null> {
   try {
-    const contract = new Contract(address, ERC20_ABI, provider)
-
-    // Try to fetch name, symbol, and decimals
+    // Use viem's readContract to fetch token data
     const [name, symbol, decimals] = await Promise.all([
-      contract.name().catch(() => null),
-      contract.symbol().catch(() => null),
-      contract.decimals().catch(() => null),
+      publicClient.readContract({
+        address: address as `0x${string}`,
+        abi: erc20Abi,
+        functionName: 'name',
+      }).catch(() => null),
+      publicClient.readContract({
+        address: address as `0x${string}`,
+        abi: erc20Abi,
+        functionName: 'symbol',
+      }).catch(() => null),
+      publicClient.readContract({
+        address: address as `0x${string}`,
+        abi: erc20Abi,
+        functionName: 'decimals',
+      }).catch(() => null),
     ])
 
     if (!name && !symbol) {
@@ -75,12 +86,26 @@ export function useSearchTokensWithFallback({
   size?: number
   hideWSOL?: boolean
 }): GqlResult<CurrencyInfo[]> {
-  // Get active chain ID as fallback
+  // Get active chain ID from wallet connection
+  // Use wagmi's useChainId directly as fallback since useAccount might filter unsupported chains
   const account = useAccount()
-  const activeChainId = account.chainId
+  const wagmiChainId = useChainId()
+  
+  // Prefer account.chainId (supports chain filtering), but fall back to raw wagmi chainId
+  // This ensures we get the actual connected chain even if it's not in the "supported" list
+  const activeChainId = account.chainId ?? (wagmiChainId ? (wagmiChainId as UniverseChainId) : null)
 
-  // Use chainFilter if provided, otherwise fall back to active chain
-  const effectiveChainFilter = chainFilter ?? (activeChainId ? (activeChainId as UniverseChainId) : null)
+  // Use chainFilter if provided, otherwise fall back to active chain from wallet
+  // Only use on-chain fallback when we have a specific chain (either from filter or wallet)
+  const effectiveChainFilter = chainFilter ?? activeChainId
+  
+  console.log('[useSearchTokensWithFallback] Chain detection', {
+    chainFilter,
+    accountChainId: account.chainId,
+    wagmiChainId,
+    activeChainId,
+    effectiveChainFilter,
+  })
 
   // First, try the API search
   const apiSearchResult = useSearchTokens({
@@ -91,46 +116,119 @@ export function useSearchTokensWithFallback({
     hideWSOL,
   })
 
+  const multicall = useInterfaceMulticall(effectiveChainFilter ?? undefined)
+  
+  // Use viem PublicClient - prefer wallet-connected client, fallback to public RPC
+  // This ensures we can fetch tokens even when wallet isn't connected
+  const publicClient = useMemo(() => {
+    if (!effectiveChainFilter) {
+      return undefined
+    }
+    const client = createViemClient({
+      chainId: effectiveChainFilter,
+      rpcType: RPCType.Public,
+    })
+    if (!client) {
+      console.warn('[useSearchTokensWithFallback] Failed to create viem client', {
+        chainId: effectiveChainFilter,
+      })
+    } else {
+      console.log('[useSearchTokensWithFallback] Created viem client', {
+        chainId: effectiveChainFilter,
+      })
+    }
+    return client
+  }, [effectiveChainFilter])
+
   // Check if we should try on-chain fallback
   const shouldTryFallback = useMemo(() => {
-    if (skip) {
-      return false
-    }
+    console.log('[useSearchTokensWithFallback] Evaluating shouldTryFallback', {
+      searchQuery,
+      effectiveChainFilter,
+      skip,
+      apiLoading: apiSearchResult.loading,
+      apiData: apiSearchResult.data,
+      apiError: apiSearchResult.error,
+    })
 
     if (!searchQuery) {
+      console.log('[useSearchTokensWithFallback] No search query, skipping fallback')
       return false
     }
 
     if (!effectiveChainFilter) {
+      console.log('[useSearchTokensWithFallback] No chain filter, skipping fallback')
       return false
     }
 
     if (!isEVMChain(effectiveChainFilter)) {
+      console.log('[useSearchTokensWithFallback] Not an EVM chain, skipping fallback', {
+        chainId: effectiveChainFilter,
+      })
       return false
     }
 
-    // Only try fallback if API search returned no results and query looks like an address
+    // Check if the search query looks like an address
     const isValidAddress = effectiveChainFilter
       ? getValidAddress({
           address: searchQuery,
           chainId: effectiveChainFilter,
+          log: true, // Enable logging for debugging
         })
       : null
 
-    const shouldFallback =
-      isValidAddress !== null &&
-      !apiSearchResult.loading &&
-      (!apiSearchResult.data || apiSearchResult.data.length === 0)
+    console.log('[useSearchTokensWithFallback] Address validation result', {
+      searchQuery,
+      isValidAddress,
+      chainId: effectiveChainFilter,
+    })
 
+    if (!isValidAddress) {
+      console.log('[useSearchTokensWithFallback] Invalid address format, skipping fallback', {
+        searchQuery,
+      })
+      return false
+    }
+
+    // If skip is true, we should try on-chain immediately (API won't run)
+    if (skip) {
+      return true
+    }
+
+    // Trigger fallback if:
+    // 1. API search returned no results (empty array or undefined), OR
+    // 2. API search returned an error (e.g., 401 Unauthorized, network error)
+    const hasApiResults = apiSearchResult.data && apiSearchResult.data.length > 0
+    const hasApiError = !!apiSearchResult.error
+    
+    // If API has an error, trigger fallback immediately (don't wait for loading to finish)
+    if (hasApiError) {
+      console.log('[useSearchTokensWithFallback] API error detected, triggering on-chain fallback', {
+        error: apiSearchResult.error,
+        searchQuery,
+        chainId: effectiveChainFilter,
+      })
+      return true
+    }
+    
+    // Wait for API to finish loading before deciding
+    if (apiSearchResult.loading) {
+      return false
+    }
+
+    // If API finished loading but returned no results, trigger fallback
+    const shouldFallback = !hasApiResults
+    
     if (shouldFallback) {
-    } else {
+      console.log('[useSearchTokensWithFallback] API returned no results, triggering on-chain fallback', {
+        searchQuery,
+        chainId: effectiveChainFilter,
+        hasPublicClient: !!publicClient,
+      })
     }
 
     return shouldFallback
-  }, [skip, searchQuery, effectiveChainFilter, apiSearchResult.loading, apiSearchResult.data])
-
-  const multicall = useInterfaceMulticall(effectiveChainFilter ?? undefined)
-  const provider = useEthersProvider({ chainId: effectiveChainFilter ?? undefined })
+  }, [skip, searchQuery, effectiveChainFilter, apiSearchResult.loading, apiSearchResult.data, apiSearchResult.error, publicClient])
 
   // Try to fetch token from chain if API search failed
   const onChainTokenQuery = useQuery({
@@ -172,13 +270,38 @@ export function useSearchTokensWithFallback({
       }
 
       // Fallback to direct RPC if multicall failed or is unavailable
-      if (!token && provider) {
-        token = await fetchTokenDirectlyFromRPC({
+      if (!token && publicClient) {
+        try {
+          console.log('[useSearchTokensWithFallback] Fetching token from RPC', {
+            address: validAddress,
+            chainId: effectiveChainFilter,
+          })
+          token = await fetchTokenDirectlyFromRPC({
+            address: validAddress,
+            chainId: effectiveChainFilter,
+            publicClient,
+          })
+          if (token) {
+            console.log('[useSearchTokensWithFallback] Successfully fetched token from RPC', {
+              address: validAddress,
+              symbol: token.symbol,
+              name: token.name,
+            })
+          } else {
+            console.log('[useSearchTokensWithFallback] Token not found on-chain', {
+              address: validAddress,
+            })
+          }
+        } catch (error) {
+          // Log error but don't throw - we want to return null gracefully
+          console.error('[useSearchTokensWithFallback] Failed to fetch token from RPC:', error)
+          return null
+        }
+      } else if (!token && !publicClient) {
+        console.warn('[useSearchTokensWithFallback] No publicClient available for on-chain fetch', {
           address: validAddress,
           chainId: effectiveChainFilter,
-          provider,
         })
-      } else if (!token && !provider) {
         return null
       }
 
@@ -207,9 +330,10 @@ export function useSearchTokensWithFallback({
 
       return currencyInfo
     },
-    enabled: shouldTryFallback && (!!multicall || !!provider),
+    enabled: shouldTryFallback && !!publicClient, // Only need publicClient, multicall is optional
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
+    retry: false, // Don't retry on-chain queries - if it fails, it's likely a real issue
   })
 
   // Combine API results with on-chain fallback
@@ -236,7 +360,10 @@ export function useSearchTokensWithFallback({
   }, [apiSearchResult.data, onChainTokenQuery.data])
 
   const loading = apiSearchResult.loading || (shouldTryFallback && onChainTokenQuery.isPending)
-  const error = apiSearchResult.error
+  
+  // Only show API error if we don't have on-chain results
+  // If we successfully fetched the token on-chain, ignore the API error
+  const error = combinedResults.length > 0 ? undefined : apiSearchResult.error
 
   const finalResult = useMemo(
     () => ({

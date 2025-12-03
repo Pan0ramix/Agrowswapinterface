@@ -8,6 +8,15 @@ import { ONE_MINUTE_MS } from 'utilities/src/time/time'
 
 const DEFAULT_POLL_INTERVAL_MS = 2 * ONE_MINUTE_MS
 
+/**
+ * Supported chains for notifications service.
+ * Testnets and unsupported chains are excluded to prevent decode errors.
+ */
+function isNotificationsSupportedChain(chainId?: number): boolean {
+  const supported = [1, 137, 10, 42161, 8453] // mainnet chains only
+  return chainId !== undefined && supported.includes(chainId)
+}
+
 interface GetNotificationQueryOptionsContext {
   apiClient: NotificationsApiClient
   pollIntervalMs?: number
@@ -34,9 +43,20 @@ interface GetNotificationQueryOptionsContext {
  * ```
  */
 export function getNotificationQueryOptions(
-  ctx: GetNotificationQueryOptionsContext,
+  ctx: GetNotificationQueryOptionsContext & { chainId?: number },
 ): QueryOptionsResult<InAppNotification[], Error, InAppNotification[], [ReactQueryCacheKey.Notifications]> {
-  const { apiClient, pollIntervalMs = DEFAULT_POLL_INTERVAL_MS } = ctx
+  const { apiClient, pollIntervalMs = DEFAULT_POLL_INTERVAL_MS, chainId } = ctx
+
+  // Early return for unsupported chains
+  if (!isNotificationsSupportedChain(chainId)) {
+    return {
+      queryKey: [ReactQueryCacheKey.Notifications],
+      enabled: false,
+      queryFn: async () => [],
+      staleTime: ONE_MINUTE_MS,
+      refetchInterval: undefined,
+    }
+  }
 
   return queryOptions({
     queryKey: [ReactQueryCacheKey.Notifications],

@@ -1,5 +1,6 @@
 import { TradingApi } from '@universe/api'
 import { DynamicConfigs, SwapConfigKey, useDynamicConfigValue } from '@universe/gating'
+import { providers } from 'ethers/lib/ethers'
 import { useEffect, useMemo, useRef } from 'react'
 import { useUniswapContextSelector } from 'uniswap/src/contexts/UniswapContext'
 import { useTradingApiSwapQuery } from 'uniswap/src/data/apiClients/tradingApi/useTradingApiSwapQuery'
@@ -33,6 +34,42 @@ function useSwapTransactionRequestInfo({
   const trace = useTrace()
   const gasStrategy = useActiveGasStrategy(derivedSwapInfo.chainId, 'general')
   const transactionSettings = useAllTransactionSettings()
+
+  // Check if we have an on-chain quote with transaction payload
+  const onChainQuote = (derivedSwapInfo as any).onChainQuote
+  const onChainTxPayload = onChainQuote?.txPayload
+
+  // If we have an on-chain transaction payload, use it directly
+  const onChainTxRequest = useMemo(() => {
+    if (onChainTxPayload && onChainQuote?.quoteAmountOut) {
+      const txRequest: providers.TransactionRequest = {
+        to: onChainTxPayload.to,
+        data: onChainTxPayload.data,
+        value: onChainTxPayload.value !== '0x0' ? onChainTxPayload.value : undefined,
+        chainId: derivedSwapInfo.chainId,
+      }
+
+      return {
+        txRequests: [txRequest],
+        permitData: undefined,
+        gasFeeResult: {
+          gasEstimate: undefined,
+          params: undefined,
+        },
+        gasEstimate: {
+          swapEstimate: undefined,
+        },
+        swapRequestArgs: undefined,
+        includesDelegation: false,
+      } as TransactionRequestInfo
+    }
+    return undefined
+  }, [onChainTxPayload, onChainQuote, derivedSwapInfo.chainId])
+
+  // Return on-chain transaction if available
+  if (onChainTxRequest) {
+    return onChainTxRequest
+  }
 
   const permitData = derivedSwapInfo.trade.trade?.quote.permitData
   // On interface, we do not fetch signature until after swap is clicked, as it requires user interaction.

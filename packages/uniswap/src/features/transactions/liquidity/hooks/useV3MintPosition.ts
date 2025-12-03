@@ -106,6 +106,15 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
   const slippageNumerator = stableSlippage.numerator
   const slippageDenominator = stableSlippage.denominator
 
+  // Memoize stringified slippage values to prevent query recreation
+  const { slippageNumeratorStr, slippageDenominatorStr } = useMemo(
+    () => ({
+      slippageNumeratorStr: slippageNumerator.toString(),
+      slippageDenominatorStr: slippageDenominator.toString(),
+    }),
+    [slippageNumerator, slippageDenominator],
+  )
+
   // Get viem public client
   const publicClient = useMemo(() => {
     if (!chainId) {
@@ -134,8 +143,8 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
       tickUpper,
       amount0Desired?.quotient.toString(),
       amount1Desired?.quotient.toString(),
-      slippageNumerator.toString(),
-      slippageDenominator.toString(),
+      slippageNumeratorStr,
+      slippageDenominatorStr,
       recipient,
     ],
     [
@@ -147,8 +156,8 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
       tickUpper,
       amount0Desired?.quotient.toString(),
       amount1Desired?.quotient.toString(),
-      slippageNumerator.toString(),
-      slippageDenominator.toString(),
+      slippageNumeratorStr,
+      slippageDenominatorStr,
       recipient,
     ],
   )
@@ -172,8 +181,8 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
     return async (): Promise<V3MintPositionResult> => {
       try {
         // Build stable JSBI numerators/denominators from the captured values
-        const slippageNumeratorBI = JSBI.BigInt(slippageNumerator.toString())
-        const slippageDenominatorBI = JSBI.BigInt(slippageDenominator.toString())
+        const slippageNumeratorBI = JSBI.BigInt(slippageNumeratorStr)
+        const slippageDenominatorBI = JSBI.BigInt(slippageDenominatorStr)
 
         // Proper Percent instance for functions that expect a Percent (e.g. mintAmountsWithSlippage)
         const slippage = new Percent(slippageNumeratorBI, slippageDenominatorBI)
@@ -301,8 +310,8 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
     tickUpper,
     amount0Desired,
     amount1Desired,
-    slippageNumerator.toString(), // String, safe for closure - used to recreate Percent in queryFn
-    slippageDenominator.toString(), // String, safe for closure - used to recreate Percent in queryFn
+    slippageNumeratorStr,
+    slippageDenominatorStr,
     chainId,
     recipient,
     publicClient,

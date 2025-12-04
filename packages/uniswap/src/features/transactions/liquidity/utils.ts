@@ -11,6 +11,13 @@ export function getErrorMessageToDisplay({
   approvalError?: unknown
 }): string | boolean {
   if (calldataError) {
+    // Check for structured pool-not-found errors from on-chain mint
+    const error = calldataError as any
+    if (error?.code === 'POOL_NOT_FOUND' || error?.code === 'POOL_NOT_INITIALIZED') {
+      // Return the user-friendly message from structured error
+      return error.userMessage || error.message || true
+    }
+    
     return parseErrorMessageTitle(calldataError, { includeRequestId: true }) || true
   }
 

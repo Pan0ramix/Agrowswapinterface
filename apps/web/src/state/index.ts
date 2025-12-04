@@ -63,7 +63,18 @@ export function createDefaultStore() {
               warnAfter: 128,
               // meta.arg and meta.baseQueryMeta are defaults. payload.trade is a nonserializable return value, but that's ok
               // because we are not adding it into any persisted store that requires serialization (e.g. localStorage)
-              ignoredActionPaths: ['meta.arg', 'meta.baseQueryMeta', 'payload.trade'],
+              // Saga actions contain functions (selectChain, callbacks, etc.) which are not serializable but are safe
+              ignoredActionPaths: [
+                'meta.arg',
+                'meta.baseQueryMeta',
+                'payload.trade',
+                'payload.selectChain',
+                'payload.setCurrentStep',
+                'payload.setSteps',
+                'payload.onSuccess',
+                'payload.onFailure',
+                'payload.disableOneClickSwap',
+              ],
               ignoredPaths: [routingApi.reducerPath],
               ignoredActions: [
                 // ignore the redux-persist actions
@@ -71,6 +82,11 @@ export function createDefaultStore() {
                 'persist/REHYDRATE',
                 'persist/PURGE',
                 'persist/FLUSH',
+                // ignore saga trigger actions (they contain functions in payload)
+                'liquiditySaga/trigger',
+                'swapSaga/trigger',
+                'wrapSaga/trigger',
+                'lpIncentivesClaimSaga/trigger',
               ],
             },
       })

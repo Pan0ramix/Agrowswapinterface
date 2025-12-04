@@ -12,8 +12,8 @@ import { useTransactionSettingsStore } from 'uniswap/src/features/transactions/c
 import { useUSDCValue } from 'uniswap/src/features/transactions/hooks/useUSDCPrice'
 import { usePriceUXEnabled } from 'uniswap/src/features/transactions/swap/hooks/usePriceUXEnabled'
 import { useTrade } from 'uniswap/src/features/transactions/swap/hooks/useTrade'
-import { useV3OnChainSwapQuote } from 'uniswap/src/features/transactions/swap/hooks/useV3OnChainSwapQuote'
-import { shouldUseV3OnChainQuote } from 'uniswap/src/features/transactions/swap/utils/v3OnChainTradeAdapter'
+import { useOnChainSwapQuote } from 'uniswap/src/features/transactions/swap/hooks/useOnChainSwapQuote'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import { getWrapType } from 'uniswap/src/features/transactions/swap/utils/wrap'
 import type { TransactionState } from 'uniswap/src/features/transactions/types/transactionState'
@@ -98,17 +98,14 @@ export function useDerivedSwapInfo({
     return ctx.getCanSignPermits?.(chainId) && !ctx.getSwapDelegationInfo?.(chainId).delegationAddress
   })
 
-  // Determine if we should use on-chain quotes (for Base Sepolia single-pool V3 swaps)
+  // Determine if we should use on-chain quotes (for Base Sepolia, Base, Polygon)
+  // Use isOnChainRouterEnabled to check if the chain supports on-chain routing
   const useOnChainQuote = useMemo(() => {
-    return (
-      isExactIn &&
-      shouldUseV3OnChainQuote({
-        chainId: chainId as number | undefined,
-        tokenIn: currencyIn,
-        tokenOut: currencyOut,
-        amountIn: amountSpecified,
-      })
-    )
+    if (!chainId || !isExactIn || !currencyIn || !currencyOut || !amountSpecified) {
+      return false
+    }
+    // Check if on-chain router is enabled for this chain
+    return isOnChainRouterEnabled(chainId as number)
   }, [isExactIn, chainId, currencyIn, currencyOut, amountSpecified])
 
   // Get slippage tolerance
@@ -120,22 +117,28 @@ export function useDerivedSwapInfo({
   }, [customSlippageTolerance])
 
   // Use on-chain quote for eligible swaps
-  const onChainQuote = useV3OnChainSwapQuote({
+  // This hook uses the full on-chain router (findRoute, QuoterV2, etc.)
+  const onChainQuote = useOnChainSwapQuote({
     tokenIn: currencyIn,
     tokenOut: currencyOut,
     amountIn: amountSpecified,
-    fee: FeeAmount.MEDIUM, // TODO: Determine fee from pool or user selection
     slippageTolerance,
     chainId: chainId as EVMUniverseChainId | undefined,
     recipient: account?.address,
     enabled: useOnChainQuote && !!amountSpecified && !!currencyIn && !!currencyOut,
   })
 
-  // Use existing Trading API trade hook (skip if using on-chain)
+  // Use existing Trading API trade hook (disabled when using on-chain)
+  // When on-chain is enabled, we skip the Trading API entirely
+  // Development warning if Trading API would be called for on-chain enabled chain
+  if (process.env.NODE_ENV !== 'production' && useOnChainQuote && account && amountSpecified && otherCurrency) {
+    console.warn('[useDerivedSwapInfo] Trading API trade hook disabled for on-chain enabled chain:', chainId)
+  }
+
   const trade = useTrade({
-    account,
-    amountSpecified,
-    otherCurrency,
+    account: useOnChainQuote ? undefined : account, // Disable by passing undefined account
+    amountSpecified: useOnChainQuote ? undefined : amountSpecified, // Disable by passing undefined amount
+    otherCurrency: useOnChainQuote ? undefined : otherCurrency, // Disable by passing undefined currency
     tradeType: isExactIn ? TradeType.EXACT_INPUT : TradeType.EXACT_OUTPUT,
     customSlippageTolerance,
     selectedProtocols,
@@ -147,26 +150,34 @@ export function useDerivedSwapInfo({
 
   // Merge on-chain quote with trade results
   const mergedTrade = useMemo(() => {
-    // If we have a successful on-chain quote, create a trade-like object
-    if (useOnChainQuote && onChainQuote.txPayload && onChainQuote.quoteAmountOut && onChainQuote.pool) {
-      // Create a Route from the pool
-      const route = new Route([onChainQuote.pool], currencyIn!, currencyOut!)
+    // If we have a successful on-chain quote, use it instead of Trading API trade
+    if (useOnChainQuote && onChainQuote.data) {
+      const { quoteAmountOut, txPayload, route: routeResult, priceImpact } = onChainQuote.data
 
       // Create execution price
-      const executionPrice = onChainQuote.quoteAmountOut.divide(amountSpecified!)
+      const executionPrice = quoteAmountOut.divide(amountSpecified!)
+
+      // Build Route object from ValidatedRoute
+      // Note: ValidatedRoute contains route.hops which we'd need to convert to pools
+      // For now, we'll create a minimal trade object without the Route
+      // The UI should work with just inputAmount, outputAmount, and executionPrice
+      const priceImpactPercent = priceImpact !== undefined 
+        ? new Percent(Math.round(priceImpact * 10000), 10000) 
+        : new Percent(0, 100)
 
       // Return a trade-like object that works with existing UI
       return {
         ...trade,
         trade: {
           inputAmount: amountSpecified!,
-          outputAmount: onChainQuote.quoteAmountOut,
+          outputAmount: quoteAmountOut,
           executionPrice,
-          priceImpact: onChainQuote.priceImpact,
-          route,
+          priceImpact: priceImpactPercent,
+          // Route is optional - UI can work without it for on-chain quotes
+          route: undefined,
           // Store on-chain data for transaction building
-          onChainTxPayload: onChainQuote.txPayload,
-          onChainPool: onChainQuote.pool,
+          onChainTxPayload: txPayload,
+          onChainRoute: routeResult,
         } as any, // Type assertion needed for compatibility
         isLoading: onChainQuote.isLoading,
         isFetching: onChainQuote.isLoading,
@@ -174,16 +185,24 @@ export function useDerivedSwapInfo({
       }
     }
 
-    // Otherwise, use the regular trade
+    // Otherwise, use the regular trade (Trading API or no trade)
+    // When on-chain is enabled but quote failed, still show error from on-chain hook
+    if (useOnChainQuote && onChainQuote.isError) {
+      return {
+        ...trade,
+        isLoading: onChainQuote.isLoading,
+        isFetching: onChainQuote.isLoading,
+        error: onChainQuote.error,
+      }
+    }
+
     return trade
   }, [
     useOnChainQuote,
-    onChainQuote.txPayload,
-    onChainQuote.quoteAmountOut,
-    onChainQuote.pool,
+    onChainQuote.data,
     onChainQuote.isLoading,
+    onChainQuote.isError,
     onChainQuote.error,
-    onChainQuote.priceImpact,
     currencyIn,
     currencyOut,
     amountSpecified,

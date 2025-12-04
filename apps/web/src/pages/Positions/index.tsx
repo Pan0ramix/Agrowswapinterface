@@ -294,7 +294,8 @@ export default function Pool() {
   const isLPIncentivesEnabled = useFeatureFlag(FeatureFlags.LpIncentives) && isConnected
 
   const [chainFilter, setChainFilter] = useAtom(chainFilterAtom)
-  const { chains: currentModeChains } = useEnabledChains()
+  // Include testnets so Base Sepolia positions surface in the filter and query.
+  const { chains: currentModeChains } = useEnabledChains({ includeTestnets: true })
   const [versionFilter, setVersionFilter] = useAtom(versionFilterAtom)
   const [statusFilter, setStatusFilter] = useAtom(statusFilterAtom)
   const [closedCTADismissed, setClosedCTADismissed] = useState(false)

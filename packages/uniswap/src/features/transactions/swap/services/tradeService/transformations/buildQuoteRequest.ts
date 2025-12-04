@@ -154,6 +154,25 @@ export function validateParsedInput(input: ParsedTradeInput): ValidatedTradeInpu
     return undefined
   }
 
+  // Skip Trading API validation if on-chain router is enabled for this chain
+  // This prevents Trading API calls for Base Sepolia, Base, and Polygon
+  // Use dynamic import to avoid circular dependencies
+  if (input.tokenInChainId) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { isOnChainRouterEnabled } = require('uniswap/src/features/transactions/swap/services/onchainRouter/config')
+      if (isOnChainRouterEnabled(input.tokenInChainId)) {
+        // Development warning only
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[buildQuoteRequest] Skipping Trading API for on-chain enabled chain:', input.tokenInChainId)
+        }
+        return undefined // Return undefined to skip Trading API query
+      }
+    } catch {
+      // If import fails, continue with normal validation (backward compatibility)
+    }
+  }
+
   // If we get here, all required fields are present
   // Return a validated object with explicit field mapping
   return {

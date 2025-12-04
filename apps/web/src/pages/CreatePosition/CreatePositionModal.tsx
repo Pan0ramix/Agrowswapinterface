@@ -147,6 +147,21 @@ export function CreatePositionModal({
   )
 
   const handleCreate = useCallback(() => {
+    console.log('[CreatePositionModal] Create button clicked', {
+      hasTxInfo: !!txInfo,
+      hasAccount: !!account,
+      isValidAccount: account ? isSignerMnemonicAccountDetails(account) : false,
+      hasCurrencyAmounts: !!currencyAmounts?.TOKEN0 && !!currencyAmounts?.TOKEN1,
+      txInfoType: txInfo?.type,
+      txInfoAction: txInfo?.action,
+      txInfoTxRequest: !!txInfo?.txRequest,
+      chainId: currencyAmounts?.TOKEN0?.currency.chainId,
+      token0: currencyAmounts?.TOKEN0?.currency.symbol,
+      token1: currencyAmounts?.TOKEN1?.currency.symbol,
+      amount0: currencyAmounts?.TOKEN0?.toExact(),
+      amount1: currencyAmounts?.TOKEN1?.toExact(),
+    })
+
     setTransactionError(false)
 
     const isValidTx = isValidLiquidityTxContext(txInfo)
@@ -158,54 +173,75 @@ export function CreatePositionModal({
       !currencyAmounts.TOKEN0 ||
       !currencyAmounts.TOKEN1
     ) {
+      console.warn('[CreatePositionModal] Validation failed, not dispatching saga', {
+        hasAccount: !!account,
+        isValidAccount: account ? isSignerMnemonicAccountDetails(account) : false,
+        isValidTx,
+        hasCurrencyAmounts: !!currencyAmounts?.TOKEN0 && !!currencyAmounts?.TOKEN1,
+      })
       return
     }
 
-    dispatch(
-      liquiditySaga.actions.trigger({
-        selectChain,
-        startChainId,
-        account,
-        liquidityTxContext: txInfo,
-        setCurrentStep: setCurrentTransactionStep,
-        setSteps,
-        onSuccess,
-        onFailure: (e) => {
-          if (e) {
-            setTransactionError(getErrorMessageToDisplay({ calldataError: e }))
-          }
-          setCurrentTransactionStep(undefined)
-        },
-        disableOneClickSwap,
-        analytics: {
-          ...getLPBaseAnalyticsProperties({
-            trace,
-            hook,
-            version: protocolVersion,
-            tickLower: ticks[0] ?? undefined,
-            tickUpper: ticks[1] ?? undefined,
-            fee: fee?.feeAmount,
-            tickSpacing: fee?.tickSpacing,
-            currency0: currencyAmounts.TOKEN0.currency,
-            currency1: currencyAmounts.TOKEN1.currency,
-            currency0AmountUsd: currencyAmountsUSDValue?.TOKEN0,
-            currency1AmountUsd: currencyAmountsUSDValue?.TOKEN1,
-            poolId: getPoolIdOrAddressFromCreatePositionInfo({
-              protocolVersion,
-              poolOrPair,
-              sdkCurrencies: {
-                TOKEN0: currencyAmounts.TOKEN0.currency,
-                TOKEN1: currencyAmounts.TOKEN1.currency,
-              },
-            }),
+    const sagaPayload = {
+      selectChain,
+      startChainId,
+      account,
+      liquidityTxContext: txInfo,
+      setCurrentStep: setCurrentTransactionStep,
+      setSteps,
+      onSuccess,
+      onFailure: (e) => {
+        if (e) {
+          setTransactionError(getErrorMessageToDisplay({ calldataError: e }))
+        }
+        setCurrentTransactionStep(undefined)
+      },
+      disableOneClickSwap,
+      analytics: {
+        ...getLPBaseAnalyticsProperties({
+          trace,
+          hook,
+          version: protocolVersion,
+          tickLower: ticks[0] ?? undefined,
+          tickUpper: ticks[1] ?? undefined,
+          fee: fee?.feeAmount,
+          tickSpacing: fee?.tickSpacing,
+          currency0: currencyAmounts.TOKEN0.currency,
+          currency1: currencyAmounts.TOKEN1.currency,
+          currency0AmountUsd: currencyAmountsUSDValue?.TOKEN0,
+          currency1AmountUsd: currencyAmountsUSDValue?.TOKEN1,
+          poolId: getPoolIdOrAddressFromCreatePositionInfo({
+            protocolVersion,
+            poolOrPair,
+            sdkCurrencies: {
+              TOKEN0: currencyAmounts.TOKEN0.currency,
+              TOKEN1: currencyAmounts.TOKEN1.currency,
+            },
           }),
-          expectedAmountBaseRaw: currencyAmounts.TOKEN0.quotient.toString(),
-          expectedAmountQuoteRaw: currencyAmounts.TOKEN1.quotient.toString(),
-          createPool: creatingPoolOrPair,
-          createPosition: true,
-        },
-      }),
-    )
+        }),
+        expectedAmountBaseRaw: currencyAmounts.TOKEN0.quotient.toString(),
+        expectedAmountQuoteRaw: currencyAmounts.TOKEN1.quotient.toString(),
+        createPool: creatingPoolOrPair,
+        createPosition: true,
+      },
+    }
+
+    console.log('[CreatePositionModal] Dispatching liquiditySaga.actions.trigger', {
+      startChainId,
+      accountAddress: account.address,
+      liquidityTxContextType: txInfo.type,
+      liquidityTxContextAction: txInfo.action,
+      hasTxRequest: !!txInfo.txRequest,
+      txRequestChainId: txInfo.txRequest?.chainId,
+      txRequestTo: txInfo.txRequest?.to,
+      txRequestData: txInfo.txRequest?.data ? `${txInfo.txRequest.data.substring(0, 20)}...` : undefined,
+      needsApproval0: !!txInfo.approveToken0Request,
+      needsApproval1: !!txInfo.approveToken1Request,
+      protocolVersion,
+      chainId: currencyAmounts.TOKEN0.currency.chainId,
+    })
+
+    dispatch(liquiditySaga.actions.trigger(sagaPayload))
   }, [
     txInfo,
     account,
@@ -335,6 +371,31 @@ export function CreatePositionModal({
           </Flex>
           <Flex gap="$spacing12">
             <ErrorCallout errorMessage={transactionError} onPress={refetch} />
+            {/* Show pool-not-found message for on-chain V3 flows */}
+            {typeof transactionError === 'string' && 
+             transactionError.includes('pool') && 
+             transactionError.includes('does not exist') && (
+              <Flex
+                backgroundColor="$surface2"
+                borderRadius="$rounded16"
+                p="$spacing16"
+                gap="$spacing8"
+                borderWidth={1}
+                borderColor="$surface3"
+              >
+                <Text variant="body2" color="$neutral1">
+                  Pool Not Found
+                </Text>
+                <Text variant="body3" color="$neutral2">
+                  The V3 pool for this token pair and fee tier does not exist on this chain. A pool must be created and initialized before you can add liquidity.
+                </Text>
+                {process.env.NODE_ENV !== 'production' && (
+                  <Text variant="body3" color="$neutral3" mt="$spacing8">
+                    On this development environment, the pool must be created and initialized via a separate script or tool before adding liquidity.
+                  </Text>
+                )}
+              </Flex>
+            )}
             <PoolOutOfSyncError />
           </Flex>
         </Flex>

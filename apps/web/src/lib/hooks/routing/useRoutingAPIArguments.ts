@@ -9,6 +9,7 @@ import {
 import { useMemo } from 'react'
 import { GetQuoteArgs } from 'state/routing/types'
 import { useIsMismatchAccountQuery } from 'uniswap/src/features/smartWallet/mismatch/hooks'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { useUniswapXPriorityOrderFlag } from 'uniswap/src/features/transactions/swap/utils/protocols'
 
 /**
@@ -38,7 +39,23 @@ export function useRoutingAPIArguments(input: RoutingAPIInput): GetQuoteArgs | S
 
   const inputValidated = validateRoutingAPIInput(input)
 
+  // Check if on-chain router is enabled for this chain - if so, skip Trading API
+  const isOnChainEnabled = useMemo(() => {
+    if (!tokenIn?.chainId) {
+      return false
+    }
+    return isOnChainRouterEnabled(tokenIn.chainId)
+  }, [tokenIn?.chainId])
+
   return useMemo(() => {
+    // Skip Trading API if on-chain router is enabled for this chain
+    if (isOnChainEnabled) {
+      // Development warning only
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[useRoutingAPIArguments] Skipping Trading API for on-chain enabled chain:', tokenIn?.chainId)
+      }
+      return skipToken
+    }
     if (!inputValidated) {
       return skipToken
     }
@@ -52,6 +69,7 @@ export function useRoutingAPIArguments(input: RoutingAPIInput): GetQuoteArgs | S
       protocolPreferences,
     })
   }, [
+    isOnChainEnabled,
     getRoutingAPIArguments,
     tokenIn,
     tokenOut,

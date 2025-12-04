@@ -199,6 +199,31 @@ export const DepositStep = () => {
         )}
       </Flex>
       <ErrorCallout errorMessage={transactionError} onPress={refetch} />
+      {/* Show pool-not-found message for on-chain V3 flows */}
+      {typeof transactionError === 'string' && 
+       transactionError.includes('pool') && 
+       transactionError.includes('does not exist') && (
+        <Flex
+          backgroundColor="$surface2"
+          borderRadius="$rounded16"
+          p="$spacing16"
+          gap="$spacing8"
+          borderWidth={1}
+          borderColor="$surface3"
+        >
+          <Text variant="body2" color="$neutral1">
+            <Trans i18nKey="position.poolNotFound.title" />
+          </Text>
+          <Text variant="body3" color="$neutral2">
+            <Trans i18nKey="position.poolNotFound.description" />
+          </Text>
+          {process.env.NODE_ENV !== 'production' && (
+            <Text variant="body3" color="$neutral3" mt="$spacing8">
+              <Trans i18nKey="position.poolNotFound.devNote" />
+            </Text>
+          )}
+        </Flex>
+      )}
       <CreatePositionModal
         formattedAmounts={updatedFormattedAmounts}
         currencyAmounts={updatedCurrencyAmounts ?? currencyAmounts}

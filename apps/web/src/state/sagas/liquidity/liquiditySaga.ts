@@ -14,7 +14,8 @@ import {
   handleSignatureStep,
 } from 'state/sagas/transactions/utils'
 import invariant from 'tiny-invariant'
-import { call, delay, spawn } from 'typed-redux-saga'
+import { call, delay, select, spawn } from 'typed-redux-saga'
+import type { SagaGenerator } from 'typed-redux-saga'
 import { ZERO_ADDRESS } from 'uniswap/src/constants/misc'
 import { TradingApiClient } from 'uniswap/src/data/apiClients/tradingApi/TradingApiClient'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
@@ -50,6 +51,11 @@ import { SignerMnemonicAccountDetails } from 'uniswap/src/features/wallet/types/
 import { currencyId, isNativeCurrencyAddress } from 'uniswap/src/utils/currencyId'
 import { createSaga } from 'uniswap/src/utils/saga'
 import { logger } from 'utilities/src/logger/logger'
+import { updateMintDeadline } from 'uniswap/src/features/transactions/liquidity/utils/updateMintDeadline'
+import { timestampToDeadline } from 'hooks/useTransactionDeadline'
+import { BigNumber } from '@ethersproject/bignumber'
+import { getSigner } from 'state/sagas/transactions/utils'
+import type { InterfaceState } from 'state/webReducer'
 
 type LiquidityParams = {
   selectChain: (chainId: number) => Promise<boolean>
@@ -68,6 +74,61 @@ type LiquidityParams = {
   disableOneClickSwap?: () => void
 }
 
+/**
+ * Compute deadline using Uniswap's shared deadline helper
+ * This ensures LP mint deadlines are computed identically to swap deadlines
+ * 
+ * TTL source: state.user.userDeadline (from Redux state, same as swaps)
+ * - For L2 chains: timestampToDeadline uses L2_DEADLINE_FROM_NOW constant (300 seconds), ignoring ttl
+ * - For L1 chains: timestampToDeadline uses ttl from user settings (can be undefined)
+ * - Returns undefined if blockTimestamp or required TTL is missing (same behavior as swaps)
+ * 
+ * This matches the exact behavior of useGetTransactionDeadline used by swaps.
+ */
+function* computeDeadlineForMint(chainId: number, accountAddress: string): SagaGenerator<number | undefined> {
+  try {
+    // Get user-configured TTL from Redux state (same source as swaps)
+    // Pass ttl as-is (can be undefined) - timestampToDeadline handles it the same way swaps do
+    // TTL source: state.user.userDeadline (initialized to DEFAULT_DEADLINE_FROM_NOW in reducer, but can be undefined)
+    const ttl: number | undefined = yield* select((state: InterfaceState) => state.user.userDeadline)
+
+    // Get current block timestamp (on-chain, not client time - same as swaps)
+    // Use getSigner to access provider (same pattern as other saga functions)
+    const signer = yield* call(getSigner, accountAddress)
+    const block = yield* call([signer.provider, 'getBlock'], 'latest')
+    const blockTimestamp = BigNumber.from(block.timestamp)
+
+    // Use Uniswap's shared deadline helper (same as useGetTransactionDeadline)
+    const deadline = timestampToDeadline({
+      chainId,
+      blockTimestamp,
+      ttl,
+    })
+
+    if (!deadline) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[computeDeadlineForMint] Failed to compute deadline', {
+          chainId,
+          blockTimestamp: blockTimestamp.toString(),
+          ttl,
+        })
+      }
+      return undefined
+    }
+
+    // Convert BigNumber to number (deadline is in seconds)
+    return deadline.toNumber()
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[computeDeadlineForMint] Error computing deadline', {
+        chainId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    return undefined
+  }
+}
+
 function* getLiquidityTxRequest(
   step:
     | IncreasePositionTransactionStep
@@ -77,29 +138,61 @@ function* getLiquidityTxRequest(
     | MigratePositionTransactionStepAsync
     | CollectFeesTransactionStep,
   signature: string | undefined,
+  accountAddress: string,
 ) {
+  let txRequest: typeof step.txRequest
+  let sqrtRatioX96: string | undefined
+
   if (
     step.type === TransactionStepType.IncreasePositionTransaction ||
     step.type === TransactionStepType.DecreasePositionTransaction
   ) {
-    return {
-      txRequest: step.txRequest,
-      sqrtRatioX96: step.sqrtRatioX96,
-    }
-  }
-  if (
+    txRequest = step.txRequest
+    sqrtRatioX96 = step.sqrtRatioX96
+  } else if (
     step.type === TransactionStepType.MigratePositionTransaction ||
     step.type === TransactionStepType.CollectFeesTransactionStep
   ) {
-    return { txRequest: step.txRequest }
+    txRequest = step.txRequest
+  } else {
+    if (!signature) {
+      throw new Error('Signature required for async increase position transaction step')
+    }
+
+    const result = yield* call(step.getTxRequest, signature)
+    invariant(result.txRequest !== undefined, 'txRequest must be defined')
+    txRequest = result.txRequest
+    sqrtRatioX96 = result.sqrtRatioX96
   }
 
-  if (!signature) {
-    throw new Error('Signature required for async increase position transaction step')
-  }
+  // Update deadline in mint calldata if this is a V3 mint transaction
+  // This ensures the deadline is always fresh when the transaction is actually sent,
+  // following Uniswap's pattern of computing deadlines at submission time
+  // Uses the same deadline computation as swaps (timestampToDeadline with user TTL from Redux)
+  // TTL source: state.user.userDeadline (same as swaps)
+  if (txRequest?.data && txRequest.data.startsWith('0x88316456') && txRequest.chainId) {
+    const freshDeadline = yield* call(computeDeadlineForMint, txRequest.chainId, accountAddress)
+    
+    if (freshDeadline !== undefined) {
+      const updatedData = updateMintDeadline(txRequest.data, freshDeadline)
+      txRequest = {
+        ...txRequest,
+        data: updatedData,
+      }
 
-  const { txRequest, sqrtRatioX96 } = yield* call(step.getTxRequest, signature)
-  invariant(txRequest !== undefined, 'txRequest must be defined')
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[getLiquidityTxRequest] Updated deadline in mint calldata', {
+          chainId: txRequest.chainId,
+          freshDeadline,
+          calldataPrefix: txRequest.data.substring(0, 20),
+        })
+      }
+    } else if (process.env.NODE_ENV !== 'production') {
+      console.warn('[getLiquidityTxRequest] Could not compute fresh deadline, using original calldata', {
+        chainId: txRequest.chainId,
+      })
+    }
+  }
 
   return { txRequest, sqrtRatioX96 }
 }
@@ -121,9 +214,9 @@ interface HandlePositionStepParams extends Omit<HandleOnChainStepParams, 'step' 
     | Omit<UniverseEventProperties[LiquidityEventName.CollectLiquiditySubmitted], 'transaction_hash'>
 }
 function* handlePositionTransactionStep(params: HandlePositionStepParams) {
-  const { action, step, signature, analytics } = params
+  const { action, step, signature, analytics, address } = params
   const info = getLiquidityTransactionInfo(action)
-  const { txRequest, sqrtRatioX96 } = yield* call(getLiquidityTxRequest, step, signature)
+  const { txRequest, sqrtRatioX96 } = yield* call(getLiquidityTxRequest, step, signature, address)
 
   const onModification = ({ hash, data }: { hash: string; data: string }) => {
     if (analytics) {
@@ -252,9 +345,27 @@ function* modifyLiquidity(params: LiquidityParams & { steps: TransactionStep[] }
     disableOneClickSwap,
   } = params
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[liquiditySaga] modifyLiquidity started', {
+      stepCount: steps.length,
+      accountAddress: account.address,
+      actionType: action.type,
+    })
+  }
+
   let signature: string | undefined
 
-  for (const step of steps) {
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i]
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[liquiditySaga] Processing step ${i + 1}/${steps.length}`, {
+        stepType: step.type,
+        hasTxRequest: 'txRequest' in step,
+        txRequestChainId: 'txRequest' in step ? step.txRequest?.chainId : undefined,
+        txRequestTo: 'txRequest' in step ? step.txRequest?.to : undefined,
+      })
+    }
+
     try {
       switch (step.type) {
         case TransactionStepType.TokenRevocationTransaction:
@@ -275,7 +386,19 @@ function* modifyLiquidity(params: LiquidityParams & { steps: TransactionStep[] }
         case TransactionStepType.DecreasePositionTransaction:
         case TransactionStepType.MigratePositionTransaction:
         case TransactionStepType.MigratePositionTransactionAsync:
-        case TransactionStepType.CollectFeesTransactionStep:
+        case TransactionStepType.CollectFeesTransactionStep: {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[liquiditySaga] Executing position transaction step', {
+              stepType: step.type,
+              hasTxRequest: 'txRequest' in step,
+              txRequest: 'txRequest' in step ? {
+                chainId: step.txRequest?.chainId,
+                to: step.txRequest?.to,
+                data: step.txRequest?.data ? `${step.txRequest.data.substring(0, 20)}...` : undefined,
+                value: step.txRequest?.value,
+              } : undefined,
+            })
+          }
           yield* call(handlePositionTransactionStep, {
             address: account.address,
             step,
@@ -284,7 +407,11 @@ function* modifyLiquidity(params: LiquidityParams & { steps: TransactionStep[] }
             signature,
             analytics,
           })
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[liquiditySaga] Position transaction step completed')
+          }
           break
+        }
         case TransactionStepType.IncreasePositionTransactionBatched:
           yield* call(handlePositionTransactionBatchedStep, {
             address: account.address,
@@ -300,6 +427,11 @@ function* modifyLiquidity(params: LiquidityParams & { steps: TransactionStep[] }
         }
       }
     } catch (e) {
+      console.error(`[liquiditySaga] ERROR in step ${i + 1}/${steps.length}`, {
+        stepType: step.type,
+        error: e instanceof Error ? e.message : String(e),
+        errorStack: e instanceof Error ? e.stack : undefined,
+      })
       const displayableError = getDisplayableError({ error: e, step, flow: 'liquidity' })
 
       if (displayableError) {
@@ -313,20 +445,75 @@ function* modifyLiquidity(params: LiquidityParams & { steps: TransactionStep[] }
     }
   }
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[liquiditySaga] All steps completed successfully, calling onSuccess')
+  }
   yield* call(onSuccess)
 }
 
 function* liquidity(params: LiquidityParams) {
-  const { liquidityTxContext, startChainId, selectChain, onFailure } = params
+  const { liquidityTxContext, selectChain, onFailure } = params
 
-  const steps = yield* call(generateLPTransactionSteps, liquidityTxContext)
-  params.setSteps(steps)
-
-  // Switch chains if needed
+  // Derive startChainId from multiple sources in priority order:
+  // 1. Currently connected wallet chain ID (from account) - HIGHEST PRIORITY
+  // 2. Payload chainId if provided
+  // 3. Transaction request chainId
+  // 4. Token chainId (as final fallback, but don't force switch if we defaulted to this)
   const token0ChainId = liquidityTxContext.action.currency0Amount.currency.chainId
   const token1ChainId = liquidityTxContext.action.currency1Amount.currency.chainId
+  const txRequestChainId = liquidityTxContext.txRequest?.chainId
 
+  // Priority order: account.chainId > startChainId > txRequest.chainId > token0.chainId
+  const startChainId: UniverseChainId | undefined =
+    params.account.chainId ?? params.startChainId ?? txRequestChainId ?? token0ChainId
+
+  // Track if we defaulted to token chainId (meaning we have no real wallet connection info)
+  const isDefaultedToTokenChain = !params.account.chainId && !params.startChainId && !txRequestChainId
+
+  // Debug logging (development only)
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[liquiditySaga] Chain detection', {
+      accountChainId: params.account.chainId,
+      payloadChainId: params.startChainId,
+      txRequestChainId,
+      token0ChainId,
+      token1ChainId,
+      derivedStartChainId: startChainId,
+      isDefaultedToTokenChain,
+    })
+  }
+
+  // Debug logging (development only)
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[liquiditySaga] Saga triggered', {
+      liquidityTxContextType: liquidityTxContext.type,
+      hasTxRequest: !!liquidityTxContext.txRequest,
+      txRequestChainId,
+      startChainId,
+      accountAddress: params.account.address,
+      currency0: liquidityTxContext.action.currency0Amount.currency.symbol,
+      currency1: liquidityTxContext.action.currency1Amount.currency.symbol,
+    })
+  }
+
+  const steps = yield* call(generateLPTransactionSteps, liquidityTxContext)
+  
+  // Debug logging (development only)
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[liquiditySaga] Generated transaction steps', {
+      stepCount: steps.length,
+      stepTypes: steps.map((s) => s.type),
+      hasOnChainSteps: steps.some((s) => 'txRequest' in s),
+    })
+  }
+  params.setSteps(steps)
+
+  // Validate tokens are on the same chain
   if (token0ChainId !== token1ChainId) {
+    console.error('[liquiditySaga] ERROR: Tokens must be on the same chain', {
+      token0ChainId,
+      token1ChainId,
+    })
     logger.error('Tokens must be on the same chain', {
       tags: { file: 'liquiditySaga', function: 'liquidity' },
     })
@@ -334,12 +521,66 @@ function* liquidity(params: LiquidityParams) {
     return undefined
   }
 
-  if (token0ChainId !== startChainId) {
-    const chainSwitched = yield* call(selectChain, token0ChainId)
+  // Determine target chain (use token chain as source of truth)
+  const targetChainId = token0ChainId
+
+  // Determine if chain switch is needed:
+  // Chain switch should only occur when ALL of these are true:
+  // 1. We didn't default to token chain (have real wallet connection info)
+  // 2. startChainId is defined (we know the current chain)
+  // 3. targetChainId is defined (we know the target chain)
+  // 4. startChainId differs from targetChainId (actually need to switch)
+  const needsChainSwitch =
+    !isDefaultedToTokenChain &&
+    startChainId !== undefined &&
+    targetChainId !== undefined &&
+    startChainId !== targetChainId
+
+  // Debug logging (development only)
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[liquiditySaga] Chain switch evaluation', {
+      startChainId,
+      targetChainId,
+      isDefaultedToTokenChain,
+      needsChainSwitch,
+      reason: isDefaultedToTokenChain
+        ? 'No wallet connection info - will prompt on tx send'
+        : startChainId === targetChainId
+          ? 'Already on target chain'
+          : startChainId === undefined || targetChainId === undefined
+            ? 'Missing chain info'
+            : 'Chain switch required',
+    })
+  }
+
+  // Only attempt chain switch if we have a real startChainId and it differs from target
+  if (needsChainSwitch) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[liquiditySaga] Switching chain', {
+        from: startChainId,
+        to: targetChainId,
+      })
+    }
+    const chainSwitched = yield* call(selectChain, targetChainId)
     if (!chainSwitched) {
+      logger.error('Failed to switch chain', {
+        tags: { file: 'liquiditySaga', function: 'liquidity' },
+        extra: { from: startChainId, targetChainId },
+      })
       onFailure()
       return undefined
     }
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[liquiditySaga] Chain switch successful')
+    }
+  } else if (isDefaultedToTokenChain && process.env.NODE_ENV !== 'production') {
+    console.log('[liquiditySaga] Skipping chain switch - no wallet connection info available')
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[liquiditySaga] Proceeding to modifyLiquidity', {
+      stepCount: steps.length,
+    })
   }
 
   return yield* modifyLiquidity({

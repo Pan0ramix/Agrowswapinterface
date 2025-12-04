@@ -50,16 +50,35 @@ export function createCreatePositionAsyncStep(
     getTxRequest: async (
       signature: string,
     ): Promise<{ txRequest: ValidatedTransactionRequest | undefined; sqrtRatioX96: string | undefined }> => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[createCreatePositionAsyncStep] WARNING: Using Trading API path for create position', {
+          hasRequestArgs: !!createPositionRequestArgs,
+          chainId: createPositionRequestArgs?.chainId,
+        })
+      }
       if (!createPositionRequestArgs) {
         return { txRequest: undefined, sqrtRatioX96: undefined }
       }
 
       try {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[createCreatePositionAsyncStep] Calling TradingApiClient.createLpPosition', {
+            chainId: createPositionRequestArgs.chainId,
+            token0: createPositionRequestArgs.token0,
+            token1: createPositionRequestArgs.token1,
+          })
+        }
         const { create, sqrtRatioX96 } = await TradingApiClient.createLpPosition({
           ...createPositionRequestArgs,
           signature,
           simulateTransaction: true,
         })
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[createCreatePositionAsyncStep] Trading API call successful', {
+            hasCreate: !!create,
+            sqrtRatioX96,
+          })
+        }
 
         return { txRequest: validateTransactionRequest(create), sqrtRatioX96 }
       } catch (e) {

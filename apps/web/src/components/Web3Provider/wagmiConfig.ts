@@ -17,6 +17,7 @@ import type { Chain } from 'viem'
 import { createClient } from 'viem'
 import type { Config } from 'wagmi'
 import { createConfig, fallback, http } from 'wagmi'
+import { baseSepolia, polygonAmoy } from 'wagmi/chains'
 import { coinbaseWallet, injected, safe, walletConnect } from 'wagmi/connectors'
 
 // Get the appropriate Binance connector based on the environment
@@ -63,11 +64,35 @@ export const orderedTransportUrls = (chain: ReturnType<typeof getChainInfo>): st
   return Array.from(new Set(orderedRpcUrls.filter(Boolean)))
 }
 
+// Build the chains array with testnets conditionally included
+// Only include testnets when not in production
+const WAGMI_CHAINS =
+  process.env.NODE_ENV !== 'production'
+    ? (() => {
+        const baseChains = [...ORDERED_EVM_CHAINS]
+        // Check if baseSepolia is already in ORDERED_EVM_CHAINS (it might be)
+        const hasBaseSepolia = baseChains.some((chain) => chain.id === baseSepolia.id)
+        const hasPolygonAmoy = baseChains.some((chain) => chain.id === polygonAmoy.id)
+        
+        const testnetChains: Chain[] = []
+        if (!hasBaseSepolia) {
+          testnetChains.push(baseSepolia)
+        }
+        if (!hasPolygonAmoy) {
+          testnetChains.push(polygonAmoy)
+        }
+        
+        return [...baseChains, ...testnetChains] as const
+      })()
+    : (ORDERED_EVM_CHAINS as const)
+
 function createWagmiConnectors(params: {
   /** If `true`, appends the wagmi `mock` connector. Used in Playwright. */
   includeMockConnector: boolean
+  /** The chains array to use for connectors */
+  chains: readonly Chain[]
 }): any[] {
-  const { includeMockConnector } = params
+  const { includeMockConnector, chains } = params
 
   const baseConnectors = [
     porto(),
@@ -75,8 +100,10 @@ function createWagmiConnectors(params: {
     getBinanceConnector(),
     // There are no unit tests that expect WalletConnect to be included here,
     // so we can disable it to reduce log noise.
-    ...(isTestEnv() && !isPlaywrightEnv() ? [] : [walletConnect(WC_PARAMS)]),
+    // Pass chains to walletConnect to ensure Base Sepolia and Polygon Amoy are supported
+    ...(isTestEnv() && !isPlaywrightEnv() ? [] : [walletConnect({ ...WC_PARAMS, chains })]),
     embeddedWallet(),
+    // Pass chains to coinbaseWallet to ensure Base Sepolia and Polygon Amoy are supported
     coinbaseWallet({
       appName: 'Uniswap',
       // CB SDK doesn't pass the parent origin context to their passkey site
@@ -84,7 +111,9 @@ function createWagmiConnectors(params: {
       appLogoUrl: `${UNISWAP_WEB_URL}${UNISWAP_LOGO}`,
       reloadOnDisconnect: false,
     }),
+    // Pass chains to safe connector to ensure Base Sepolia and Polygon Amoy are supported
     safe(),
+    // injected connector automatically uses chains from wagmi config
   ]
 
   return includeMockConnector
@@ -103,11 +132,11 @@ function createWagmiConfig(params: {
   connectors: any[]
   /** Optional custom `onFetchResponse` handler – defaults to `defaultOnFetchResponse`. */
   onFetchResponse?: (response: Response, chain: Chain, url: string) => void
-}): Config<typeof ORDERED_EVM_CHAINS> {
+}): Config<typeof WAGMI_CHAINS> {
   const { connectors, onFetchResponse = defaultOnFetchResponse } = params
 
   return createConfig({
-    chains: getNonEmptyArrayOrThrow(ORDERED_EVM_CHAINS),
+    chains: getNonEmptyArrayOrThrow(WAGMI_CHAINS),
     connectors,
     client({ chain }) {
       return createClient({
@@ -155,9 +184,28 @@ const defaultOnFetchResponse = (response: Response, chain: Chain, url: string) =
 
 const defaultConnectors = createWagmiConnectors({
   includeMockConnector: isPlaywrightEnv(),
+  chains: WAGMI_CHAINS,
 })
 
 export const wagmiConfig = createWagmiConfig({ connectors: defaultConnectors })
+
+// Debug: Verify Base Sepolia and Polygon Amoy are included in wagmi config chains
+// Only log after wagmiConfig is initialized to avoid printing before config is ready
+if (process.env.NODE_ENV !== 'production') {
+  // Use setTimeout to ensure wagmiConfig is fully initialized
+  setTimeout(() => {
+    const hasBaseSepolia = wagmiConfig.chains.some((chain) => chain.id === 84532)
+    const hasPolygonAmoy = wagmiConfig.chains.some((chain) => chain.id === 80002)
+    console.log('[wagmiConfig] Chain support verification', {
+      totalChains: wagmiConfig.chains.length,
+      hasBaseSepolia,
+      hasPolygonAmoy,
+      baseSepoliaChain: wagmiConfig.chains.find((chain) => chain.id === 84532),
+      polygonAmoyChain: wagmiConfig.chains.find((chain) => chain.id === 80002),
+      allChainIds: wagmiConfig.chains.map((chain) => chain.id),
+    })
+  }, 0)
+}
 
 declare module 'wagmi' {
   interface Register {

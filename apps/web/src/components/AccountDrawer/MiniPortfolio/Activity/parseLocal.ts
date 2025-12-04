@@ -471,9 +471,10 @@ export async function transactionToActivity({
 }: {
   details?: InterfaceTransactionDetails
   formatNumber: FormatNumberFunctionType
-}): Promise<Activity | undefined> {
+}): Promise<Activity | null> {
+  // Never return undefined from a React Query queryFn – use null to represent "no data".
   if (!details) {
-    return undefined
+    return null
   }
   const { chainId } = details
   try {
@@ -584,7 +585,8 @@ export async function transactionToActivity({
     return activity
   } catch (error) {
     logger.warn('parseLocal', 'transactionToActivity', `Failed to parse transaction ${details.hash}`, error)
-    return undefined
+    // Never return undefined from a React Query queryFn – use null to represent "no data".
+    return null
   }
 }
 
@@ -595,9 +597,42 @@ export function getTransactionToActivityQueryOptions({
   transaction?: InterfaceTransactionDetails
   formatNumber: FormatNumberFunctionType
 }) {
+  // Dev-only: log when query is created
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[TransactionToActivity] query options created', {
+      hasTransaction: !!transaction,
+      transactionHash: transaction?.hash,
+      transactionId: transaction?.id,
+    })
+  }
+
   return queryOptions({
     queryKey: [ReactQueryCacheKey.TransactionToActivity, transaction],
-    queryFn: async () => transactionToActivity({ details: transaction, formatNumber }),
+    queryFn: async () => {
+      // Dev-only: log when queryFn runs
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[TransactionToActivity] queryFn started', {
+          hasTransaction: !!transaction,
+          transactionHash: transaction?.hash,
+        })
+      }
+
+      // Never return undefined from a React Query queryFn – use null to represent "no data".
+      // transactionToActivity already returns null when details is missing, but we also disable the query.
+      const result = await transactionToActivity({ details: transaction, formatNumber })
+      
+      // Dev-only: log result
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[TransactionToActivity] queryFn completed', {
+          hasResult: result !== null && result !== undefined,
+          resultType: result === null ? 'null' : typeof result,
+        })
+      }
+
+      return result
+    },
+    // Disable query when transaction is null/undefined to avoid running with invalid input
+    enabled: !!transaction,
   })
 }
 
@@ -612,7 +647,13 @@ export function getFORTransactionToActivityQueryOptions({
 }) {
   return queryOptions({
     queryKey: [ReactQueryCacheKey.TransactionToActivity, transaction],
-    queryFn: async () => forTransactionToActivity({ transaction, formatNumber, formatFiatPrice }),
+    queryFn: async () => {
+      // Never return undefined from a React Query queryFn – use null to represent "no data".
+      // forTransactionToActivity already returns null when transaction is missing, but we also disable the query.
+      return forTransactionToActivity({ transaction, formatNumber, formatFiatPrice })
+    },
+    // Disable query when transaction is null/undefined to avoid running with invalid input
+    enabled: !!transaction,
   })
 }
 
@@ -624,9 +665,10 @@ async function forTransactionToActivity({
   transaction?: FORTransaction
   formatNumber: FormatNumberFunctionType
   formatFiatPrice: FormatFiatPriceFunctionType
-}): Promise<Activity | undefined> {
+}): Promise<Activity | null> {
+  // Never return undefined from a React Query queryFn – use null to represent "no data".
   if (!transaction) {
-    return undefined
+    return null
   }
 
   const chainId = Number(transaction.cryptoDetails.chainId) as UniverseChainId

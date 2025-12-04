@@ -1,6 +1,9 @@
 import type { Config } from '@universe/config/src/config-types'
 import { isNonTestDev } from 'utilities/src/environment/constants'
 
+// Module-level flag to ensure config is only logged once per page load
+let hasLoggedAppConfig = false
+
 // eslint-disable-next-line complexity
 export const getConfig = (): Config => {
   /**
@@ -51,9 +54,13 @@ export const getConfig = (): Config => {
     walletConnectProjectIdBeta: process.env.WALLETCONNECT_PROJECT_ID_BETA || '',
     walletConnectProjectIdDev: process.env.WALLETCONNECT_PROJECT_ID_DEV || '',
   }
-  if (isNonTestDev) {
+
+  // Dev-only: log config once per session for debugging, avoid console spam.
+  if (process.env.NODE_ENV !== 'production' && !hasLoggedAppConfig) {
     // biome-ignore lint/suspicious/noConsole: Cannot use logger here, causes error from circular dep
-    console.debug('Using app config:', config)
+    console.debug('[getConfig] Using app config:', config)
+    hasLoggedAppConfig = true
   }
+
   return Object.freeze(config)
 }

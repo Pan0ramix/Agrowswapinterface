@@ -38,7 +38,15 @@ export function createFetchClient({
         if (sessionState?.sessionId) {
           headers.set('x-session-id', sessionState.sessionId)
         }
-        return fetch(`${baseUrl}${path}`, {
+        
+        const url = `${baseUrl}${path}`
+        
+        // Dev-only: log Trading API calls to verify they're disabled for on-chain chains
+        if (process.env.NODE_ENV !== 'production' && baseUrl.includes('trading-api')) {
+          console.log('[createFetchClient] Fetch called', { url, method: options?.method || 'GET' })
+        }
+        
+        return fetch(url, {
           ...defaultOptions,
           ...options,
           headers,

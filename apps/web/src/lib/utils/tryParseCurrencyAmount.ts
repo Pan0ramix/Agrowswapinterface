@@ -24,9 +24,25 @@ export default function tryParseCurrencyAmount<T extends Currency>(
     return undefined
   }
   try {
-    const typedValueParsed = parseUnits(truncateValue(value, currency.decimals), currency.decimals).toString()
+    const truncatedValue = truncateValue(value, currency.decimals)
+    const typedValueParsed = parseUnits(truncatedValue, currency.decimals).toString()
     if (typedValueParsed !== '0') {
-      return CurrencyAmount.fromRawAmount(currency, JSBI.BigInt(typedValueParsed))
+      const result = CurrencyAmount.fromRawAmount(currency, JSBI.BigInt(typedValueParsed))
+      
+      // Dev-only: log parsing transformation
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[tryParseCurrencyAmount] Input → Raw conversion', {
+          input: value,
+          truncated: truncatedValue,
+          decimals: currency.decimals,
+          raw: typedValueParsed,
+          human: result.toExact(),
+          currency: currency.symbol,
+          currencyAddress: currency.address,
+        })
+      }
+      
+      return result
     }
   } catch (error) {
     // fails if the user specifies too many decimal places of precision (or maybe exceed max uint?)

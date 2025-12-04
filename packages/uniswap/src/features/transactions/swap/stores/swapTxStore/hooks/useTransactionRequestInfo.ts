@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useUniswapContextSelector } from 'uniswap/src/contexts/UniswapContext'
 import { useTradingApiSwapQuery } from 'uniswap/src/data/apiClients/tradingApi/useTradingApiSwapQuery'
 import { useActiveGasStrategy } from 'uniswap/src/features/gas/hooks'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { useAllTransactionSettings } from 'uniswap/src/features/transactions/components/settings/stores/transactionSettingsStore/useTransactionSettingsStore'
 import { FALLBACK_SWAP_REQUEST_POLL_INTERVAL_MS } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/constants'
 import { processUniswapXResponse } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/uniswapx/utils'
@@ -125,11 +126,24 @@ function useSwapTransactionRequestInfo({
     permitsDontNeedSignature,
   })
 
+  // Check if on-chain router is enabled for this chain - if so, skip Trading API swap request
+  const isOnChainEnabled = useMemo(() => {
+    return isOnChainRouterEnabled(derivedSwapInfo.chainId)
+  }, [derivedSwapInfo.chainId])
+
   const tradingApiSwapRequestMs = useDynamicConfigValue({
     config: DynamicConfigs.Swap,
     key: SwapConfigKey.TradingApiSwapRequestMs,
     defaultValue: FALLBACK_SWAP_REQUEST_POLL_INTERVAL_MS,
   })
+
+  // Development warning if Trading API would be called for on-chain enabled chain
+  if (process.env.NODE_ENV !== 'production' && isOnChainEnabled && swapRequestParams) {
+    console.warn(
+      '[useTransactionRequestInfo] Trading API swap request blocked for on-chain enabled chain:',
+      derivedSwapInfo.chainId,
+    )
+  }
 
   const {
     data,
@@ -137,7 +151,8 @@ function useSwapTransactionRequestInfo({
     isLoading: isSwapLoading,
   } = useTradingApiSwapQuery(
     {
-      params: shouldSkipSwapRequest ? undefined : swapRequestParams,
+      // Skip Trading API swap request if on-chain router is enabled
+      params: isOnChainEnabled || shouldSkipSwapRequest ? undefined : swapRequestParams,
       refetchInterval: tradingApiSwapRequestMs,
       staleTime: tradingApiSwapRequestMs,
       // We add a small buffer in case connection is too slow

@@ -120,6 +120,16 @@ export function* handleOnChainStep<T extends OnChainTransactionStep>(params: Han
   } = params
   const { chainId } = step.txRequest
 
+  console.log('[handleOnChainStep] Starting on-chain transaction', {
+    stepType: step.type,
+    chainId,
+    to: step.txRequest.to,
+    data: step.txRequest.data ? `${step.txRequest.data.substring(0, 20)}...` : undefined,
+    value: step.txRequest.value,
+    address,
+    infoType: info.type,
+  })
+
   addTransactionBreadcrumb({ step, data: { ...info } })
 
   // Avoid sending prompting a transaction if the user already submitted an equivalent tx, e.g. by closing and reopening a transaction flow
@@ -266,13 +276,34 @@ function* handleOnModificationAsync({
 /** Submits a transaction and handles potential wallet errors */
 function* submitTransaction(params: HandleOnChainStepParams): SagaGenerator<VitalTxFields> {
   const { address, step } = params
+  console.log('[handleOnChainStep] Submitting transaction via signer.sendTransaction', {
+    chainId: step.txRequest.chainId,
+    to: step.txRequest.to,
+    data: step.txRequest.data ? `${step.txRequest.data.substring(0, 20)}...` : undefined,
+    value: step.txRequest.value,
+    from: address,
+  })
   const signer = yield* call(getSigner, address)
 
   try {
     const response = yield* call([signer, 'sendTransaction'], step.txRequest)
+    console.log('[handleOnChainStep] Transaction submitted successfully', {
+      hash: response.hash,
+      chainId: response.chainId,
+      to: response.to,
+    })
     return transformTransactionResponse(response)
   } catch (error) {
+    console.error('[handleOnChainStep] Transaction submission failed', {
+      error: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      chainId: step.txRequest.chainId,
+      to: step.txRequest.to,
+    })
     if (error && typeof error === 'object' && 'transactionHash' in error && isValidHexString(error.transactionHash)) {
+      console.log('[handleOnChainStep] Recovering transaction from hash', {
+        hash: error.transactionHash,
+      })
       return yield* recoverTransactionFromHash(error.transactionHash, step)
     }
     throw error

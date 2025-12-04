@@ -7,25 +7,18 @@
 import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
 import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
-
-// Base Sepolia chain ID constant
-const BASE_SEPOLIA_CHAIN_ID = 84532
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 
 /**
  * Determines if we should use on-chain V3 operations instead of Trading API
- * For now, only for Base Sepolia V3 positions
+ * Uses the same chain check as the on-chain router for consistency
  * 
- * TODO: Add feature flag support:
- * ```typescript
- * import { useFeatureFlag } from '@universe/gating'
- * const v3OnChainEnabled = useFeatureFlag(FeatureFlags.V3OnChainEnabled)
- * if (!v3OnChainEnabled) return false
- * ```
+ * Enabled chains: [84532 (Base Sepolia), 8453 (Base), 137 (Polygon)]
  */
 export function shouldUseV3OnChainLp({
   chainId,
   protocolVersion,
-  featureFlagEnabled = true, // Default to true for Base Sepolia
+  featureFlagEnabled = true, // Default to true
 }: {
   chainId?: number
   protocolVersion?: string
@@ -36,11 +29,9 @@ export function shouldUseV3OnChainLp({
     return false
   }
 
-  // Only for Base Sepolia (84532) for now
-  // TODO: Expand to other chains as needed
-  // Handle both numeric and enum values
+  // Use the same chain check as on-chain router
   const chainIdNum = typeof chainId === 'number' ? chainId : (chainId as any)
-  if (chainIdNum !== BASE_SEPOLIA_CHAIN_ID && chainIdNum !== UniverseChainId.BaseSepolia) {
+  if (!chainIdNum || !isOnChainRouterEnabled(chainIdNum)) {
     return false
   }
 
@@ -99,6 +90,7 @@ export function convertOnChainTxToCreateLpResponse(
     to: string
     data: string
     value: string
+    sqrtPriceX96?: string
   },
   chainId: EVMUniverseChainId,
 ): {
@@ -118,6 +110,7 @@ export function convertOnChainTxToCreateLpResponse(
       value: txPayload.value,
       chainId,
     },
+    sqrtRatioX96: txPayload.sqrtPriceX96,
   }
 }
 

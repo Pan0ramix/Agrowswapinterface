@@ -31,10 +31,11 @@ export function opacifyRaw(opacity: number, color: string): string {
     if (color.startsWith('#')) {
       return _opacifyHex(opacity, color)
     }
-    if (color.startsWith('rgb(')) {
+    // Handle both rgb() and rgba() formats
+    if (color.startsWith('rgb(') || color.startsWith('rgba(')) {
       return _opacifyRgba(opacity, color)
     }
-    throw new Error(`provided color ${color} is neither a hex nor an rgb color`)
+    throw new Error(`provided color ${color} is neither a hex nor an rgb/rgba color`)
   } catch (e) {
     logger.warn('color/utils', 'opacifyRaw', `Error opacifying color ${color} with opacity ${opacity}: ${e}`)
   }
@@ -42,9 +43,10 @@ export function opacifyRaw(opacity: number, color: string): string {
 }
 
 function _opacifyRgba(opacity: number, color: string): string {
+  // Match both rgb() and rgba() formats, extracting the values inside parentheses
   const match = color.match(/rgba?\(([^)]+)\)/)
   if (!match) {
-    throw new Error(`provided color ${color} is invalid rgb format`)
+    throw new Error(`provided color ${color} is invalid rgb/rgba format`)
   }
   const parts = match[1]?.split(',').map((p) => p.trim())
 
@@ -52,7 +54,9 @@ function _opacifyRgba(opacity: number, color: string): string {
     throw new Error(`provided color ${color} does not have enough components`)
   }
 
+  // Extract RGB values (ignore existing alpha if present in rgba format)
   const [r, g, b] = parts
+  // Apply the new opacity value (0-100 converted to 0-1)
   return `rgba(${r}, ${g}, ${b}, ${(opacity / 100).toFixed(2)})`
 }
 

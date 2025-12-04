@@ -137,7 +137,8 @@ export function TransactionPopupContent({ hash, onClose }: { hash: string; onClo
 
   const isFlashblockNotification = useIsRecentFlashblocksNotification({ transaction, activity })
 
-  if (!transaction || !activity) {
+  // Handle null activity gracefully (query returns null when transaction is missing or parsing fails)
+  if (!transaction || activity === null || activity === undefined) {
     return null
   }
 
@@ -205,7 +206,8 @@ export function FORTransactionPopupContent({
     }),
   )
 
-  if (!activity) {
+  // Handle null activity gracefully (query returns null when transaction is missing or parsing fails)
+  if (activity === null || activity === undefined) {
     return null
   }
 

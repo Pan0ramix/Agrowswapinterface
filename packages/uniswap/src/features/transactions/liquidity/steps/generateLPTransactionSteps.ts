@@ -120,7 +120,22 @@ export function generateLPTransactionSteps(txContext: LiquidityTxAndGasInfo): Tr
         }
       case 'create':
       case 'increase':
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[generateLPTransactionSteps] Creating position/increase steps', {
+            type: txContext.type,
+            unsigned: txContext.unsigned,
+            hasTxRequest: !!txContext.txRequest,
+            hasCreatePositionRequestArgs: !!txContext.createPositionRequestArgs,
+            hasIncreasePositionRequestArgs: !!txContext.increasePositionRequestArgs,
+            chainId: txContext.txRequest?.chainId,
+          })
+        }
         if (txContext.unsigned) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn('[generateLPTransactionSteps] WARNING: Using unsigned/async path (Trading API)', {
+              type: txContext.type,
+            })
+          }
           return orderIncreaseLiquiditySteps({
             revokeToken0,
             revokeToken1,
@@ -136,6 +151,14 @@ export function generateLPTransactionSteps(txContext: LiquidityTxAndGasInfo): Tr
                 : createCreatePositionAsyncStep(txContext.createPositionRequestArgs),
           })
         } else {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[generateLPTransactionSteps] Using on-chain path (direct txRequest)', {
+              type: txContext.type,
+              hasTxRequest: !!txContext.txRequest,
+              txRequestChainId: txContext.txRequest?.chainId,
+              txRequestTo: txContext.txRequest?.to,
+            })
+          }
           const steps = orderIncreaseLiquiditySteps({
             revokeToken0,
             revokeToken1,
@@ -147,6 +170,23 @@ export function generateLPTransactionSteps(txContext: LiquidityTxAndGasInfo): Tr
             token1PermitTransaction: token1PermitTransactionStep,
             increasePosition: createIncreasePositionStep(txContext.txRequest, txContext.sqrtRatioX96),
           })
+
+          // Dev-only: log generated steps for on-chain path
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[generateLPTransactionSteps] generated LP steps', {
+              steps: steps.map((s) => ({
+                type: s.type,
+                chainId: 'txRequest' in s ? s.txRequest?.chainId : undefined,
+                label: 'label' in s ? s.label : undefined,
+                hasApprovalToken0: !!approvalToken0,
+                hasApprovalToken1: !!approvalToken1,
+              })),
+              hasApprovalToken0: !!approvalToken0,
+              hasApprovalToken1: !!approvalToken1,
+              hasRevokeToken0: !!revokeToken0,
+              hasRevokeToken1: !!revokeToken1,
+            })
+          }
 
           if (txContext.canBatchTransactions) {
             // Use batched step - all transactions (approvals, permits, revokes, main) are in the array

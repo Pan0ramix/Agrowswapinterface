@@ -333,17 +333,17 @@ export default function Pool() {
     isFetching,
     isError,
   } = useGetPositionsInfiniteQuery(
-    {
-      address,
-      chainIds: chainFilter ? [chainFilter] : currentModeChains,
-      positionStatuses: statusFilter,
-      protocolVersions: versionFilter,
-      pageSize: PAGE_SIZE,
-      pageToken: '',
-      includeHidden: true,
-    },
-    !isConnected,
-  )
+      {
+        address,
+        chainIds: chainFilter ? [chainFilter] : currentModeChains,
+        positionStatuses: statusFilter,
+        protocolVersions: versionFilter,
+        pageSize: PAGE_SIZE,
+        pageToken: '',
+        includeHidden: true,
+      },
+      !isConnected,
+    )
 
   const loadedPositions = useMemo(() => {
     return data?.pages.flatMap((positionsResponse) => positionsResponse.positions) || []
@@ -455,13 +455,13 @@ export default function Pool() {
       .filter((position): position is PositionInfo => !!position)
 
     return [...parsedApiPositions, ...onChainPositions].reduce<PositionInfo[]>((unique, position) => {
-      const positionId = `${position.poolId}-${position.tokenId}-${position.chainId}`
-      const exists = unique.some((p) => `${p.poolId}-${p.tokenId}-${p.chainId}` === positionId)
-      if (!exists) {
-        unique.push(position)
-      }
-      return unique
-    }, [])
+        const positionId = `${position.poolId}-${position.tokenId}-${position.chainId}`
+        const exists = unique.some((p) => `${p.poolId}-${p.tokenId}-${p.chainId}` === positionId)
+        if (!exists) {
+          unique.push(position)
+        }
+        return unique
+      }, [])
   }, [loadedPositions, savedPositions, chainFilter, statusFilter, versionFilter, onChainPositions])
 
   const { visiblePositions, hiddenPositions } = useMemo(() => {

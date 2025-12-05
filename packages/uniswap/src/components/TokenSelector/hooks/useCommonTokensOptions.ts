@@ -12,17 +12,21 @@ export function useCommonTokensOptions({
   evmAddress,
   svmAddress,
   chainFilter,
+  disablePortfolio = false,
 }: {
   evmAddress: Address | undefined
   svmAddress: Address | undefined
   chainFilter: UniverseChainId | null
+  disablePortfolio?: boolean
 }): GqlResult<TokenOption[] | undefined> {
   const {
     data: portfolioBalancesById,
     error: portfolioBalancesByIdError,
     refetch: portfolioBalancesByIdRefetch,
     loading: loadingPorfolioBalancesById,
-  } = usePortfolioBalancesForAddressById({ evmAddress, svmAddress })
+  } = disablePortfolio
+    ? { data: undefined, error: undefined, refetch: undefined, loading: false }
+    : usePortfolioBalancesForAddressById({ evmAddress, svmAddress, disablePortfolio })
 
   const {
     data: commonBaseCurrencies,
@@ -35,15 +39,19 @@ export function useCommonTokensOptions({
   // TODO(WEB-6284): Replace useAllCommonBaseCurrencies static filter with a dynamic filter
   const USDT_UNICHAIN_ADDRESS = '0x588ce4f028d8e7b53b687865d6a67b3a54c75518'
   const filteredCommonBaseCurrencies = useMemo(() => {
-    return commonBaseCurrencies?.filter(
-      (currency) =>
-        currency.currency.isNative ||
-        currency.currency.chainId !== UniverseChainId.Unichain ||
+    if (!commonBaseCurrencies?.length) return []
+    return commonBaseCurrencies.filter((currency) => {
+      const c = currency?.currency
+      if (!c) return false
+      return (
+        c.isNative ||
+        c.chainId !== UniverseChainId.Unichain ||
         !areAddressesEqual({
           addressInput1: { address: USDT_UNICHAIN_ADDRESS, chainId: UniverseChainId.Unichain },
-          addressInput2: { address: currency.currency.address, chainId: currency.currency.chainId },
-        }),
-    )
+          addressInput2: { address: c.address, chainId: c.chainId },
+        })
+      )
+    })
   }, [commonBaseCurrencies])
 
   const commonBaseTokenOptions = useCurrencyInfosToTokenOptions({

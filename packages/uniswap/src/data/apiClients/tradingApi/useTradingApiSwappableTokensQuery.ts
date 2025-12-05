@@ -16,11 +16,38 @@ import { MAX_REACT_QUERY_CACHE_TIME_MS } from 'utilities/src/time/time'
 
 export function useTradingApiSwappableTokensQuery({
   params,
+  disableTradingApi = false,
   ...rest
 }: UseQueryApiHelperHookArgs<
   SwappableTokensParams,
   TradingApi.GetSwappableTokensResponse
->): UseQueryResult<TradingApi.GetSwappableTokensResponse> {
+> & { disableTradingApi?: boolean }): UseQueryResult<TradingApi.GetSwappableTokensResponse> {
+  if (disableTradingApi) {
+    return {
+      data: undefined,
+      error: undefined,
+      isLoading: false,
+      isFetching: false,
+      isPending: false,
+      refetch: async () => ({ data: undefined, error: undefined, status: 'success' as const }),
+      remove: () => undefined,
+      status: 'success',
+      fetchStatus: 'idle',
+      failureCount: 0,
+      isError: false,
+      isSuccess: true,
+      isStale: false,
+      isRefetching: false,
+      isFetched: true,
+      isFetchedAfterMount: true,
+      isPaused: false,
+      isPlaceholderData: false,
+      isPreviousData: false,
+      dataUpdatedAt: 0,
+      errorUpdatedAt: 0,
+    }
+  }
+
   const queryKey = swappableTokensQueryKey(params)
 
   return useQuery<TradingApi.GetSwappableTokensResponse>({

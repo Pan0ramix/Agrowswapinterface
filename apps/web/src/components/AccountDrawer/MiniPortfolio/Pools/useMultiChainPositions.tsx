@@ -1,5 +1,6 @@
 import { BigNumber } from '@ethersproject/bignumber'
 import { CurrencyAmount, V3_CORE_FACTORY_ADDRESSES as SDK_V3_CORE_FACTORY_ADDRESSES, Token } from '@uniswap/sdk-core'
+import { ProtocolVersion, PositionStatus } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
 import IUniswapV3PoolStateJSON from '@uniswap/v3-core/artifacts/contracts/interfaces/pool/IUniswapV3PoolState.sol/IUniswapV3PoolState.json'
 import { computePoolAddress, Pool, Position } from '@uniswap/v3-sdk'
 import {
@@ -34,6 +35,7 @@ function createPositionInfo({
   slot0,
   tokenA,
   tokenB,
+  poolAddress,
 }: {
   owner: string
   chainId: UniverseChainId
@@ -41,6 +43,7 @@ function createPositionInfo({
   slot0: any
   tokenA: Token
   tokenB: Token
+  poolAddress: string
 }): PositionInfo {
   /* Instantiates a Pool with a hardcoded 0 liqudity value since the sdk only uses this value for swap state and this avoids an RPC fetch */
   const pool = new Pool(tokenA, tokenB, details.fee, slot0.sqrtPriceX96.toString(), 0, slot0.tick)
@@ -52,7 +55,29 @@ function createPositionInfo({
   })
   const inRange = slot0.tick >= details.tickLower && slot0.tick < details.tickUpper
   const closed = details.liquidity.eq(0)
-  return { owner, chainId, pool, position, details, inRange, closed }
+  return {
+    owner,
+    chainId,
+    pool,
+    position,
+    details,
+    inRange,
+    closed,
+    version: ProtocolVersion.V3,
+    poolOrPair: pool,
+    currency0Amount: position.amount0,
+    currency1Amount: position.amount1,
+    poolId: poolAddress,
+    tokenId: details.tokenId.toString(),
+    tickLower: details.tickLower,
+    tickUpper: details.tickUpper,
+    tickSpacing: pool.tickSpacing,
+    liquidity: details.liquidity.toString(),
+    status: closed ? PositionStatus.CLOSED : inRange ? PositionStatus.IN_RANGE : PositionStatus.OUT_OF_RANGE,
+    fee0Amount: CurrencyAmount.fromRawAmount(tokenA, details.tokensOwed0.toString()),
+    fee1Amount: CurrencyAmount.fromRawAmount(tokenB, details.tokensOwed1.toString()),
+    isHidden: false,
+  }
 }
 
 type FeeAmounts = [BigNumber, BigNumber]
@@ -225,6 +250,7 @@ export default function useMultiChainPositions(
 
       const calls: Call[] = []
       const poolPairs: [Token, Token][] = []
+      const poolAddresses: string[] = []
       positionDetails.forEach((details) => {
         const tokenA = tokens[details.token0] ?? new Token(chainId, details.token0, DEFAULT_ERC20_DECIMALS)
         const tokenB = tokens[details.token1] ?? new Token(chainId, details.token1, DEFAULT_ERC20_DECIMALS)
@@ -248,6 +274,7 @@ export default function useMultiChainPositions(
           poolAddressCache.set(details, chainId, poolAddress)
         }
         poolPairs.push([tokenA, tokenB])
+        poolAddresses.push(poolAddress)
         calls.push({
           target: poolAddress,
           callData: poolInterface.encodeFunctionData('slot0'),
@@ -267,6 +294,7 @@ export default function useMultiChainPositions(
                 slot0,
                 tokenA: poolPairs[i][0],
                 tokenB: poolPairs[i][1],
+                poolAddress: poolAddresses[i],
               }),
             )
           } else {
@@ -292,6 +320,7 @@ export default function useMultiChainPositions(
                 slot0,
                 tokenA: poolPairs[i][0],
                 tokenB: poolPairs[i][1],
+                poolAddress: poolAddresses[i],
               }),
             )
           } catch (slotError) {

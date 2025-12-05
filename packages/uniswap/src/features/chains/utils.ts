@@ -247,6 +247,8 @@ export function getEnabledChains({
   featureFlaggedChainIds: UniverseChainId[]
   includeTestnets?: boolean
 }): EnabledChainsInfo {
+  const safeFeatureFlagged = featureFlaggedChainIds ?? []
+
   const enabledChainInfos = ORDERED_CHAINS.filter((chainInfo) => {
     // Filter by platform
     if (platform !== undefined && platform !== chainInfo.platform) {
@@ -259,7 +261,7 @@ export function getEnabledChains({
     }
 
     // Filter by feature flags
-    if (!featureFlaggedChainIds.includes(chainInfo.id)) {
+    if (!safeFeatureFlagged.includes(chainInfo.id)) {
       return false
     }
 

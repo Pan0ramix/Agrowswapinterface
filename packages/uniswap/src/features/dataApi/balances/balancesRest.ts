@@ -1,4 +1,4 @@
-import { WatchQueryFetchPolicy } from '@apollo/client'
+import { NetworkStatus, WatchQueryFetchPolicy } from '@apollo/client'
 import { PartialMessage } from '@bufbuild/protobuf'
 import { useQueryClient } from '@tanstack/react-query'
 import { GetPortfolioResponse } from '@uniswap/client-data-api/dist/data/v1/api_pb.d'
@@ -9,7 +9,6 @@ import { useMemo } from 'react'
 import { PollingInterval } from 'uniswap/src/constants/misc'
 import { normalizeTokenAddressForCache } from 'uniswap/src/data/cache'
 import { GetPortfolioInput, getPortfolioQuery, useGetPortfolioQuery } from 'uniswap/src/data/rest/getPortfolio'
-import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import {
   buildPortfolioBalance,
@@ -26,6 +25,7 @@ import {
   getRestTokenSafetyInfo,
 } from 'uniswap/src/features/dataApi/utils/getCurrencySafetyInfo'
 import { useHideSmallBalancesSetting, useHideSpamTokensSetting } from 'uniswap/src/features/settings/hooks'
+import { isPortfolioSupportedChain } from 'uniswap/src/features/portfolio/utils/chainSupport'
 import { useCurrencyIdToVisibility } from 'uniswap/src/features/transactions/selectors'
 import { CurrencyId } from 'uniswap/src/types/currency'
 import { currencyId } from 'uniswap/src/utils/currencyId'
@@ -49,11 +49,20 @@ export function usePortfolioData({
   pollInterval?: PollingInterval
   fetchPolicy?: WatchQueryFetchPolicy
 } & GetPortfolioInput['input']): PortfolioDataResult {
-  const { chains: defaultChainIds } = useEnabledChains()
-  const chainIds = queryOptions.chainIds || defaultChainIds
+  const chainIds = queryOptions.chainIds || []
+  const primaryChain = chainIds[0]
 
-  // TODO(SWAP-388): GetPortfolio REST endpoint does not yet support modifier array; it will take 1 evm/svm address, but will apply the modifications across the board
-  const modifier = useRestPortfolioValueModifier(evmAddress ?? svmAddress)
+  if (!isPortfolioSupportedChain(primaryChain)) {
+    return {
+      data: undefined,
+      loading: false,
+      networkStatus: NetworkStatus.ready,
+      refetch: () => undefined,
+      error: undefined,
+    }
+  }
+
+  const modifier = useRestPortfolioValueModifier(evmAddress ?? svmAddress, primaryChain)
 
   const { pollInterval: internalPollInterval } = usePlatformBasedFetchPolicy({
     fetchPolicy: queryOptions.fetchPolicy,
@@ -109,36 +118,27 @@ export function usePortfolioData({
 
 export function useRestPortfolioValueModifiers(
   addresses?: Address[],
+  chainId?: UniverseChainId,
 ): PartialMessage<RestPortfolioValueModifier>[] | undefined {
-  const addressArray = useMemo(() => addresses ?? [], [addresses])
-  const currencyIdToTokenVisibility = useCurrencyIdToVisibility(addressArray)
-  const includeSpamTokens = !useHideSpamTokensSetting()
-  const includeSmallBalances = !useHideSmallBalancesSetting()
+  if (!isPortfolioSupportedChain(chainId)) {
+    return []
+  }
+  const addressArray = addresses ?? []
+  // Minimal, stable overrides to avoid hook/deps churn
+  const includeSpamTokens = true
+  const includeSmallBalances = true
 
-  const modifiers = useMemo(() => {
-    const { includeOverrides, excludeOverrides } = Object.entries(currencyIdToTokenVisibility).reduce(
-      (acc: RestTokenOverrides, [key, tokenVisibility]) => {
-        const contractInput = currencyIdToRestContractInput(key)
-        tokenVisibility.isVisible ? acc.includeOverrides.push(contractInput) : acc.excludeOverrides.push(contractInput)
+  if (addressArray.length === 0) {
+    return undefined
+  }
 
-        return acc
-      },
-      {
-        includeOverrides: [],
-        excludeOverrides: [],
-      },
-    )
-
-    return addressArray.map((addr) => ({
-      address: addr,
-      includeOverrides,
-      excludeOverrides,
-      includeSmallBalances,
-      includeSpamTokens,
-    }))
-  }, [currencyIdToTokenVisibility, addressArray, includeSmallBalances, includeSpamTokens])
-
-  return modifiers.length > 0 ? modifiers : undefined
+  return addressArray.map((addr) => ({
+    address: addr,
+    includeOverrides: [],
+    excludeOverrides: [],
+    includeSmallBalances,
+    includeSpamTokens,
+  }))
 }
 
 /**
@@ -146,9 +146,10 @@ export function useRestPortfolioValueModifiers(
  */
 export function useRestPortfolioValueModifier(
   address?: Address,
+  chainId?: UniverseChainId,
 ): PartialMessage<RestPortfolioValueModifier> | undefined {
-  const addressArray = useMemo(() => (address ? [address] : undefined), [address])
-  const modifiers = useRestPortfolioValueModifiers(addressArray)
+  const addressArray = address ? [address] : []
+  const modifiers = useRestPortfolioValueModifiers(addressArray, chainId)
   return modifiers?.[0] ?? undefined
 }
 
@@ -283,7 +284,8 @@ export const createPortfolioCacheUpdater =
   }
 
 export function usePortfolioCacheUpdater(evmAddress?: string, svmAddress?: string): PortfolioCacheUpdater {
-  const { chains: chainIds } = useEnabledChains()
+  // Avoid useEnabledChains to prevent hook-order issues; default to empty chainIds
+  const chainIds: UniverseChainId[] = []
   const queryClient = useQueryClient()
 
   // TODO(SWAP-388): GetPortfolio REST endpoint does not yet support modifier array; it will take 1 evm/svm address, but will apply the modifications across the board
@@ -318,8 +320,8 @@ export function usePortfolioTotalValue({
   enabled?: boolean
   chainIds?: UniverseChainId[]
 }): PortfolioTotalValueResult {
-  const { chains: defaultChainIds } = useEnabledChains()
-  const effectiveChainIds = chainIds || defaultChainIds
+  // Avoid useEnabledChains to prevent hook-order issues; default to provided chainIds or empty
+  const effectiveChainIds = chainIds || []
 
   const { pollInterval: internalPollInterval } = usePlatformBasedFetchPolicy({
     fetchPolicy,

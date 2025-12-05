@@ -58,7 +58,7 @@ export const BASE_SEPOLIA_CHAIN_INFO = {
   assetRepoNetworkName: undefined,
   backendChain: {
     chain: GraphQLApi.Chain.BaseSepolia as GqlChainId,
-    backendSupported: true,
+    backendSupported: false, // disable REST/analytics on testnet to force local lists
     nativeTokenBackendAddress: undefined,
   },
   blockPerMainnetEpochForChainId: 6,

@@ -64,25 +64,33 @@ export function useCurrencyInfosToTokenOptions({
   currencyInfos,
   portfolioBalancesById,
   sortAlphabetically,
+  disablePortfolio = false,
 }: {
   currencyInfos?: CurrencyInfo[]
   sortAlphabetically?: boolean
   portfolioBalancesById?: Record<string, PortfolioBalance>
+  disablePortfolio?: boolean
 }): TokenOption[] | undefined {
+  const safeCurrencyInfos = currencyInfos ?? []
+  const balancesKey = portfolioBalancesById ? Object.keys(portfolioBalancesById).length : 0
+
   // we use useMemo here to avoid recalculation of internals when function params are the same,
   // but the component, where this hook is used is re-rendered
   return useMemo(() => {
-    if (!currencyInfos) {
-      return undefined
+    if (safeCurrencyInfos.length === 0) {
+      return []
+    }
+    if (disablePortfolio) {
+      return safeCurrencyInfos.map((currencyInfo) => createEmptyBalanceOption(currencyInfo))
     }
     const sortedCurrencyInfos = sortAlphabetically
-      ? [...currencyInfos].sort((a, b) => {
+      ? [...safeCurrencyInfos].sort((a, b) => {
           if (a.currency.name && b.currency.name) {
             return a.currency.name.localeCompare(b.currency.name)
           }
           return 0
         })
-      : currencyInfos
+      : safeCurrencyInfos
 
     return sortedCurrencyInfos.map((currencyInfo) => {
       const portfolioBalance = portfolioBalancesById?.[normalizeCurrencyIdForMapLookup(currencyInfo.currencyId)]
@@ -90,5 +98,5 @@ export function useCurrencyInfosToTokenOptions({
         ? { type: OnchainItemListOptionType.Token, ...portfolioBalance }
         : createEmptyBalanceOption(currencyInfo)
     })
-  }, [currencyInfos, portfolioBalancesById, sortAlphabetically])
+  }, [safeCurrencyInfos, balancesKey, sortAlphabetically, disablePortfolio])
 }

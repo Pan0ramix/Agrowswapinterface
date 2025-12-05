@@ -181,8 +181,11 @@ type SwapQueryKeyParams =
 // TODO(WEB-7243): Simplify query key logic once all routing types have a corresponding trade this query can be decoupled from derivedSwapInfo
 function parseQueryKeyParams(params: SwapQueryParams): SwapQueryKeyParams {
   const { trade, derivedSwapInfo } = params
-  // If a trade is not defined, supply information about the currencies and amounts to use as a placeholder key params
-  if (!trade) {
+  const requestId = trade?.quote?.requestId
+
+  // If a trade is not defined or does not have a requestId, supply information about the currencies and amounts
+  // to use as a placeholder key params. This keeps the query key stable even for local/on-chain routes.
+  if (!trade || !requestId) {
     const { input, output } = derivedSwapInfo.currencies
     const amounts = derivedSwapInfo.currencyAmounts
     const inputAmount = amounts[CurrencyField.INPUT]?.toExact()
@@ -197,7 +200,7 @@ function parseQueryKeyParams(params: SwapQueryParams): SwapQueryKeyParams {
   }
 
   return {
-    requestId: trade.quote.requestId,
+    requestId,
     approvalTxInfo: params.approvalTxInfo,
   }
 }

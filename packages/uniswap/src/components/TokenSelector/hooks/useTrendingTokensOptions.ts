@@ -10,39 +10,37 @@ export function useTrendingTokensOptions({
   evmAddress,
   svmAddress,
   chainFilter,
+  disablePortfolio = false,
 }: {
   evmAddress: Address | undefined
   svmAddress: Address | undefined
   chainFilter: Maybe<UniverseChainId>
+  disablePortfolio?: boolean
 }): GqlResult<TokenOption[] | undefined> {
-  const {
-    data: portfolioBalancesById,
-    error: portfolioBalancesByIdError,
-    refetch: portfolioBalancesByIdRefetch,
-    loading: loadingPortfolioBalancesById,
-  } = usePortfolioBalancesForAddressById({ evmAddress, svmAddress })
+  // On this fork, when portfolio/trading data is disabled, short-circuit before any queries
+  if (disablePortfolio) {
+    return { data: [], error: undefined, refetch: undefined, loading: false }
+  }
 
   const {
     data: tokens,
     error: tokensError,
     refetch: refetchTokens,
     loading: loadingTokens,
-  } = useTrendingTokensCurrencyInfos(chainFilter)
+  } = useTrendingTokensCurrencyInfos(chainFilter, undefined, disablePortfolio)
 
-  const tokenOptions = useCurrencyInfosToTokenOptions({ currencyInfos: tokens, portfolioBalancesById })
+  const tokenOptions = useCurrencyInfosToTokenOptions({ currencyInfos: tokens, portfolioBalancesById: undefined })
 
   const refetch = useCallback(() => {
-    portfolioBalancesByIdRefetch?.()
     refetchTokens()
-  }, [portfolioBalancesByIdRefetch, refetchTokens])
+  }, [refetchTokens])
 
-  const error =
-    (!portfolioBalancesById ? portfolioBalancesByIdError : undefined) || (!tokenOptions ? tokensError : undefined)
+  const error = !tokenOptions ? tokensError : undefined
 
   return {
     data: tokenOptions,
     refetch,
     error,
-    loading: loadingPortfolioBalancesById || loadingTokens,
+    loading: loadingTokens,
   }
 }

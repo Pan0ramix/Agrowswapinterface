@@ -12,6 +12,7 @@ import {
   getTokenAddressForApi,
   toTradingApiSupportedChainId,
 } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { WrapType } from 'uniswap/src/features/transactions/types/wrap'
 import { AccountDetails } from 'uniswap/src/features/wallet/types/AccountDetails'
 import { logger } from 'utilities/src/logger/logger'
@@ -97,7 +98,9 @@ export function useTokenApprovalInfo(params: TokenApprovalInfoParams): ApprovalT
   ])
 
   const approvalWillBeBatchedWithSwap = useApprovalWillBeBatchedWithSwap(chainId, routing)
-  const shouldSkip = !approvalRequestArgs || isWrap || !address || approvalWillBeBatchedWithSwap || isChained
+  const isOnChainEnabled = isOnChainRouterEnabled(chainId)
+  const shouldSkip =
+    !approvalRequestArgs || isWrap || !address || approvalWillBeBatchedWithSwap || isChained || isOnChainEnabled
 
   const { data, isLoading, error } = useCheckApprovalQuery({
     params: shouldSkip ? undefined : approvalRequestArgs,
@@ -106,6 +109,14 @@ export function useTokenApprovalInfo(params: TokenApprovalInfoParams): ApprovalT
   })
 
   const tokenApprovalInfo: TokenApprovalInfo = useMemo(() => {
+    if (isOnChainEnabled) {
+      return {
+        action: ApprovalAction.None,
+        txRequest: null,
+        cancelTxRequest: null,
+      }
+    }
+
     if (error) {
       logger.error(error, {
         tags: { file: 'useTokenApprovalInfo', function: 'useTokenApprovalInfo' },
@@ -161,7 +172,7 @@ export function useTokenApprovalInfo(params: TokenApprovalInfoParams): ApprovalT
       txRequest: null,
       cancelTxRequest: null,
     }
-  }, [address, approvalRequestArgs, approvalWillBeBatchedWithSwap, data, error, isWrap, isChained])
+  }, [address, approvalRequestArgs, approvalWillBeBatchedWithSwap, data, error, isWrap, isChained, isOnChainEnabled])
 
   return useMemo(() => {
     const gasEstimate = data?.gasEstimates?.[0]

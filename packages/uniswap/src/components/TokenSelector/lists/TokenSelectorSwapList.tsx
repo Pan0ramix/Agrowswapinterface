@@ -12,8 +12,8 @@ import { TokenSelectorList } from 'uniswap/src/components/TokenSelector/TokenSel
 import { OnSelectCurrency, TokenSectionsHookProps } from 'uniswap/src/components/TokenSelector/types'
 import { isSwapListLoading } from 'uniswap/src/components/TokenSelector/utils'
 import { useBridgingTokensOptions } from 'uniswap/src/features/bridging/hooks/tokens'
-import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
+import { isPortfolioSupportedChain } from 'uniswap/src/features/portfolio/utils/chainSupport'
 import { ClearRecentSearchesButton } from 'uniswap/src/features/search/ClearRecentSearchesButton'
 import { isMobileApp } from 'utilities/src/platform'
 
@@ -24,39 +24,45 @@ function useTokenSectionsForSwap({
   chainFilter,
   oppositeSelectedToken,
 }: TokenSectionsHookProps): GqlResult<OnchainItemSection<TokenSelectorOption>[]> {
-  const { defaultChainId, isTestnetModeEnabled } = useEnabledChains()
+  // Avoid pull from feature-flagged chain selector to keep hook order stable
+  // in this fork. Default to Base Sepolia for the swap selector.
+  const defaultChainId = chainFilter ?? UniverseChainId.BaseSepolia
+  const isTestnetModeEnabled = true
+  // Hard-disable portfolio-dependent logic for stability on this fork.
+  const disablePortfolio = true
 
   const {
-    data: portfolioTokenOptions,
+    data: portfolioTokenOptions = [],
     error: portfolioTokenOptionsError,
     refetch: refetchPortfolioTokenOptions,
-    loading: portfolioTokenOptionsLoading,
-  } = usePortfolioTokenOptions({ evmAddress, svmAddress, chainFilter })
+    loading: portfolioTokenOptionsLoading = false,
+  } = usePortfolioTokenOptions({ evmAddress, svmAddress, chainFilter, disablePortfolio })
 
   const {
-    data: trendingTokenOptions,
+    data: trendingTokenOptions = [],
     error: trendingTokenOptionsError,
     refetch: refetchTrendingTokenOptions,
-    loading: trendingTokenOptionsLoading,
-  } = useTrendingTokensOptions({ evmAddress, svmAddress, chainFilter })
+    loading: trendingTokenOptionsLoading = false,
+  } = useTrendingTokensOptions({ evmAddress, svmAddress, chainFilter, disablePortfolio })
 
   const {
-    data: favoriteTokenOptions,
+    data: favoriteTokenOptions = [],
     error: favoriteTokenOptionsError,
     refetch: refetchFavoriteTokenOptions,
-    loading: favoriteTokenOptionsLoading,
-  } = useFavoriteTokensOptions({ evmAddress, svmAddress, chainFilter })
+    loading: favoriteTokenOptionsLoading = false,
+  } = useFavoriteTokensOptions({ evmAddress, svmAddress, chainFilter, disablePortfolio })
 
   const {
-    data: commonTokenOptions,
+    data: commonTokenOptions = [],
     error: commonTokenOptionsError,
     refetch: refetchCommonTokenOptions,
-    loading: commonTokenOptionsLoading,
+    loading: commonTokenOptionsLoading = false,
     // if there is no chain filter, first check if the input token has a chainId, fallback to defaultChainId
   } = useCommonTokensOptionsWithFallback({
     evmAddress,
     svmAddress,
     chainFilter: chainFilter ?? oppositeSelectedToken?.chainId ?? defaultChainId,
+    disablePortfolio,
   })
 
   const {
@@ -65,9 +71,15 @@ function useTokenSectionsForSwap({
     refetch: refetchBridgingTokenOptions,
     loading: bridgingTokenOptionsLoading,
     shouldNest: shouldNestBridgingTokens,
-  } = useBridgingTokensOptions({ oppositeSelectedToken, evmAddress, svmAddress, chainFilter })
+  } = useBridgingTokensOptions({
+    oppositeSelectedToken,
+    evmAddress,
+    svmAddress,
+    chainFilter,
+    disablePortfolio,
+  })
 
-  const recentlySearchedTokenOptions = useRecentlySearchedTokens(chainFilter)
+  const recentlySearchedTokenOptions = disablePortfolio ? [] : useRecentlySearchedTokens(chainFilter)
 
   const error =
     (!portfolioTokenOptions && portfolioTokenOptionsError) ||
@@ -113,7 +125,7 @@ function useTokenSectionsForSwap({
   const memoizedEndElement = useMemo(() => <ClearRecentSearchesButton />, [])
   const recentSection = useOnchainItemListSection({
     sectionKey: OnchainItemSectionName.RecentSearches,
-    options: recentlySearchedTokenOptions,
+    options: disablePortfolio ? [] : recentlySearchedTokenOptions,
     endElement: memoizedEndElement,
   })
   const favoriteSection = useOnchainItemListSection({

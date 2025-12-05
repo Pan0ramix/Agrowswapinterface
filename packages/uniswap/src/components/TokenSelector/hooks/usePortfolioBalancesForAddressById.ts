@@ -6,10 +6,21 @@ import { PortfolioBalance } from 'uniswap/src/features/dataApi/types'
 export function usePortfolioBalancesForAddressById({
   evmAddress,
   svmAddress,
+  disablePortfolio = false,
 }: {
   evmAddress: Address | undefined
   svmAddress?: Address | undefined
+  disablePortfolio?: boolean
 }): GqlResult<Record<Address, PortfolioBalance> | undefined> {
+  if (disablePortfolio) {
+    return {
+      data: undefined,
+      error: undefined,
+      refetch: () => undefined,
+      loading: false,
+    }
+  }
+
   const {
     data: portfolioBalancesById,
     error,
@@ -18,6 +29,7 @@ export function usePortfolioBalancesForAddressById({
   } = usePortfolioBalances({
     evmAddress,
     svmAddress,
+    disablePortfolio,
     fetchPolicy: 'cache-first', // we want to avoid re-renders when token selector is opening
   })
 

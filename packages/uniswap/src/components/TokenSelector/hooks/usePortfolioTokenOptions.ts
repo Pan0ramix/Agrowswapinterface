@@ -15,18 +15,29 @@ export function usePortfolioTokenOptions({
   svmAddress,
   chainFilter,
   searchFilter,
+  disablePortfolio = false,
 }: {
   evmAddress: Address | undefined
   svmAddress: Address | undefined
   chainFilter: UniverseChainId | null
   searchFilter?: string
+  disablePortfolio?: boolean
 }): GqlResult<TokenOption[] | undefined> {
+  if (disablePortfolio) {
+    return {
+      data: undefined,
+      error: undefined,
+      refetch: () => undefined,
+      loading: false,
+    }
+  }
+
   const {
     data: portfolioBalancesById,
     error,
     refetch,
     loading,
-  } = usePortfolioBalancesForAddressById({ evmAddress, svmAddress })
+  } = usePortfolioBalancesForAddressById({ evmAddress, svmAddress, disablePortfolio })
   const { isTestnetModeEnabled } = useEnabledChains()
 
   const { shownTokens } = useTokenBalancesGroupedByVisibility({

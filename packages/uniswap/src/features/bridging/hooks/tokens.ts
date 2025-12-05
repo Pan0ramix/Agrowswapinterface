@@ -125,12 +125,18 @@ export function useBridgingTokensOptions({
   evmAddress,
   svmAddress,
   chainFilter,
+  disablePortfolio = false,
 }: {
   oppositeSelectedToken: TradeableAsset | undefined
   evmAddress: Address | undefined
   svmAddress: Address | undefined
   chainFilter: UniverseChainId | null
+  disablePortfolio?: boolean
 }): GqlResult<TokenOption[] | undefined> & { shouldNest?: boolean } {
+  if (disablePortfolio) {
+    return { data: [], error: undefined, refetch: () => undefined, loading: false, shouldNest: false }
+  }
+
   const tokenIn = oppositeSelectedToken?.address
     ? getTokenAddressFromChainForTradingApi(oppositeSelectedToken.address, oppositeSelectedToken.chainId)
     : undefined
@@ -148,6 +154,7 @@ export function useBridgingTokensOptions({
             tokenInChainId,
           }
         : undefined,
+    disableTradingApi: disablePortfolio,
   })
 
   // Get portfolio balance for returned tokens

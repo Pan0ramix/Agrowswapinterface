@@ -19,7 +19,8 @@ export const sharedDehydrateOptions: React.ComponentProps<
       return false
     }
 
-    if (query.queryKey.includes(ReactQueryCacheKey.TradeService)) {
+    const keyParts = Array.isArray(query.queryKey) ? query.queryKey : [query.queryKey]
+    if (keyParts.includes(ReactQueryCacheKey.TradeService)) {
       return false
     }
 

@@ -1,6 +1,6 @@
 /* eslint-disable max-lines */
 import { BigNumber } from '@ethersproject/bignumber'
-import { Position, PositionStatus, ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
+import { PositionStatus, ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
 import { Currency, CurrencyAmount, Percent, Price } from '@uniswap/sdk-core'
 import { GraphQLApi } from '@universe/api'
 import { FeatureFlags, useFeatureFlag } from '@universe/gating'
@@ -27,6 +27,7 @@ import { useAccount } from 'hooks/useAccount'
 import { useSrcColor } from 'hooks/useColor'
 import { useLpIncentivesFormattedEarnings } from 'hooks/useLpIncentivesFormattedEarnings'
 import { usePositionTokenURI } from 'hooks/usePositionTokenURI'
+import useMultiChainPositions from 'components/AccountDrawer/MiniPortfolio/Pools/useMultiChainPositions'
 import NotFound from 'pages/NotFound'
 import { useMemo, useState } from 'react'
 import { ArrowLeft } from 'react-feather'
@@ -137,7 +138,25 @@ function PositionPage({ chainId }: { chainId: EVMUniverseChainId | undefined }) 
     chainId: chainId ?? supportedAccountChainId,
   })
   const position = data?.position
-  const positionInfo = useMemo(() => parseRestPosition(position), [position])
+  const { positions: onChainPositions, loading: onChainPositionsLoading } = useMultiChainPositions(
+    account.address ?? '',
+    { includeTestnets: true },
+  )
+  const positionInfo = useMemo(() => {
+    const parsed = parseRestPosition(position)
+    if (parsed) {
+      return parsed
+    }
+    // Fallback to on-chain positions when REST/analytics data is unavailable (e.g., Base Sepolia)
+    const match = onChainPositions?.find((p) => {
+      const sameToken =
+        tokenIdFromUrl &&
+        (p.tokenId?.toString?.() === tokenIdFromUrl || p.details?.tokenId?.toString?.() === tokenIdFromUrl)
+      const sameChain = chainId ? p.chainId === chainId : true
+      return sameToken && sameChain
+    })
+    return match
+  }, [position, onChainPositions, tokenIdFromUrl, chainId])
   const metadata = usePositionTokenURI({ tokenId, chainId, version: positionInfo?.version })
   usePendingLPTransactionsChangeListener(refetch)
 
@@ -270,7 +289,7 @@ function PositionPage({ chainId }: { chainId: EVMUniverseChainId | undefined }) 
     navigate(`/migrate/v3/${chainInfo?.urlParam}/${tokenIdFromUrl}`)
   })
 
-  if (positionLoading) {
+  if (positionLoading || onChainPositionsLoading) {
     return (
       <BodyWrapper>
         <LoadingRows>
@@ -290,7 +309,9 @@ function PositionPage({ chainId }: { chainId: EVMUniverseChainId | undefined }) 
     )
   }
 
-  if (!position || !positionInfo || !currency0Amount || !currency1Amount || !baseCurrency || !quoteCurrency) {
+  const positionStatus = positionInfo?.status ?? position?.status
+
+  if (!positionInfo || !currency0Amount || !currency1Amount || !baseCurrency || !quoteCurrency) {
     return (
       <NotFound
         title={<Text variant="heading2">{t('position.notFound')}</Text>}
@@ -579,7 +600,7 @@ function PositionPage({ chainId }: { chainId: EVMUniverseChainId | undefined }) 
           </Flex>
           <Flex gap="$spacing20">
             <PositionSection
-              position={position}
+              positionStatus={positionStatus}
               currency0Amount={currency0Amount}
               currency1Amount={currency1Amount}
               fiatValue0={fiatValue0}
@@ -642,13 +663,13 @@ const SectionContainer = ({ children }: { children: React.ReactNode }) => {
 }
 
 const PositionSection = ({
-  position,
+  positionStatus,
   currency0Amount,
   currency1Amount,
   fiatValue0,
   fiatValue1,
 }: {
-  position: Position
+  positionStatus?: PositionStatus
   currency0Amount: CurrencyAmount<Currency>
   currency1Amount: CurrencyAmount<Currency>
   fiatValue0: Maybe<CurrencyAmount<Currency>>
@@ -716,7 +737,7 @@ const PositionSection = ({
         <Text color="$neutral2" variant="body2">
           <Trans i18nKey="pool.position" />
         </Text>
-        {position.status === PositionStatus.CLOSED ? (
+        {positionStatus === PositionStatus.CLOSED ? (
           <Text variant="heading2" $lg={{ variant: 'heading3' }}>
             {convertFiatAmountFormatted(0, NumberType.FiatTokenPrice)}
           </Text>

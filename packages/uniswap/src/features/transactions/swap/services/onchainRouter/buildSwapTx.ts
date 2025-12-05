@@ -217,10 +217,23 @@ export function buildSwapTx(params: BuildSwapTxParams): SwapTransactionPayload {
  */
 export function calculateAmountOutMinimum(
   amountOut: CurrencyAmount<Currency>,
-  slippageTolerance: Percent,
+  slippageTolerance: Percent | { numerator?: bigint | number; denominator?: bigint | number } | number,
 ): CurrencyAmount<Currency> {
-  // complement() = (1 - slippage), which is exactly what we need
-  return amountOut.multiply(slippageTolerance.complement())
+  // Guard against malformed slippage inputs (e.g. plain numbers or dehydrated objects)
+  const percent = slippageTolerance instanceof Percent
+    ? slippageTolerance
+    : new Percent(
+        (slippageTolerance as any)?.numerator ?? Math.round((Number(slippageTolerance) || 0.5) * 100),
+        (slippageTolerance as any)?.denominator ?? 10_000,
+      )
+
+  // complement() = (1 - slippage); if complement is unavailable, fall back to no slippage
+  const complement =
+    typeof (percent as any).complement === 'function'
+      ? (percent as any).complement()
+      : new Percent(1, 1)
+
+  return amountOut.multiply(complement)
 }
 
 /**

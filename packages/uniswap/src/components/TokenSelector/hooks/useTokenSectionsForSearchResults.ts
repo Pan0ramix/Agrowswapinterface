@@ -14,6 +14,7 @@ import { useBridgingTokensOptions } from 'uniswap/src/features/bridging/hooks/to
 import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { getChainLabel } from 'uniswap/src/features/chains/utils'
+import { isPortfolioSupportedChain } from 'uniswap/src/features/portfolio/utils/chainSupport'
 import { useSearchTokens } from 'uniswap/src/features/dataApi/searchTokens'
 import type { CurrencyInfo } from 'uniswap/src/features/dataApi/types'
 import { getValidAddress } from 'uniswap/src/utils/addresses'
@@ -41,20 +42,27 @@ export function useTokenSectionsForSearchResults({
   // Use current chain ID from wallet if chainFilter is null (for address searches)
   // Convert wagmi chainId to UniverseChainId if it's a supported chain
   const effectiveChainFilter = chainFilter ?? (wagmiChainId as UniverseChainId | undefined) ?? null
+  const disablePortfolio = !isPortfolioSupportedChain(effectiveChainFilter ?? undefined)
 
   const {
     data: portfolioBalancesById,
     error: portfolioBalancesByIdError,
     refetch: refetchPortfolioBalances,
     loading: portfolioBalancesByIdLoading,
-  } = usePortfolioBalancesForAddressById({ evmAddress, svmAddress })
+  } = usePortfolioBalancesForAddressById({ evmAddress, svmAddress, disablePortfolio })
 
   const {
     data: portfolioTokenOptions,
     error: portfolioTokenOptionsError,
     refetch: refetchPortfolioTokenOptions,
     loading: portfolioTokenOptionsLoading,
-  } = usePortfolioTokenOptions({ evmAddress, svmAddress, chainFilter, searchFilter: searchFilter ?? undefined })
+  } = usePortfolioTokenOptions({
+    evmAddress,
+    svmAddress,
+    chainFilter,
+    searchFilter: searchFilter ?? undefined,
+    disablePortfolio,
+  })
 
   // Bridging tokens are only shown if input is provided
   const {

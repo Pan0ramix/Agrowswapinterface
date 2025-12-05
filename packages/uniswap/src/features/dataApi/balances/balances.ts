@@ -39,15 +39,27 @@ export function usePortfolioBalances({
   evmAddress,
   svmAddress,
   chainIds,
+  disablePortfolio = false,
   ...queryOptions
 }: {
   evmAddress?: Address
   svmAddress?: Address
   chainIds?: UniverseChainId[]
+  disablePortfolio?: boolean
 } & QueryHookOptions<
   GraphQLApi.PortfolioBalancesQuery,
   GraphQLApi.PortfolioBalancesQueryVariables
 >): PortfolioDataResult {
+  if (disablePortfolio) {
+    return {
+      data: undefined,
+      error: undefined,
+      loading: false,
+      networkStatus: NetworkStatus.ready,
+      refetch: () => undefined,
+    }
+  }
+
   return usePortfolioData({
     evmAddress: evmAddress || '',
     svmAddress: svmAddress || '',

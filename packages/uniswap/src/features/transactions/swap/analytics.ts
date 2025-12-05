@@ -258,7 +258,11 @@ export function useSwapAnalytics(derivedSwapInfo: DerivedSwapInfo): void {
     trade: { trade },
   } = derivedSwapInfo
 
-  const quoteId = trade?.quote.requestId
+  // No trade or missing quote -> nothing to record
+  const quoteId = trade?.quote?.requestId
+  if (!trade || !quoteId) {
+    return
+  }
 
   const wallet = useWallet()
   const evmAddress = wallet.evmAccount?.address

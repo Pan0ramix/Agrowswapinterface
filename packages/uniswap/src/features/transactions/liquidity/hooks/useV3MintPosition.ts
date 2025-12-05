@@ -301,8 +301,8 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
             poolCodeExists,
             slot0: slot0
               ? {
-                  sqrtPriceX96: slot0.sqrtPriceX96.toString(),
-                  tick: slot0.tick,
+              sqrtPriceX96: slot0.sqrtPriceX96.toString(),
+              tick: slot0.tick,
                 }
               : null,
             poolInitialized,
@@ -767,7 +767,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
             callSequence: txPayload.callSequence,
             sqrtPriceX96: txPayload.sqrtPriceX96,
             selectorPrefix: txPayload.data.substring(0, 10),
-          })
+        })
         }
 
         // Dev-only: log mint params before simulation

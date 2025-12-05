@@ -1,8 +1,9 @@
 import { GetPortfolioResponse } from '@uniswap/client-data-api/dist/data/v1/api_pb'
 import { GraphQLApi } from '@universe/api'
-import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
 import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
+import { isPortfolioSupportedChain } from 'uniswap/src/features/portfolio/utils/chainSupport'
 import { logger } from 'utilities/src/logger/logger'
 
 /**
@@ -11,39 +12,31 @@ import { logger } from 'utilities/src/logger/logger'
 export function useTotalBalancesUsdPerChain(
   portfolioBalances: GraphQLApi.PortfolioBalancesQueryResult,
 ): Record<string, number> | undefined {
-  const [totalBalancesUsdPerChain, setTotalBalancesUsdPerChain] = useState<Record<string, number> | undefined>(
-    undefined,
-  )
+  const { gqlChains, defaultChainId } = useEnabledChains()
+  const tokenBalances = portfolioBalances.data?.portfolios?.[0]?.tokenBalances
+  const disablePortfolio = !isPortfolioSupportedChain(defaultChainId)
 
-  const { gqlChains } = useEnabledChains()
-
-  useEffect(() => {
-    const calculateBalancesPerChain = async (): Promise<void> => {
-      if (!portfolioBalances.data?.portfolios?.[0]?.tokenBalances) {
-        return
-      }
-
-      const totalBalances = gqlChains.reduce(
-        (chainAcc, chain) => {
-          chainAcc[chain] =
-            portfolioBalances.data?.portfolios?.[0]?.tokenBalances?.reduce((balanceAcc, tokenBalance) => {
-              if (tokenBalance?.token?.chain === chain && !tokenBalance.isHidden) {
-                return balanceAcc + (tokenBalance.denominatedValue?.value || 0)
-              }
-              return balanceAcc
-            }, 0) || 0
-          return chainAcc
-        },
-        {} as Record<string, number>,
-      )
-
-      setTotalBalancesUsdPerChain(totalBalances)
+  return useMemo(() => {
+    if (disablePortfolio || !tokenBalances || !gqlChains.length) {
+      return undefined
     }
 
-    calculateBalancesPerChain().catch((error) => logger.error('useTotalBalancesUsdPerChain', error))
-  }, [portfolioBalances.data?.portfolios, gqlChains])
-
-  return totalBalancesUsdPerChain
+    try {
+      return gqlChains.reduce((chainAcc, chain) => {
+        chainAcc[chain] =
+          tokenBalances?.reduce((balanceAcc, tokenBalance) => {
+            if (tokenBalance?.token?.chain === chain && !tokenBalance.isHidden) {
+              return balanceAcc + (tokenBalance.denominatedValue?.value || 0)
+            }
+            return balanceAcc
+          }, 0) || 0
+        return chainAcc
+      }, {} as Record<string, number>)
+    } catch (error) {
+      logger.error('useTotalBalancesUsdPerChain', error)
+      return undefined
+    }
+  }, [disablePortfolio, gqlChains, tokenBalances])
 }
 
 /**

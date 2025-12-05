@@ -11,17 +11,28 @@ export function useFavoriteTokensOptions({
   evmAddress,
   svmAddress,
   chainFilter,
+  disablePortfolio = false,
 }: {
   evmAddress: Address | undefined
   svmAddress: Address | undefined
   chainFilter: UniverseChainId | null
+  disablePortfolio?: boolean
 }): GqlResult<TokenOption[] | undefined> {
+  if (disablePortfolio) {
+    return {
+      data: [],
+      refetch: () => undefined,
+      error: undefined,
+      loading: false,
+    }
+  }
+
   const {
     data: portfolioBalancesById,
     error: portfolioBalancesByIdError,
     refetch: portfolioBalancesByIdRefetch,
     loading: loadingPorfolioBalancesById,
-  } = usePortfolioBalancesForAddressById({ evmAddress, svmAddress })
+  } = usePortfolioBalancesForAddressById({ evmAddress, svmAddress, disablePortfolio })
 
   const {
     data: favoriteCurrencies,
@@ -34,6 +45,7 @@ export function useFavoriteTokensOptions({
     currencyInfos: favoriteCurrencies,
     portfolioBalancesById,
     sortAlphabetically: true,
+    disablePortfolio,
   })
 
   const refetch = useCallback(() => {

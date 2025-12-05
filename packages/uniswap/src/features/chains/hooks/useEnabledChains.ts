@@ -17,28 +17,20 @@ export function useIsModeMismatch(chainId?: UniverseChainId): boolean {
 
 export function useEnabledChains(options?: { platform?: Platform; includeTestnets?: boolean }): EnabledChainsInfo {
   const featureFlaggedChainIds = useFeatureFlaggedChainIds()
+  const safeFeatureFlaggedChainIds = (featureFlaggedChainIds ?? []) as UniverseChainId[]
   const isTestnetModeEnabled = useSelector(selectIsTestnetModeEnabled)
+  const featureFlagsKey = safeFeatureFlaggedChainIds.join(',')
 
-  const {
-    chains: unorderedChains,
-    gqlChains,
-    defaultChainId,
-  } = useMemo(
-    () =>
-      getEnabledChains({
-        platform: options?.platform,
-        includeTestnets: options?.includeTestnets,
-        isTestnetModeEnabled,
-        featureFlaggedChainIds,
-      }),
-    [options?.platform, options?.includeTestnets, isTestnetModeEnabled, featureFlaggedChainIds],
-  )
+  const { chains: unorderedChains, gqlChains, defaultChainId } = getEnabledChains({
+    platform: options?.platform,
+    includeTestnets: options?.includeTestnets,
+    isTestnetModeEnabled,
+    featureFlaggedChainIds: safeFeatureFlaggedChainIds,
+  })
 
   const orderedChains = useOrderedChainIds(unorderedChains)
 
-  return useMemo(() => {
-    return { chains: orderedChains, gqlChains, defaultChainId, isTestnetModeEnabled }
-  }, [defaultChainId, gqlChains, isTestnetModeEnabled, orderedChains])
+  return { chains: orderedChains, gqlChains, defaultChainId, isTestnetModeEnabled }
 }
 
 // use in non hook contexts

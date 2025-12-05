@@ -1,7 +1,7 @@
 import { GqlResult } from '@universe/api'
+import { useMemo } from 'react'
 import { useCurrencies } from 'uniswap/src/components/TokenSelector/hooks/useCurrencies'
 import { USDC, USDT, WBTC } from 'uniswap/src/constants/tokens'
-import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { CurrencyInfo } from 'uniswap/src/features/dataApi/types'
 import { buildNativeCurrencyId, buildWrappedNativeCurrencyId, currencyId } from 'uniswap/src/utils/currencyId'
@@ -23,6 +23,18 @@ const baseCurrencyIds = [
 ]
 
 export function useAllCommonBaseCurrencies(): GqlResult<CurrencyInfo[]> {
-  const { isTestnetModeEnabled } = useEnabledChains()
-  return useCurrencies(isTestnetModeEnabled ? [] : baseCurrencyIds)
+  // On this fork we hard-disable feature-flag-driven chain selection to keep hook
+  // order stable. Always return mainnet bases and fall back to an empty list rather
+  // than synthesizing partial CurrencyInfos (which can break downstream filters).
+  const stableIds = baseCurrencyIds
+  const result = useCurrencies(stableIds)
+  return useMemo(
+    () => ({
+      data: result?.data ?? [],
+      error: result?.error,
+      refetch: result?.refetch,
+      loading: result?.loading ?? false,
+    }),
+    [result],
+  )
 }

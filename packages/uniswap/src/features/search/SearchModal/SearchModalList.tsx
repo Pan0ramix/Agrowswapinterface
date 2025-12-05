@@ -312,11 +312,19 @@ export const SearchModalList = memo(function _SearchModalList({
 
 // eslint-disable-next-line consistent-return
 function key(item: SearchModalOption): string {
+  if (!item) {
+    return 'token-unknown'
+  }
+
   switch (item.type) {
     case OnchainItemListOptionType.Pool:
       return `pool-${item.chainId}-${item.poolId}-${item.protocolVersion}-${item.hookAddress}-${item.feeTier}`
     case OnchainItemListOptionType.Token:
-      return `token-${item.currencyInfo.currency.chainId}-${item.currencyInfo.currencyId}`
+      // Guard against partially populated currencyInfo when token metadata fails to load
+      // Prefer currencyId; fall back to address/symbol to avoid null deref.
+      return `token-${item.chainId ?? item.currencyInfo?.currency?.chainId ?? 'unknown'}-${
+        item.currencyInfo?.currencyId ?? item.address ?? item.currencyInfo?.currency?.symbol ?? 'unknown'
+      }`
     case OnchainItemListOptionType.WalletByAddress:
       return `wallet-${item.address}`
     case OnchainItemListOptionType.ENSAddress:

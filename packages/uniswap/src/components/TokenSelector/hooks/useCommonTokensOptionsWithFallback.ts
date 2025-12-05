@@ -15,12 +15,19 @@ export function useCommonTokensOptionsWithFallback({
   evmAddress,
   svmAddress,
   chainFilter,
+  disablePortfolio = false,
 }: {
   evmAddress: Address | undefined
   svmAddress: Address | undefined
   chainFilter: UniverseChainId | null
+  disablePortfolio?: boolean
 }): GqlResult<TokenOption[] | undefined> {
-  const { data, error, refetch, loading } = useCommonTokensOptions({ evmAddress, svmAddress, chainFilter })
+  const { data, error, refetch, loading } = useCommonTokensOptions({
+    evmAddress,
+    svmAddress,
+    chainFilter,
+    disablePortfolio,
+  })
   const commonBases = chainFilter ? currencyInfosToTokenOptions(COMMON_BASES[chainFilter]) : undefined
   const commonBasesCurrencyIds = useMemo(
     () => commonBases?.map((token) => currencyId(token.currencyInfo.currency)).filter(Boolean) ?? [],
@@ -29,7 +36,7 @@ export function useCommonTokensOptionsWithFallback({
   const { data: commonBasesCurrencies } = useCurrencies(commonBasesCurrencyIds)
   const commonBasesTokenOptions = useCurrencyInfosToTokenOptions({
     currencyInfos: commonBasesCurrencies,
-    portfolioBalancesById: {},
+    portfolioBalancesById: disablePortfolio ? undefined : {},
   })
 
   const shouldFallback = data?.length === 0 && commonBases?.length

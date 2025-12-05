@@ -13,6 +13,7 @@ import { TradeableAsset } from 'uniswap/src/entities/assets'
 import { useBridgingTokensOptions } from 'uniswap/src/features/bridging/hooks/tokens'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { getChainLabel } from 'uniswap/src/features/chains/utils'
+import { isPortfolioSupportedChain } from 'uniswap/src/features/portfolio/utils/chainSupport'
 import type { CurrencyInfo } from 'uniswap/src/features/dataApi/types'
 
 /**
@@ -35,20 +36,27 @@ export function useTokenSectionsForSearchResults({
   input?: TradeableAsset
 }): GqlResult<OnchainItemSection<TokenOption>[]> {
   const { t } = useTranslation()
+  const disablePortfolio = !isPortfolioSupportedChain(chainFilter ?? undefined)
 
   const {
     data: portfolioBalancesById,
     error: portfolioBalancesByIdError,
     refetch: refetchPortfolioBalances,
     loading: portfolioBalancesByIdLoading,
-  } = usePortfolioBalancesForAddressById({ evmAddress, svmAddress })
+  } = usePortfolioBalancesForAddressById({ evmAddress, svmAddress, disablePortfolio })
 
   const {
     data: portfolioTokenOptions,
     error: portfolioTokenOptionsError,
     refetch: refetchPortfolioTokenOptions,
     loading: portfolioTokenOptionsLoading,
-  } = usePortfolioTokenOptions({ evmAddress, svmAddress, chainFilter, searchFilter: searchFilter ?? undefined })
+  } = usePortfolioTokenOptions({
+    evmAddress,
+    svmAddress,
+    chainFilter,
+    searchFilter: searchFilter ?? undefined,
+    disablePortfolio,
+  })
 
   // Bridging tokens are only shown if input is provided
   const {

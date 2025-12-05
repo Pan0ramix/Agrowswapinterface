@@ -27,8 +27,10 @@ export function useIsSupportedChainId(chainId?: number | UniverseChainId): chain
   return supportedChainId !== undefined
 }
 
-export function useIsSupportedChainIdCallback(): (chainId?: number | UniverseChainId) => chainId is UniverseChainId {
-  const { chains } = useEnabledChains()
+export function useIsSupportedChainIdCallback(
+  includeTestnets?: boolean,
+): (chainId?: number | UniverseChainId) => chainId is UniverseChainId {
+  const { chains } = useEnabledChains({ includeTestnets })
   return useEvent((chainId?: number | UniverseChainId): chainId is UniverseChainId => {
     return createGetSupportedChainId({ getChains: () => chains }).isSupportedChainId(chainId)
   })

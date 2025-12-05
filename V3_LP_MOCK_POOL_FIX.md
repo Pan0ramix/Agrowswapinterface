@@ -86,3 +86,4 @@ For user input: 0.01 USDC, 0.009999 EURC with initial price ~1.0:
 The dependent amount calculation now uses the actual price from context (derived from `initialPrice` or pool price), matching upstream Uniswap's behavior exactly.
 
 
+

@@ -51,3 +51,4 @@ The minimal fix is to ensure `poolOrPair` passed to `useDepositInfo` includes th
 **Better fix**: In `useDepositInfo`, when `poolOrPair` is `undefined` for V3, create a mock pool using a default 1:1 price if no price is available.
 
 
+

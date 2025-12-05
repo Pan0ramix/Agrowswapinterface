@@ -1,10 +1,13 @@
 /* eslint-disable max-lines */
 import { PositionStatus, ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
+import { Currency, CurrencyAmount, V3_CORE_FACTORY_ADDRESSES as SDK_V3_CORE_FACTORY_ADDRESSES } from '@uniswap/sdk-core'
+import { Pool as V3Pool, Position as V3Position, computePoolAddress } from '@uniswap/v3-sdk'
 import { FeatureFlags, useFeatureFlag } from '@universe/gating'
 import PROVIDE_LIQUIDITY from 'assets/images/provideLiquidity.png'
 import tokenLogo from 'assets/images/token-logo.png'
 import V4_HOOK from 'assets/images/v4Hooks.png'
 import { ExpandoRow } from 'components/AccountDrawer/MiniPortfolio/ExpandoRow'
+import useMultiChainPositions from 'components/AccountDrawer/MiniPortfolio/Pools/useMultiChainPositions'
 import { useAccountDrawer } from 'components/AccountDrawer/MiniPortfolio/hooks'
 import { MenuStateVariant, useSetMenu } from 'components/AccountDrawer/menuState'
 import { ExternalArrowLink } from 'components/Liquidity/ExternalArrowLink'
@@ -42,6 +45,8 @@ import Trace from 'uniswap/src/features/telemetry/Trace'
 import { useIsMissingPlatformWallet } from 'uniswap/src/features/transactions/swap/components/SwapFormButton/hooks/useIsMissingPlatformWallet'
 import { usePositionVisibilityCheck } from 'uniswap/src/features/visibility/hooks/usePositionVisibilityCheck'
 import { useInfiniteScroll } from 'utilities/src/react/useInfiniteScroll'
+import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
+import { DEFAULT_TICK_SPACING } from 'uniswap/src/constants/pools'
 
 // The BE limits the number of positions by chain and protocol version.
 // PAGE_SIZE=25 means the limit is at most 25 positions * x chains * y protocol versions.
@@ -302,6 +307,10 @@ export default function Pool() {
 
   const isPositionVisible = usePositionVisibilityCheck()
   const [showHiddenPositions, setShowHiddenPositions] = useState(false)
+  const { positions: onChainPositionsRaw, loading: onChainPositionsLoading } = useMultiChainPositions(
+    address ?? '',
+    { includeTestnets: true },
+  )
 
   const {
     isPendingTransaction,
@@ -314,29 +323,123 @@ export default function Pool() {
     hasCollectedRewards,
   } = useLpIncentives()
 
-  const { data, isPlaceholderData, refetch, isLoading, fetchNextPage, hasNextPage, isFetching } =
-    useGetPositionsInfiniteQuery(
-      {
-        address,
-        chainIds: chainFilter ? [chainFilter] : currentModeChains,
-        positionStatuses: statusFilter,
-        protocolVersions: versionFilter,
-        pageSize: PAGE_SIZE,
-        pageToken: '',
-        includeHidden: true,
-      },
-      !isConnected,
-    )
+  const {
+    data,
+    isPlaceholderData,
+    refetch,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isError,
+  } = useGetPositionsInfiniteQuery(
+    {
+      address,
+      chainIds: chainFilter ? [chainFilter] : currentModeChains,
+      positionStatuses: statusFilter,
+      protocolVersions: versionFilter,
+      pageSize: PAGE_SIZE,
+      pageToken: '',
+      includeHidden: true,
+    },
+    !isConnected,
+  )
 
   const loadedPositions = useMemo(() => {
     return data?.pages.flatMap((positionsResponse) => positionsResponse.positions) || []
   }, [data])
 
+  const onChainPositions = useMemo(() => {
+    if (!onChainPositionsRaw) {
+      return []
+    }
+
+    type OnChainV3Position = {
+      status: PositionStatus
+      version: ProtocolVersion.V3
+      currency0Amount: CurrencyAmount<Currency>
+      currency1Amount: CurrencyAmount<Currency>
+      chainId: UniverseChainId
+      poolId: string
+      tokenId: string
+      tickLower: number
+      tickUpper: number
+      tickSpacing: number
+      liquidity: string
+      token0UncollectedFees: string
+      token1UncollectedFees: string
+      feeTier: { feeAmount: number; tickSpacing: number; isDynamic: boolean }
+      poolOrPair: V3Pool
+      position: V3Position
+      owner: string
+      isHidden: boolean
+    }
+
+    const mapped = onChainPositionsRaw
+      .map((position): OnChainV3Position | null => {
+        const factoryAddresses =
+          position.chainId === UniverseChainId.BaseSepolia
+            ? AGROSWAP_V3_CORE_FACTORY_ADDRESSES
+            : SDK_V3_CORE_FACTORY_ADDRESSES
+        const factoryAddress = factoryAddresses[position.chainId as keyof typeof factoryAddresses]
+        if (!factoryAddress) {
+          return null
+        }
+
+        const poolId = computePoolAddress({
+          factoryAddress,
+          tokenA: position.pool.token0,
+          tokenB: position.pool.token1,
+          fee: position.details.fee,
+          chainId: position.chainId as number,
+        })
+
+        const status = position.closed
+          ? PositionStatus.CLOSED
+          : position.inRange
+            ? PositionStatus.IN_RANGE
+            : PositionStatus.OUT_OF_RANGE
+
+        return {
+          status,
+          version: ProtocolVersion.V3,
+          currency0Amount: position.position.amount0,
+          currency1Amount: position.position.amount1,
+          chainId: position.chainId,
+          poolId,
+          tokenId: position.details.tokenId.toString(),
+          tickLower: position.details.tickLower,
+          tickUpper: position.details.tickUpper,
+          tickSpacing: position.pool.tickSpacing,
+          liquidity: position.details.liquidity.toString(),
+          token0UncollectedFees: position.details.tokensOwed0.toString(),
+          token1UncollectedFees: position.details.tokensOwed1.toString(),
+          feeTier: {
+            feeAmount: position.details.fee,
+            tickSpacing: position.pool.tickSpacing ?? DEFAULT_TICK_SPACING,
+            isDynamic: false,
+          },
+          poolOrPair: position.pool,
+          position: position.position,
+          owner: position.owner,
+          isHidden: false,
+        }
+      })
+      .filter((position): position is OnChainV3Position => position !== null)
+
+    return mapped.filter((position) => {
+      const matchesChain = !chainFilter || position.chainId === chainFilter
+      const matchesStatus = position.status && statusFilter.includes(position.status)
+      const matchesVersion = position.version && versionFilter.includes(position.version)
+      return matchesChain && matchesStatus && matchesVersion
+    }) as PositionInfo[]
+  }, [onChainPositionsRaw, chainFilter, statusFilter, versionFilter])
+
   const savedPositions = useRequestPositionsForSavedPairs()
 
-  const isLoadingPositions = !!account.address && (isLoading || !data)
+  const isLoadingPositions = !!account.address && (onChainPositionsLoading || (!isError && (isLoading || !data)))
   const combinedPositions = useMemo(() => {
-    return [
+    const parsedApiPositions = [
       ...loadedPositions,
       ...savedPositions
         .filter((position) => {
@@ -350,15 +453,16 @@ export default function Pool() {
     ]
       .map(parseRestPosition)
       .filter((position): position is PositionInfo => !!position)
-      .reduce<PositionInfo[]>((unique, position) => {
-        const positionId = `${position.poolId}-${position.tokenId}-${position.chainId}`
-        const exists = unique.some((p) => `${p.poolId}-${p.tokenId}-${p.chainId}` === positionId)
-        if (!exists) {
-          unique.push(position)
-        }
-        return unique
-      }, [])
-  }, [loadedPositions, savedPositions, chainFilter, statusFilter, versionFilter])
+
+    return [...parsedApiPositions, ...onChainPositions].reduce<PositionInfo[]>((unique, position) => {
+      const positionId = `${position.poolId}-${position.tokenId}-${position.chainId}`
+      const exists = unique.some((p) => `${p.poolId}-${p.tokenId}-${p.chainId}` === positionId)
+      if (!exists) {
+        unique.push(position)
+      }
+      return unique
+    }, [])
+  }, [loadedPositions, savedPositions, chainFilter, statusFilter, versionFilter, onChainPositions])
 
   const { visiblePositions, hiddenPositions } = useMemo(() => {
     const visiblePositions: PositionInfo[] = []

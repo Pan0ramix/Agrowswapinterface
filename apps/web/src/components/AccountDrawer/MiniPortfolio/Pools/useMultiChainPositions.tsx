@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PositionDetails } from 'types/position'
 import { NonfungiblePositionManager, UniswapInterfaceMulticall } from 'uniswap/src/abis/types/v3'
 import { UniswapV3PoolInterface } from 'uniswap/src/abis/types/v3/UniswapV3Pool'
+import ERC20_ABI from 'uniswap/src/abis/erc20.json'
 import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
@@ -60,6 +61,10 @@ const MAX_UINT128 = BigNumber.from(2).pow(128).sub(1)
 
 type UseMultiChainPositionsData = { positions?: PositionInfo[]; loading: boolean }
 
+type UseMultiChainPositionsOptions = {
+  includeTestnets?: boolean
+}
+
 /**
  * Returns all positions for a given account on multiple chains.
  *
@@ -69,8 +74,11 @@ type UseMultiChainPositionsData = { positions?: PositionInfo[]; loading: boolean
  * @param chains - chains to fetch positions from
  * @returns positions, fees
  */
-export default function useMultiChainPositions(account: string): UseMultiChainPositionsData {
-  const { chains } = useEnabledChains()
+export default function useMultiChainPositions(
+  account: string,
+  options?: UseMultiChainPositionsOptions,
+): UseMultiChainPositionsData {
+  const { chains } = useEnabledChains({ includeTestnets: options?.includeTestnets })
 
   const pms = useV3ManagerContracts(chains)
   const multicalls = useInterfaceMulticallContracts(chains)
@@ -86,6 +94,35 @@ export default function useMultiChainPositions(account: string): UseMultiChainPo
   const [feeMap, setFeeMap] = useState<{ [key: string]: FeeAmounts }>({})
 
   const { priceMap, pricesLoading } = usePoolPriceMap(positions)
+
+  const fetchErc20Token = useCallback(
+    async ({
+      address,
+      chainId,
+      provider,
+    }: {
+      address: string
+      chainId: UniverseChainId
+      provider: any
+    }): Promise<Token | undefined> => {
+      try {
+        const iface = new Interface(ERC20_ABI)
+        const [nameData, symbolData, decimalsData] = await Promise.all([
+          provider.call({ to: address, data: iface.encodeFunctionData('name') }),
+          provider.call({ to: address, data: iface.encodeFunctionData('symbol') }),
+          provider.call({ to: address, data: iface.encodeFunctionData('decimals') }),
+        ])
+        const name = iface.decodeFunctionResult('name', nameData)[0] as string
+        const symbol = iface.decodeFunctionResult('symbol', symbolData)[0] as string
+        const decimals = Number(iface.decodeFunctionResult('decimals', decimalsData)[0])
+        return new Token(chainId, address, decimals || DEFAULT_ERC20_DECIMALS, symbol, name)
+      } catch (error) {
+        logger.debug('useMultiChainPositions', 'fetchErc20Token', 'Failed to fetch token', { error, address, chainId })
+        return undefined
+      }
+    },
+    [],
+  )
 
   const fetchPositionFees = useCallback(
     // eslint-disable-next-line max-params
@@ -111,35 +148,80 @@ export default function useMultiChainPositions(account: string): UseMultiChainPo
   )
 
   const fetchPositionIds = useCallback(
-    async (pm: NonfungiblePositionManager, balance: BigNumber) => {
+    async (pm: NonfungiblePositionManager, balance: BigNumber, chainId: UniverseChainId) => {
       const callData = Array.from({ length: balance.toNumber() }, (_, i) =>
         pm.interface.encodeFunctionData('tokenOfOwnerByIndex', [account, i]),
       )
-      return (await pm.callStatic.multicall(callData)).map((idByte) => BigNumber.from(idByte))
+      try {
+        return (await pm.callStatic.multicall(callData)).map((idByte) => BigNumber.from(idByte))
+      } catch (error) {
+        logger.debug('useMultiChainPositions', 'fetchPositionIds', 'multicall failed, sequential fallback', {
+          error,
+          chainId,
+        })
+        const ids: BigNumber[] = []
+        for (let i = 0; i < balance.toNumber(); i++) {
+          ids.push(await pm.tokenOfOwnerByIndex(account, i))
+        }
+        return ids
+      }
     },
     [account],
   )
 
-  const fetchPositionDetails = useCallback(async (pm: NonfungiblePositionManager, positionIds: BigNumber[]) => {
-    const callData = positionIds.map((id) => pm.interface.encodeFunctionData('positions', [id]))
-    return (await pm.callStatic.multicall(callData)).map(
-      (positionBytes, index) =>
-        ({
-          ...pm.interface.decodeFunctionResult('positions', positionBytes),
-          tokenId: positionIds[index],
-        }) as unknown as PositionDetails,
-    )
-  }, [])
+  const fetchPositionDetails = useCallback(
+    async (pm: NonfungiblePositionManager, positionIds: BigNumber[], chainId: UniverseChainId) => {
+      const callData = positionIds.map((id) => pm.interface.encodeFunctionData('positions', [id]))
+      try {
+        return (await pm.callStatic.multicall(callData)).map(
+          (positionBytes, index) =>
+            ({
+              ...pm.interface.decodeFunctionResult('positions', positionBytes),
+              tokenId: positionIds[index],
+            }) as unknown as PositionDetails,
+        )
+      } catch (error) {
+        logger.debug('useMultiChainPositions', 'fetchPositionDetails', 'multicall failed, sequential fallback', {
+          error,
+          chainId,
+        })
+        const details: PositionDetails[] = []
+        for (const id of positionIds) {
+          const res = await pm.positions(id)
+          details.push({ ...res, tokenId: id } as unknown as PositionDetails)
+        }
+        return details
+      }
+    },
+    [],
+  )
 
   // Combines PositionDetails with Pool data to build our return type
   const fetchPositionInfo = useCallback(
     // eslint-disable-next-line max-params
     async (positionDetails: PositionDetails[], chainId: UniverseChainId, multicall: UniswapInterfaceMulticall) => {
       const poolInterface = new Interface(IUniswapV3PoolStateJSON.abi) as UniswapV3PoolInterface
-      const tokens = await getTokens(
-        positionDetails.flatMap((details) => [details.token0, details.token1]),
-        chainId,
-      )
+
+      // Fallback token fetching when multicall fails (e.g., Base Sepolia)
+      const tokens =
+        chainId === UniverseChainId.BaseSepolia && !multicall
+          ? (
+              await Promise.all(
+                positionDetails
+                  .flatMap((details) => [details.token0, details.token1])
+                  .map((address) => fetchErc20Token({ address, chainId, provider: multicall?.provider })),
+              )
+            ).reduce<{ [key: string]: Token | undefined }>((acc, token, idx, arr) => {
+              const address = positionDetails.flatMap((d) => [d.token0, d.token1])[idx]
+              if (token) {
+                acc[address] = token
+              }
+              return acc
+            }, {})
+          : await getTokens(
+              positionDetails.flatMap((details) => [details.token0, details.token1]),
+              chainId,
+            )
 
       const calls: Call[] = []
       const poolPairs: [Token, Token][] = []
@@ -173,27 +255,56 @@ export default function useMultiChainPositions(account: string): UseMultiChainPo
         })
       }, [])
 
-      // eslint-disable-next-line max-params
-      return (await multicall.callStatic.multicall(calls)).returnData.reduce((acc: PositionInfo[], result, i) => {
-        if (result.success) {
-          const slot0 = poolInterface.decodeFunctionResult('slot0', result.returnData)
-          acc.push(
-            createPositionInfo({
-              owner: account,
+      try {
+        return (await multicall.callStatic.multicall(calls)).returnData.reduce((acc: PositionInfo[], result, i) => {
+          if (result.success) {
+            const slot0 = poolInterface.decodeFunctionResult('slot0', result.returnData)
+            acc.push(
+              createPositionInfo({
+                owner: account,
+                chainId,
+                details: positionDetails[i],
+                slot0,
+                tokenA: poolPairs[i][0],
+                tokenB: poolPairs[i][1],
+              }),
+            )
+          } else {
+            logger.debug('useMultiChainPositions', 'fetchPositionInfo', 'slot0 fetch errored', result)
+          }
+          return acc
+        }, [])
+      } catch (error) {
+        logger.debug('useMultiChainPositions', 'fetchPositionInfo', 'multicall slot0 failed, sequential fallback', {
+          error,
+          chainId,
+        })
+        const results: PositionInfo[] = []
+        for (let i = 0; i < calls.length; i++) {
+          try {
+            const returnData = await multicall.provider.call({ to: calls[i].target, data: calls[i].callData })
+            const slot0 = poolInterface.decodeFunctionResult('slot0', returnData)
+            results.push(
+              createPositionInfo({
+                owner: account,
+                chainId,
+                details: positionDetails[i],
+                slot0,
+                tokenA: poolPairs[i][0],
+                tokenB: poolPairs[i][1],
+              }),
+            )
+          } catch (slotError) {
+            logger.debug('useMultiChainPositions', 'fetchPositionInfo', 'slot0 direct call failed', {
+              slotError,
               chainId,
-              details: positionDetails[i],
-              slot0,
-              tokenA: poolPairs[i][0],
-              tokenB: poolPairs[i][1],
-            }),
-          )
-        } else {
-          logger.debug('useMultiChainPositions', 'fetchPositionInfo', 'slot0 fetch errored', result)
+            })
+          }
         }
-        return acc
-      }, [])
+        return results
+      }
     },
-    [account, poolAddressCache, getTokens],
+    [account, fetchErc20Token, poolAddressCache, getTokens],
   )
 
   const fetchPositionsForChain = useCallback(
@@ -211,11 +322,11 @@ export default function useMultiChainPositions(account: string): UseMultiChainPo
           return []
         }
 
-        const positionIds = await fetchPositionIds(pm, balance)
+        const positionIds = await fetchPositionIds(pm, balance, chainId)
         // Fetches fees in the background and stores them separetely from the results of this function
         fetchPositionFees(pm, positionIds, chainId)
 
-        const postionDetails = await fetchPositionDetails(pm, positionIds)
+        const postionDetails = await fetchPositionDetails(pm, positionIds, chainId)
         return fetchPositionInfo(postionDetails, chainId, multicall)
       } catch (error) {
         const wrappedError = new Error('Failed to fetch positions for chain', { cause: error })

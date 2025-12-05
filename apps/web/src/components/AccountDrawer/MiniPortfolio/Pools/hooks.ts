@@ -31,14 +31,16 @@ function useContractMultichain<T extends BaseContract>({
   addressMap,
   ABI,
   chainIds,
+  includeTestnets,
 }: {
   addressMap: { [chainId: number]: string | undefined }
   ABI: any
   chainIds?: UniverseChainId[]
+  includeTestnets?: boolean
 }): ContractMap<T> {
   const account = useAccount()
   const { provider: walletProvider } = useWeb3React()
-  const isSupportedChain = useIsSupportedChainIdCallback()
+  const isSupportedChain = useIsSupportedChainIdCallback(includeTestnets)
 
   return useMemo(() => {
     const relevantChains =
@@ -75,6 +77,7 @@ export function useV3ManagerContracts(chainIds: UniverseChainId[]): ContractMap<
     addressMap,
     ABI: NFTPositionManagerJSON.abi,
     chainIds,
+    includeTestnets: true,
   })
 }
 
@@ -88,6 +91,7 @@ export function useInterfaceMulticallContracts(chainIds: UniverseChainId[]): Con
     addressMap,
     ABI: MulticallJSON.abi,
     chainIds,
+    includeTestnets: true,
   })
 }
 

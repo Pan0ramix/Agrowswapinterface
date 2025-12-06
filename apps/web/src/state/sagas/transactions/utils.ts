@@ -472,9 +472,24 @@ function* findDuplicativeTx({
     .filter(isInterfaceTransaction)
 
   // Check all pending and recent transactions
-  return transactionsForAccount.find(
+  const candidate = transactionsForAccount.find(
     (tx) => (isPendingTx(tx) || isRecentTx(tx)) && JSON.stringify(tx.typeInfo) === JSON.stringify(info),
   )
+
+  // If the candidate is pending but the node no longer knows about it (dropped / not propagated),
+  // allow the UI to prompt again.
+  if (candidate && candidate.hash && isPendingTx(candidate)) {
+    try {
+      const onchainTx = yield* call(getTransaction, { hash: candidate.hash })
+      if (!onchainTx) {
+        return undefined
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  return candidate
 }
 
 // Saga to wait for the specific action while asyncTask is running

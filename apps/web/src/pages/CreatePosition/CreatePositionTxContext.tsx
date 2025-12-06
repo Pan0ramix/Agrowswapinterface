@@ -435,7 +435,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     customDeadline: s.customDeadline,
     customSlippageTolerance: s.customSlippageTolerance,
   }))
-  const canBatchTransactions =
+  const canBatchTransactionsFromContext =
     useUniswapContextSelector((ctx) => ctx.getCanBatchTransactions?.(poolOrPair?.chainId)) ?? false
 
   const [transactionError, setTransactionError] = useState<string | boolean>(false)
@@ -480,6 +480,12 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
 
     return result
   }, [chainId, isOnChainEnabled, protocolVersion])
+
+  // Disable batching on on-chain router testnets to keep approvals sequential and wallet prompts visible.
+  const canBatchTransactions = useMemo(
+    () => (isOnChainEnabled ? false : canBatchTransactionsFromContext),
+    [isOnChainEnabled, canBatchTransactionsFromContext],
+  )
 
   const addLiquidityApprovalParams = useMemo(() => {
     return generateAddLiquidityApprovalParams({

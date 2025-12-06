@@ -6,11 +6,11 @@ import { NONFUNGIBLE_POSITION_MANAGER_ADDRESSES, V3_CORE_FACTORY_ADDRESSES } fro
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 
 // Custom contract addresses for Base Sepolia (Chain ID: 84532)
-const BASE_SEPOLIA_V3_FACTORY = '0xd8B483e9D01AEF316D0b6971f55d32614a280CE3'
-const BASE_SEPOLIA_POSITION_MANAGER = '0xD2AF9906D955bcbdD3CD7411fd8a7E22574ce497'
-const BASE_SEPOLIA_SWAP_ROUTER = '0xfc92663ccf3c1fe47eE72057df1f1D00fbdCD9C6'
-const BASE_SEPOLIA_QUOTER_V2 = '0x8A1b1Da3C114FEc711F17EF49A2CC5Cc97dc76D6'
-const BASE_SEPOLIA_WETH = '0xE6acF4D03Fb173e590645Cc2432F2943c438A57A'
+const BASE_SEPOLIA_V3_FACTORY = '0xB1285002ce1173097A7E2A1a0aCa00fBb436370d'
+const BASE_SEPOLIA_POSITION_MANAGER = '0xcAB40e366603997dDAdaF30d2c774e104Ba97612'
+const BASE_SEPOLIA_SWAP_ROUTER = '0xFBE90a25E523e7e668cC2Da97BED21d8FB0BDa26'
+const BASE_SEPOLIA_QUOTER_V2 = '0x9B988c0B5720c3ab8a60a04e7C17126519AF64e4'
+const BASE_SEPOLIA_WETH = '0x0328b69C7b94b8f5814CfDe0482Ef3bE1D4D091c'
 
 /**
  * Extended V3 Factory addresses with custom deployments
@@ -30,10 +30,10 @@ export const NONFUNGIBLE_POSITION_MANAGER_ADDRESSES_OVERRIDE: Record<number, str
 
 /**
  * Extended Multicall addresses with custom deployments
- * Base Sepolia multicall: 0xd867e273eAbD6c853fCd0Ca0bFB6a3aE6491d2C1
+ * Base Sepolia multicall: Agroswap UniswapInterfaceMulticall deployment
  */
 export const MULTICALL_ADDRESSES_OVERRIDE: Record<number, string> = {
-  [UniverseChainId.BaseSepolia]: '0xd867e273eAbD6c853fCd0Ca0bFB6a3aE6491d2C1',
+  [UniverseChainId.BaseSepolia]: '0xFc87d551FA35638da206bDe0Fb15298467Fb0dbd',
 }
 
 /**

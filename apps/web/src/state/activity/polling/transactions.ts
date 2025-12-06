@@ -59,7 +59,8 @@ const SWAP_STATUS_TO_FINALIZED_STATUS: Partial<Record<TradingApi.SwapStatus, 'su
 export function usePollPendingTransactions(onActivityUpdate: OnActivityUpdate) {
   const account = useAccount()
   const publicClient = usePublicClient()
-  const tradingApiPollingEnabled = useFeatureFlag(FeatureFlags.TradingApiSwapConfirmation)
+  // Agroswap: never use Trading API confirmations; rely on on-chain receipts only.
+  const tradingApiPollingEnabled = false
 
   const pendingTransactions = usePendingTransactions(account.chainId)
   const hasPending = pendingTransactions.length > 0
@@ -89,7 +90,8 @@ export function usePollPendingTransactions(onActivityUpdate: OnActivityUpdate) {
                 if (blockTimestamp && tx.deadline < Number(blockTimestamp)) {
                   removeTransaction(tx.id)
                 }
-              } else if (tx.addedTime + ms(`6h`) < Date.now()) {
+              // Without a deadline, drop stale pending txs after 30 minutes to avoid UI lockups.
+              } else if (tx.addedTime + ms(`30m`) < Date.now()) {
                 removeTransaction(tx.id)
               }
             }
@@ -115,87 +117,8 @@ export function usePollPendingTransactions(onActivityUpdate: OnActivityUpdate) {
     [account.chainId, account.isConnected, blockTimestamp, publicClient, removeTransaction],
   )
 
-  const getReceiptWithTradingApi = useCallback(
-    (tx: PendingTransactionDetails): { promise: Promise<ReceiptWithStatus>; cancel: () => void } => {
-      const chainId = toTradingApiSupportedChainId(account.chainId)
-      if (!account.chainId || !chainId) {
-        throw new Error('No chainId')
-      }
-
-      const pollingInterval = getChainInfo(account.chainId).tradingApiPollingIntervalMs
-      const retryOptions: RetryOptions = {
-        n: 20,
-        minWait: pollingInterval,
-        medWait: pollingInterval,
-        maxWait: pollingInterval,
-      }
-
-      return retry(() => {
-        if (!tx.hash) {
-          throw new Error(`Invalid transaction hash: hash not defined`)
-        }
-        return TradingApiClient.fetchSwaps({ txHashes: [tx.hash], chainId })
-          .then(async (res) => {
-            const status = res.swaps?.[0]?.status
-            const finalizedStatus = status ? SWAP_STATUS_TO_FINALIZED_STATUS[status] : undefined
-
-            if (!finalizedStatus) {
-              if (account.isConnected) {
-                // Remove transactions past their deadline or - if there is no deadline - older than 6 hours.
-                if (tx.deadline) {
-                  // Deadlines are expressed as seconds since epoch, as they are used on-chain.
-                  if (blockTimestamp && tx.deadline < Number(blockTimestamp)) {
-                    removeTransaction(tx.id)
-                  }
-                } else if (tx.addedTime + ms(`6h`) < Date.now()) {
-                  removeTransaction(tx.id)
-                }
-              }
-
-              throw new RetryableError()
-            }
-
-            sendAnalyticsEvent(InterfaceEventName.SwapConfirmedOnClient, {
-              time: Date.now() - tx.addedTime,
-              swap_success: finalizedStatus === 'success',
-              chainId: account.chainId,
-              txHash: tx.hash ?? '',
-            })
-
-            let adaptedReceipt: TransactionReceipt | undefined
-
-            if (publicClient && tx.hash && isValidHexString(tx.hash)) {
-              try {
-                const viemReceipt = await publicClient.getTransactionReceipt({ hash: tx.hash })
-                adaptedReceipt = receiptFromViemReceipt(viemReceipt)
-                if (!adaptedReceipt) {
-                  throw new Error('Error converting viem receipt to transaction receipt')
-                }
-              } catch {
-                // ignore errors and fallback to dummy
-              }
-            }
-
-            if (!adaptedReceipt) {
-              adaptedReceipt = {
-                transactionIndex: 0,
-                blockHash: tx.hash ?? '',
-                blockNumber: 0,
-                confirmedTime: Date.now(),
-                gasUsed: 0,
-                effectiveGasPrice: 0,
-              }
-            }
-
-            return { status: finalizedStatus, receipt: adaptedReceipt } as ReceiptWithStatus
-          })
-          .catch((_error) => {
-            throw new RetryableError()
-          })
-      }, retryOptions) as { promise: Promise<ReceiptWithStatus>; cancel: () => void }
-    },
-    [account.chainId, account.isConnected, blockTimestamp, removeTransaction, publicClient],
-  )
+  // Trading API path disabled; on-chain receipt polling only.
+  const getReceiptWithTradingApi = getReceipt
 
   useEffect(() => {
     if (!account.address || !account.chainId || !publicClient || !lastBlockNumber || !hasPending) {

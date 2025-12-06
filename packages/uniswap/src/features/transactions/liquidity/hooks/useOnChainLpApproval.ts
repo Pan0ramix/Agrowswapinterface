@@ -6,8 +6,8 @@
  */
 
 import { CurrencyAmount, Token } from '@uniswap/sdk-core'
-import { useMemo } from 'react'
-import { useReadContract } from 'wagmi'
+import { useEffect, useMemo } from 'react'
+import { useReadContract, useWatchContractEvent } from 'wagmi'
 import { erc20Abi, type Address } from 'viem'
 import { getPositionManagerAddress } from 'uniswap/src/constants/v3Addresses'
 import { AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
@@ -99,6 +99,36 @@ export function useOnChainLpApproval(
       enabled: queryEnabled0,
       refetchOnMount: true,
       refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      staleTime: 0,
+      cacheTime: 0,
+      refetchInterval: 10_000, // safety net if tx event is missed
+    },
+    watch: queryEnabled0, // listen for new blocks so mined approvals reflect immediately
+  })
+
+  // Force a fresh allowance read when dependencies change (e.g., after external approvals)
+  useEffect(() => {
+    if (queryEnabled0) {
+      void refetchAllowance0()
+    }
+  }, [queryEnabled0, owner, spender, amount0?.currency.address, amount0?.currency.chainId, refetchAllowance0])
+
+  // React to Approval(owner, spender, value) events for token0
+  useWatchContractEvent({
+    address: toAddress(amount0?.currency.address),
+    chainId: amount0?.currency.chainId,
+    abi: erc20Abi,
+    eventName: 'Approval',
+    args: queryEnabled0
+      ? {
+          owner: toAddress(owner),
+          spender: toAddress(spender),
+        }
+      : undefined,
+    enabled: queryEnabled0,
+    onLogs: () => {
+      void refetchAllowance0()
     },
   })
 
@@ -125,6 +155,36 @@ export function useOnChainLpApproval(
       enabled: queryEnabled1,
       refetchOnMount: true,
       refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      staleTime: 0,
+      cacheTime: 0,
+      refetchInterval: 10_000, // safety net if tx event is missed
+    },
+    watch: queryEnabled1, // listen for new blocks so mined approvals reflect immediately
+  })
+
+  // Force a fresh allowance read when dependencies change (e.g., after external approvals)
+  useEffect(() => {
+    if (queryEnabled1) {
+      void refetchAllowance1()
+    }
+  }, [queryEnabled1, owner, spender, amount1?.currency.address, amount1?.currency.chainId, refetchAllowance1])
+
+  // React to Approval(owner, spender, value) events for token1
+  useWatchContractEvent({
+    address: toAddress(amount1?.currency.address),
+    chainId: amount1?.currency.chainId,
+    abi: erc20Abi,
+    eventName: 'Approval',
+    args: queryEnabled1
+      ? {
+          owner: toAddress(owner),
+          spender: toAddress(spender),
+        }
+      : undefined,
+    enabled: queryEnabled1,
+    onLogs: () => {
+      void refetchAllowance1()
     },
   })
 

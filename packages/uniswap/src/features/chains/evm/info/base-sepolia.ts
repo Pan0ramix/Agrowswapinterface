@@ -85,9 +85,11 @@ export const BASE_SEPOLIA_CHAIN_INFO = {
   rpcUrls: isPlaywrightEnv()
     ? getPlaywrightRpcUrls(LOCAL_BASE_SEPOLIA_PLAYWRIGHT_RPC_URL)
     : {
-        [RPCType.Public]: { http: [getQuicknodeEndpointUrl(UniverseChainId.BaseSepolia)] },
+        // Prefer the stable public Base Sepolia RPC; QuickNode can be added as PublicAlt if needed.
+        [RPCType.Public]: { http: ['https://sepolia.base.org'] },
         [RPCType.Default]: { http: ['https://sepolia.base.org'] },
         [RPCType.Fallback]: { http: ['https://sepolia.base.org'] },
+        [RPCType.PublicAlt]: { http: [getQuicknodeEndpointUrl(UniverseChainId.BaseSepolia)] },
         [RPCType.Interface]: { http: [`https://base-sepolia.infura.io/v3/${config.infuraKey}`] },
       },
   tokens,
@@ -95,7 +97,7 @@ export const BASE_SEPOLIA_CHAIN_INFO = {
     name: 'Wrapped Ether',
     symbol: 'WETH',
     decimals: 18,
-    address: '0xE6acF4D03Fb173e590645Cc2432F2943c438A57A',
+    address: '0x0328b69C7b94b8f5814CfDe0482Ef3bE1D4D091c',
   },
   gasConfig: GENERIC_L2_GAS_CONFIG,
   tradingApiPollingIntervalMs: 150,

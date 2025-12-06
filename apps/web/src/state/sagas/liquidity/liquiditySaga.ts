@@ -406,6 +406,10 @@ function* modifyLiquidity(params: LiquidityParams & { steps: TransactionStep[] }
             action,
             signature,
             analytics,
+            // For LP flows on custom chains, allow re-prompting even if a prior identical
+            // transaction was recorded, to avoid suppressing the wallet prompt after
+            // approval retries or modal reloads.
+            allowDuplicativeTx: true,
           })
           if (process.env.NODE_ENV !== 'production') {
             console.log('[liquiditySaga] Position transaction step completed')

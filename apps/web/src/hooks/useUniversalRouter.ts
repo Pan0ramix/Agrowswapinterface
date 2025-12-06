@@ -2,12 +2,7 @@ import { useTotalBalancesUsdForAnalytics } from 'appGraphql/data/apollo/useTotal
 import { TransactionResponse } from '@ethersproject/abstract-provider'
 import { BigNumber } from '@ethersproject/bignumber'
 import { Percent } from '@uniswap/sdk-core'
-import {
-  FlatFeeOptions,
-  SwapRouter,
-  UNIVERSAL_ROUTER_ADDRESS,
-  UniversalRouterVersion,
-} from '@uniswap/universal-router-sdk'
+import { FlatFeeOptions, SwapRouter, UniversalRouterVersion } from '@uniswap/universal-router-sdk'
 import { FeeOptions, toHex } from '@uniswap/v3-sdk'
 import { useAccount } from 'hooks/useAccount'
 import { useEthersWeb3Provider } from 'hooks/useEthersProvider'
@@ -26,6 +21,7 @@ import i18n from 'uniswap/src/i18n'
 import { logger } from 'utilities/src/logger/logger'
 import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
 import { calculateGasMargin } from 'utils/calculateGasMargin'
+import { getUniversalRouterAddress } from 'utils/universalRouterAddress'
 import { UserRejectedRequestError, WrongChainError } from 'utils/errors'
 import isZero from 'utils/isZero'
 import { didUserReject, swapErrorToUserReadableMessage } from 'utils/swapErrorToUserReadableMessage'
@@ -114,7 +110,7 @@ export function useUniversalRouterSwapCallback({
       // For Agroswap, UR will route through Agroswap v3 pools via the factory
       const tx = {
         from: account.address,
-        to: UNIVERSAL_ROUTER_ADDRESS(UniversalRouterVersion.V1_2, chainId),
+        to: getUniversalRouterAddress(UniversalRouterVersion.V1_2, chainId),
         data,
         // TODO(https://github.com/Uniswap/universal-router-sdk/issues/113): universal-router-sdk returns a non-hexlified value.
         ...(value && !isZero(value) ? { value: toHex(value) } : {}),

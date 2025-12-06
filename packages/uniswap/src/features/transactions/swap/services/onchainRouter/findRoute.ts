@@ -56,16 +56,10 @@ export async function findRoute(
     )
 
     if (candidateRoutes.length === 0) {
-      logger.warn('findRoute: No candidate routes generated', {
-        tags: {
-          file: 'findRoute',
-          function: 'findRoute',
-        },
-        extra: {
-          tokenIn: tokenIn.symbol,
-          tokenOut: tokenOut.symbol,
-          chainId,
-        },
+      logger.warn('findRoute', 'findRoute', 'No candidate routes generated', {
+        tokenIn: tokenIn.symbol,
+        tokenOut: tokenOut.symbol,
+        chainId,
       })
       return null
     }
@@ -80,17 +74,50 @@ export async function findRoute(
     )
 
     if (validatedRoutes.length === 0) {
-      logger.warn('findRoute: No valid routes found after validation', {
-        tags: {
-          file: 'findRoute',
-          function: 'findRoute',
-        },
-        extra: {
-          tokenIn: tokenIn.symbol,
-          tokenOut: tokenOut.symbol,
-          chainId,
-          candidateCount: candidateRoutes.length,
-        },
+      logger.warn('findRoute', 'findRoute', 'No valid routes after validation; attempting direct fallback', {
+        tokenIn: tokenIn.symbol,
+        tokenOut: tokenOut.symbol,
+        chainId,
+        candidateCount: candidateRoutes.length,
+        feesTried: fees,
+      })
+      // Fallback: explicitly try a direct single-hop route across provided fee tiers.
+      // This covers cases where candidate generation or multi-hop construction misses a valid direct pool.
+      for (const fee of fees) {
+        const directRoute: CandidateRoute = {
+          hops: [
+            {
+              tokenIn: tokenIn.wrapped,
+              tokenOut: tokenOut.wrapped,
+              fee,
+            },
+          ],
+          description: `Fallback direct: ${tokenIn.symbol} → ${tokenOut.symbol} (fee ${fee})`,
+        }
+
+        const validated = await validateRouteWithQuoter(directRoute, amountIn, tokenOut, chainId, publicClient)
+        if (validated) {
+          logger.info('findRoute', 'findRoute', 'Direct fallback route succeeded', {
+            tokenIn: tokenIn.symbol,
+            tokenOut: tokenOut.symbol,
+            chainId,
+            fee,
+            amountIn: amountIn.toExact(),
+            amountOut: validated.amountOutCurrency.toExact(),
+          })
+          return {
+            route: validated,
+            amountIn,
+            amountOut: validated.amountOutCurrency,
+          }
+        }
+      }
+
+      logger.warn('findRoute', 'findRoute', 'No valid routes found after validation', {
+        tokenIn: tokenIn.symbol,
+        tokenOut: tokenOut.symbol,
+        chainId,
+        candidateCount: candidateRoutes.length,
       })
       return null
     }

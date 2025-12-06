@@ -1,6 +1,6 @@
 /* eslint-disable max-lines */
 import { Currency, CurrencyAmount, Token } from '@uniswap/sdk-core'
-import { UNIVERSAL_ROUTER_ADDRESS, UniversalRouterVersion } from '@uniswap/universal-router-sdk'
+import { UniversalRouterVersion } from '@uniswap/universal-router-sdk'
 import { FeatureFlags, useFeatureFlag } from '@universe/gating'
 import { useAccountDrawer } from 'components/AccountDrawer/MiniPortfolio/hooks'
 import { OpenLimitOrdersButton } from 'components/AccountDrawer/MiniPortfolio/Limits/OpenLimitOrdersButton'
@@ -51,6 +51,7 @@ import { CurrencyField } from 'uniswap/src/types/currency'
 import { formatCurrencyAmount as formatCurrencyAmountRaw } from 'utilities/src/format/localeBased'
 import { NumberType } from 'utilities/src/format/types'
 import { maxAmountSpend } from 'utils/maxAmountSpend'
+import { getUniversalRouterAddress } from 'utils/universalRouterAddress'
 
 const CustomHeightSwapSection = TamaguiStyled(SwapSection, {
   height: 'unset',
@@ -259,7 +260,7 @@ function LimitForm({ onCurrencyChange }: LimitFormProps) {
 
   const allowance = usePermit2Allowance({
     amount: parsedAmounts.input?.currency.isNative ? undefined : (parsedAmounts.input as CurrencyAmount<Token>),
-    spender: isSupportedChain ? UNIVERSAL_ROUTER_ADDRESS(UniversalRouterVersion.V1_2, chainId) : undefined,
+    spender: isSupportedChain ? getUniversalRouterAddress(UniversalRouterVersion.V1_2, chainId) : undefined,
     tradeFillType: TradeFillType.UniswapX,
   })
 

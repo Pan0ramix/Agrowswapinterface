@@ -6,6 +6,7 @@
  */
 
 import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
+import JSBI from 'jsbi'
 import { skipToken, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
@@ -124,8 +125,33 @@ export function useOnChainSwapQuote(
       return skipToken
     }
 
+    // Guard: never call on-chain quoting with zero/negative amount
+    if (JSBI.lessThanOrEqual(amountIn.quotient, JSBI.BigInt(0))) {
+      if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+        logger.debug('useOnChainSwapQuote', 'useOnChainSwapQuote', 'Skip on-chain quote due to zero amount', {
+          chainId,
+          tokenIn: tokenIn.symbol,
+          tokenOut: tokenOut.symbol,
+          amountInRaw: amountIn.quotient.toString(),
+          amountInExact: amountIn.toExact(),
+        })
+      }
+      return skipToken
+    }
+
     return async (): Promise<OnChainSwapQuoteResult> => {
       try {
+        if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+          logger.debug('useOnChainSwapQuote', 'useOnChainSwapQuote', 'Executing on-chain quote', {
+            chainId,
+            tokenIn: tokenIn.symbol,
+            tokenOut: tokenOut.symbol,
+            amountInRaw: amountIn.quotient.toString(),
+            amountInExact: amountIn.toExact(),
+            recipient,
+          })
+        }
+
         // Step 1: Find best route
         const routeResult = await findRoute(
           tokenIn,
@@ -137,6 +163,24 @@ export function useOnChainSwapQuote(
 
         if (!routeResult) {
           throw new Error('No route found for swap')
+        }
+
+        if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+          logger.debug('useOnChainSwapQuote', 'useOnChainSwapQuote', 'Route found', {
+            chainId,
+            tokenIn: tokenIn.symbol,
+            tokenOut: tokenOut.symbol,
+            amountInRaw: amountIn.quotient.toString(),
+            amountInExact: amountIn.toExact(),
+            amountOutRaw: routeResult.amountOut.quotient.toString(),
+            amountOutExact: routeResult.amountOut.toExact(),
+            routeDescription: routeResult.route?.description,
+            hops: (routeResult.route?.hops ?? []).map((h) => ({
+              tokenIn: h.tokenIn.symbol,
+              tokenOut: h.tokenOut.symbol,
+              fee: h.fee,
+            })),
+          })
         }
 
         // Step 2: Calculate minimum amount out with slippage
@@ -155,6 +199,18 @@ export function useOnChainSwapQuote(
           recipient,
           deadline,
         })
+
+        if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+          logger.debug('useOnChainSwapQuote', 'useOnChainSwapQuote', 'Built on-chain tx payload', {
+            chainId,
+            to: txPayload.to,
+            value: txPayload.value,
+            dataLen: txPayload.data?.length,
+            gasLimit: txPayload.gasLimit,
+            amountOutMinimumRaw: amountOutMinimum.quotient.toString(),
+            amountOutMinimumExact: amountOutMinimum.toExact(),
+          })
+        }
 
         return {
           quoteAmountOut: routeResult.amountOut,
@@ -207,7 +263,13 @@ export function useOnChainSwapQuote(
   } = useQuery({
     queryKey,
     queryFn,
-    enabled: enabled && routerEnabled && !!queryFn && queryFn !== skipToken,
+    enabled:
+      enabled &&
+      routerEnabled &&
+      !!queryFn &&
+      queryFn !== skipToken &&
+      !!amountIn &&
+      JSBI.greaterThan(amountIn.quotient, JSBI.BigInt(0)),
     staleTime: 10_000, // 10 seconds - quotes should be fresh
     gcTime: 30_000, // 30 seconds cache
     retry: 2,

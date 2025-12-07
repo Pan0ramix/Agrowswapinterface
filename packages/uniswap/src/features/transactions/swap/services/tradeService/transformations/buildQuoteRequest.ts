@@ -15,6 +15,7 @@ import {
   SWAP_GAS_URGENCY_OVERRIDE,
   toTradingApiSupportedChainId,
 } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
+import { logger } from 'utilities/src/logger/logger'
 
 // The TradingAPI requires an address for the swapper field; we supply a placeholder address if no account is connected.
 // Note: This address was randomly generated.
@@ -162,9 +163,11 @@ export function validateParsedInput(input: ParsedTradeInput): ValidatedTradeInpu
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { isOnChainRouterEnabled } = require('uniswap/src/features/transactions/swap/services/onchainRouter/config')
       if (isOnChainRouterEnabled(input.tokenInChainId)) {
-        // Development warning only
-        if (process.env.NODE_ENV !== 'production') {
-          console.warn('[buildQuoteRequest] Skipping Trading API for on-chain enabled chain:', input.tokenInChainId)
+        // Development debug only; deduped per chainId to avoid spam.
+        if (process.env.NODE_ENV !== 'production' && logOnChainSkipOnce(input.tokenInChainId)) {
+          logger.debug('buildQuoteRequest', 'validateParsedInput', 'Skipping Trading API for on-chain chain', {
+            chainId: input.tokenInChainId,
+          })
         }
         return undefined // Return undefined to skip Trading API query
       }
@@ -196,4 +199,17 @@ function areCurrenciesEqual(currencyIn?: Currency | null, currencyOut?: Currency
     return false
   }
   return currencyIn.equals(currencyOut)
+}
+
+// Deduplicate debug logging for on-chain skip per chainId
+let lastOnChainSkipChainId: number | undefined
+function logOnChainSkipOnce(chainId?: number): boolean {
+  if (!chainId) {
+    return false
+  }
+  if (lastOnChainSkipChainId === chainId) {
+    return false
+  }
+  lastOnChainSkipChainId = chainId
+  return true
 }

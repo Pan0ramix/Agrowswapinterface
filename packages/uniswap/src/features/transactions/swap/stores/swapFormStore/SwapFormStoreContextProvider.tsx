@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import type { TradeableAsset } from 'uniswap/src/entities/assets'
 import { useMaxAmountSpend } from 'uniswap/src/features/gas/hooks/useMaxAmountSpend'
@@ -26,6 +26,10 @@ import { useEvent } from 'utilities/src/react/hooks'
 import { useValueAsRef } from 'utilities/src/react/useValueAsRef'
 import { useStore } from 'zustand'
 import { useShallow } from 'zustand/shallow'
+import {
+  LocalizationContext,
+  LocalizationContextProvider,
+} from 'uniswap/src/features/language/LocalizationContext'
 
 const useCalculatedInitialDerivedSwapInfo = (
   partialSwapFormState: Pick<
@@ -106,6 +110,10 @@ function SwapFormStoreContextProviderBase({
   initialStateToUse: SwapFormState
   initialDerivedSwapInfo: DerivedSwapInfo
 }>): JSX.Element {
+  // Safeguard: ensure localization context is present even if parent tree forgot to wrap.
+  const localizationContext = useContext(LocalizationContext)
+  const MaybeLocalizationProvider = localizationContext ? Fragment : LocalizationContextProvider
+
   const dispatch = useDispatch()
 
   // Create store with default state and prefilled state
@@ -298,7 +306,11 @@ function SwapFormStoreContextProviderBase({
     setSwapFormState(derivedState)
   }, [derivedState, setSwapFormState])
 
-  return <SwapFormStoreContext.Provider value={store}>{children}</SwapFormStoreContext.Provider>
+  return (
+    <MaybeLocalizationProvider>
+      <SwapFormStoreContext.Provider value={store}>{children}</SwapFormStoreContext.Provider>
+    </MaybeLocalizationProvider>
+  )
 }
 
 // Orchestrator: computes initial state, bootstraps initial derived swap info, then renders the base provider
@@ -312,6 +324,11 @@ export const SwapFormStoreContextProvider = ({
   hideSettings?: boolean
   prefilledState?: SwapFormState
 }>): JSX.Element => {
+  // Ensure localization context is present; if missing (e.g., tests or embedded usage),
+  // inject the provider locally. Upstream behavior unchanged when parent already wraps.
+  const localizationContext = useContext(LocalizationContext)
+  const MaybeLocalizationProvider = localizationContext ? Fragment : LocalizationContextProvider
+
   // Get default state for store initialization
   const defaultState = useDefaultSwapFormState()
 
@@ -323,19 +340,26 @@ export const SwapFormStoreContextProvider = ({
 
   if (!initialDerivedSwapInfo) {
     return (
-      <SwapFormStoreContextProviderInitializer initialState={initialStateToUse} onReady={setInitialDerivedSwapInfo} />
+      <MaybeLocalizationProvider>
+        <SwapFormStoreContextProviderInitializer
+          initialState={initialStateToUse}
+          onReady={setInitialDerivedSwapInfo}
+        />
+      </MaybeLocalizationProvider>
     )
   }
 
   return (
-    <SwapFormStoreContextProviderBase
-      hideFooter={hideFooter}
-      hideSettings={hideSettings}
-      prefilledState={prefilledState}
-      initialStateToUse={initialStateToUse}
-      initialDerivedSwapInfo={initialDerivedSwapInfo}
-    >
-      {children}
-    </SwapFormStoreContextProviderBase>
+    <MaybeLocalizationProvider>
+      <SwapFormStoreContextProviderBase
+        hideFooter={hideFooter}
+        hideSettings={hideSettings}
+        prefilledState={prefilledState}
+        initialStateToUse={initialStateToUse}
+        initialDerivedSwapInfo={initialDerivedSwapInfo}
+      >
+        {children}
+      </SwapFormStoreContextProviderBase>
+    </MaybeLocalizationProvider>
   )
 }

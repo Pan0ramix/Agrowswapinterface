@@ -417,14 +417,12 @@ export function usePermitTxInfo({
   const classicQuote = quote && isClassic(quote) ? quote : undefined
   const gasStrategy = useActiveGasStrategy(classicQuote?.quote.chainId, 'swap')
 
-  const getPermitTxInfo = useMemo(() => createGetPermitTxInfo({ gasStrategy }), [gasStrategy])
-  return useMemo(() => {
-    if (!classicQuote) {
-      return EMPTY_PERMIT_TX_INFO
-    }
+  if (!classicQuote) {
+    return EMPTY_PERMIT_TX_INFO
+  }
 
-    return getPermitTxInfo({ quote: classicQuote })
-  }, [getPermitTxInfo, classicQuote])
+  const getPermitTxInfo = createGetPermitTxInfo({ gasStrategy })
+  return getPermitTxInfo({ quote: classicQuote })
 }
 
 export function createGetPermitTxInfo({ gasStrategy }: { gasStrategy: GasStrategy }) {

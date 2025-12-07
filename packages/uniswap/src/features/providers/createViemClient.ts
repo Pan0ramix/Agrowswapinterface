@@ -26,6 +26,26 @@ export function createViemClient({
 
     // Define the chain for viem
     const chainInfo = getChainInfo(chainId)
+    // TEMP: Base Sepolia (84532) RPC override for on-chain quoting.
+    // Force primary public RPC to avoid flaky alt endpoints. Do not enable for mainnet.
+    let effectiveRpcUrl = rpcConfig.rpcUrl
+    const shouldForcePublic =
+      chainId === UniverseChainId.BaseSepolia &&
+      (rpcType === RPCType.Public || rpcType === RPCType.Default || rpcType === RPCType.Fallback)
+    if (shouldForcePublic) {
+      const primaryPublic = chainInfo.rpcUrls?.[RPCType.Public]?.http?.[0]
+      if (primaryPublic && primaryPublic !== effectiveRpcUrl) {
+        effectiveRpcUrl = primaryPublic
+        if (process.env.NODE_ENV !== 'production') {
+          logger.debug('createViemClient', 'createViemClient', 'Applying Base Sepolia primary RPC override', {
+            chainId,
+            rpcType,
+            rpcUrl: primaryPublic,
+          })
+        }
+      }
+    }
+
     const viemChain = defineChain({
       id: chainInfo.id,
       name: chainInfo.name,
@@ -46,8 +66,25 @@ export function createViemClient({
       // Create a standard public client
       client = createPublicClient({
         chain: viemChain,
-        transport: http(rpcConfig.rpcUrl),
+        transport: http(effectiveRpcUrl),
       }).extend(walletActions)
+    }
+
+    // Attach the effective RPC URL for downstream logging/labeling when viem transport does not expose it.
+    try {
+      ;(client as any).__agroswapEffectiveRpcUrl = effectiveRpcUrl
+    } catch {
+      // ignore
+    }
+
+    if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
+      const rpcLabel = effectiveRpcUrl.includes('sepolia.base.org') ? 'base-public' : 'alt-public'
+      logger.debug('createViemClient', 'createViemClient', 'Initialized viem client', {
+        chainId,
+        rpcType,
+        rpcLabel,
+        rpcUrl: effectiveRpcUrl,
+      })
     }
 
     return client

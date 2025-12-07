@@ -49,21 +49,19 @@ export function useSwapTxAndGasInfo({
 
   const permitTxInfo = usePermitTxInfo({ quote: trade?.quote })
 
-  return useMemo(() => {
-    switch (trade?.routing) {
-      case TradingApi.Routing.DUTCH_V2:
-      case TradingApi.Routing.DUTCH_V3:
-      case TradingApi.Routing.PRIORITY:
-        return getUniswapXSwapTxAndGasInfo({ trade, swapTxInfo, approvalTxInfo })
-      case TradingApi.Routing.BRIDGE:
-        return getBridgeSwapTxAndGasInfo({ trade, swapTxInfo, approvalTxInfo })
-      case TradingApi.Routing.CLASSIC:
-        return getClassicSwapTxAndGasInfo({ trade, swapTxInfo, approvalTxInfo, permitTxInfo })
-      case TradingApi.Routing.WRAP:
-      case TradingApi.Routing.UNWRAP:
-        return getWrapTxAndGasInfo({ trade, swapTxInfo })
-      default:
-        return getFallbackSwapTxAndGasInfo({ swapTxInfo, approvalTxInfo })
-    }
-  }, [approvalTxInfo, permitTxInfo, swapTxInfo, trade])
+  switch (trade?.routing) {
+    case TradingApi.Routing.DUTCH_V2:
+    case TradingApi.Routing.DUTCH_V3:
+    case TradingApi.Routing.PRIORITY:
+      return getUniswapXSwapTxAndGasInfo({ trade, swapTxInfo, approvalTxInfo })
+    case TradingApi.Routing.BRIDGE:
+      return getBridgeSwapTxAndGasInfo({ trade, swapTxInfo, approvalTxInfo })
+    case TradingApi.Routing.CLASSIC:
+      return getClassicSwapTxAndGasInfo({ trade, swapTxInfo, approvalTxInfo, permitTxInfo })
+    case TradingApi.Routing.WRAP:
+    case TradingApi.Routing.UNWRAP:
+      return getWrapTxAndGasInfo({ trade, swapTxInfo })
+    default:
+      return getFallbackSwapTxAndGasInfo({ swapTxInfo, approvalTxInfo })
+  }
 }

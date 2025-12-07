@@ -1,18 +1,18 @@
-import { StatsigClientEventCallback, StatsigLoadingStatus } from '@statsig/client-core'
+import { StatsigClient, StatsigClientEventCallback, StatsigLoadingStatus } from '@statsig/client-core'
 import { DynamicConfigKeys } from '@universe/gating/src/configs'
 import { ExperimentProperties, Experiments } from '@universe/gating/src/experiments'
 import { FeatureFlags, getFeatureFlagName } from '@universe/gating/src/flags'
 import {
   getStatsigClient,
+  StatsigContext,
   TypedReturn,
   useDynamicConfig,
   useExperiment,
   useFeatureGate,
   useGateValue,
   useLayer,
-  useStatsigClient,
 } from '@universe/gating/src/sdk/statsig'
-import { useEffect, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import { logger } from 'utilities/src/logger/logger'
 
 export function useFeatureFlag(flag: FeatureFlags): boolean {
@@ -215,15 +215,28 @@ export function checkTypeGuard<ValType>({
   }
 }
 
+// NOTE: Statsig may not be mounted in all environments (forks/test). This hook
+// obeys Rules of Hooks and returns undefined when no provider is present.
+export function useSafeStatsigClient(): StatsigClient | undefined {
+  const ctx = useContext(StatsigContext)
+  return ctx?.client
+}
+
 export function useStatsigClientStatus(): {
   isStatsigLoading: boolean
   isStatsigReady: boolean
   isStatsigUninitialized: boolean
 } {
-  const { client } = useStatsigClient()
-  const [statsigStatus, setStatsigStatus] = useState<StatsigLoadingStatus>(client.loadingStatus)
+  const client = useSafeStatsigClient()
+
+  const [statsigStatus, setStatsigStatus] = useState<StatsigLoadingStatus>(
+    client?.loadingStatus ?? 'Uninitialized',
+  )
 
   useEffect(() => {
+    if (!client) {
+      return
+    }
     const handler: StatsigClientEventCallback<'values_updated'> = (event) => {
       setStatsigStatus(event.status)
     }

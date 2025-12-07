@@ -23,15 +23,15 @@ export function useTradingApiSwappableTokensQuery({
   TradingApi.GetSwappableTokensResponse
 > & { disableTradingApi?: boolean }): UseQueryResult<TradingApi.GetSwappableTokensResponse> {
   if (disableTradingApi) {
+    // Return a minimal stub that satisfies the hook contract when disabled.
     return {
       data: undefined,
-      error: undefined,
+      error: null,
       isLoading: false,
       isFetching: false,
       isPending: false,
-      refetch: async () => ({ data: undefined, error: undefined, status: 'success' as const }),
-      remove: () => undefined,
-      status: 'success',
+      refetch: async () => ({ data: undefined, error: null, status: 'success' } as any),
+      status: 'success' as any,
       fetchStatus: 'idle',
       failureCount: 0,
       isError: false,
@@ -45,7 +45,7 @@ export function useTradingApiSwappableTokensQuery({
       isPreviousData: false,
       dataUpdatedAt: 0,
       errorUpdatedAt: 0,
-    }
+    } as unknown as UseQueryResult<TradingApi.GetSwappableTokensResponse>
   }
 
   const queryKey = swappableTokensQueryKey(params)
@@ -72,10 +72,14 @@ export function getSwappableTokensQueryData({
   return queryClient.getQueryData(swappableTokensQueryKey(params))
 }
 
-export function usePrefetchSwappableTokens(input: Maybe<TradeableAsset>): void {
+export function usePrefetchSwappableTokens(input: Maybe<TradeableAsset>, disableTradingApi?: boolean): void {
   const queryClient = useQueryClient()
 
   useEffect(() => {
+    if (disableTradingApi) {
+      return
+    }
+
     const prefetchSwappableTokens = async (): Promise<void> => {
       const tokenIn = input?.address ? getTokenAddressFromChainForTradingApi(input.address, input.chainId) : undefined
       const tokenInChainId = toTradingApiSupportedChainId(input?.chainId)
@@ -103,7 +107,7 @@ export function usePrefetchSwappableTokens(input: Maybe<TradeableAsset>): void {
         tags: { file: 'useTradingApiSwappableTokensQuery', function: 'prefetchSwappableTokens' },
       })
     })
-  }, [input, queryClient])
+  }, [disableTradingApi, input, queryClient])
 }
 
 const swappableTokensQueryKey = (params?: SwappableTokensParams): QueryKey => {

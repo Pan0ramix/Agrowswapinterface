@@ -60,6 +60,9 @@ export function selectRpcUrl(chainId: UniverseChainId, rpcType: RPCType = RPCTyp
     try {
       const publicRPCUrl = getChainInfo(chainId).rpcUrls[RPCType.Public]?.http[0]
       if (publicRPCUrl) {
+        if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
+          logger.debug('rpcUrlSelector', 'selectRpcUrl', 'Selected Public RPC', { chainId, rpcType, rpcUrl: publicRPCUrl })
+        }
         return { rpcUrl: publicRPCUrl }
       }
       throw new Error(`No public RPC available for chain ${chainId}`)
@@ -67,6 +70,13 @@ export function selectRpcUrl(chainId: UniverseChainId, rpcType: RPCType = RPCTyp
       // Fall back to alternative public RPC URL if available
       const altPublicRPCUrl = getChainInfo(chainId).rpcUrls[RPCType.PublicAlt]?.http[0]
       if (altPublicRPCUrl) {
+        if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
+          logger.debug('rpcUrlSelector', 'selectRpcUrl', 'Selected PublicAlt RPC', {
+            chainId,
+            rpcType,
+            rpcUrl: altPublicRPCUrl,
+          })
+        }
         return { rpcUrl: altPublicRPCUrl }
       }
       throw error

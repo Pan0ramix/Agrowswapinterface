@@ -116,10 +116,25 @@ export function useUniversalRouterSwapCallback({
         ...(value && !isZero(value) ? { value: toHex(value) } : {}),
       }
 
+      logger.debug('useUniversalRouter', 'useUniversalRouterSwapCallback', 'Prepared swap tx', {
+        chainId,
+        from: tx.from,
+        to: tx.to,
+        dataLen: tx.data?.length,
+        value: value?.toString(),
+        slippageBps: options.slippageTolerance.numerator.toString(),
+        deadline: deadline?.toString(),
+      })
+
       let gasLimit: BigNumber
       try {
         const gasEstimate = await provider.estimateGas(tx)
         gasLimit = calculateGasMargin(gasEstimate)
+        logger.debug('useUniversalRouter', 'useUniversalRouterSwapCallback', 'Gas estimated', {
+          chainId,
+          gasEstimate: gasEstimate.toString(),
+          gasLimit: gasLimit.toString(),
+        })
       } catch (gasError) {
         sendAnalyticsEvent(SwapEventName.SwapEstimateGasCallFailed, {
           ...formatCommonPropertiesForTrade({ trade, allowedSlippage: options.slippageTolerance }),
@@ -139,6 +154,12 @@ export function useUniversalRouterSwapCallback({
           if (!provider) {
             throw new Error('missing provider')
           }
+          logger.debug('useUniversalRouter', 'useUniversalRouterSwapCallback', 'Sending swap tx', {
+            chainId,
+            from: tx.from,
+            to: tx.to,
+            gasLimit: gasLimit.toString(),
+          })
           return await provider.getSigner().sendTransaction({ ...tx, gasLimit })
         } catch (error) {
           if (didUserReject(error)) {

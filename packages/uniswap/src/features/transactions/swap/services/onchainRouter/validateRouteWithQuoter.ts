@@ -10,9 +10,10 @@ import { PublicClient } from 'viem'
 import { Interface } from 'ethers/lib/utils'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { CandidateRoute } from './generateCandidateRoutes'
-import { getQuoterV2Address } from 'uniswap/src/constants/v3Addresses'
+import { getQuoterV2Address, getV3FactoryAddress } from 'uniswap/src/constants/v3Addresses'
 import { AGROSWAP_QUOTER_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 import { QUOTER_ADDRESSES } from '@uniswap/sdk-core'
+import { logger } from 'utilities/src/logger/logger'
 
 /**
  * Validated route with quote result
@@ -73,6 +74,74 @@ const QUOTER_V2_ABI = [
   },
 ] as const
 
+const V3_FACTORY_ABI = [
+  {
+    inputs: [
+      { internalType: 'address', name: 'tokenA', type: 'address' },
+      { internalType: 'address', name: 'tokenB', type: 'address' },
+      { internalType: 'uint24', name: 'fee', type: 'uint24' },
+    ],
+    name: 'getPool',
+    outputs: [{ internalType: 'address', name: 'pool', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const
+
+async function getPoolAddress(
+  chainId: EVMUniverseChainId,
+  publicClient: PublicClient,
+  tokenIn: `0x${string}`,
+  tokenOut: `0x${string}`,
+  fee: number,
+): Promise<`0x${string}` | null> {
+  const factory = getV3FactoryAddress(chainId)
+  if (!factory) {
+    return null
+  }
+  try {
+    const pool = (await publicClient.readContract({
+      address: factory as `0x${string}`,
+      abi: V3_FACTORY_ABI as any,
+      functionName: 'getPool',
+      args: [tokenIn, tokenOut, BigInt(fee)],
+    })) as `0x${string}`
+
+    if (!pool || pool === '0x0000000000000000000000000000000000000000') {
+      if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+        logger.debug('validateRouteWithQuoter', 'getPoolAddress', 'No pool for pair/fee', {
+          tokenIn,
+          tokenOut,
+          fee,
+          chainId,
+        })
+      }
+      return null
+    }
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('validateRouteWithQuoter', 'getPoolAddress', 'Found pool', {
+        tokenIn,
+        tokenOut,
+        fee,
+        chainId,
+        pool,
+      })
+    }
+    return pool
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('validateRouteWithQuoter', 'getPoolAddress', 'Error reading pool', {
+        tokenIn,
+        tokenOut,
+        fee,
+        chainId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    return null
+  }
+}
+
 /**
  * Get Quoter contract address
  */
@@ -132,45 +201,128 @@ async function quoteSingleHop(
   amountIn: CurrencyAmount<Currency>,
   chainId: EVMUniverseChainId,
   publicClient: PublicClient,
+  rpcLabel?: string,
+  rpcOrigin?: string,
 ): Promise<{
   amountOut: string
   sqrtPriceX96After: string
   initializedTicksCrossed: number
   gasEstimate: string
 } | null> {
+  // Pre-check pool existence to avoid quoter reverts for non-existent fee tiers
+  const pool = await getPoolAddress(
+    chainId,
+    publicClient,
+    hop.tokenIn.address as `0x${string}`,
+    hop.tokenOut.address as `0x${string}`,
+    hop.fee,
+  )
+  if (!pool) {
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('validateRouteWithQuoter', 'quoteSingleHop', 'Skipped: pool does not exist', {
+        fee: hop.fee,
+        tokenIn: hop.tokenIn.symbol,
+        tokenOut: hop.tokenOut.symbol,
+        tokenInAddress: hop.tokenIn.address,
+        tokenOutAddress: hop.tokenOut.address,
+        chainId,
+        rpcLabel,
+        rpcUrl: rpcOrigin,
+        rpcOrigin,
+      })
+    }
+    return null
+  }
+
+  if (amountIn.quotient <= 0n) {
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('validateRouteWithQuoter', 'quoteSingleHop', 'Skipped zero amountIn', {
+        fee: hop.fee,
+        tokenIn: hop.tokenIn.symbol,
+        tokenOut: hop.tokenOut.symbol,
+        tokenInAddress: hop.tokenIn.address,
+        tokenOutAddress: hop.tokenOut.address,
+        amountInRaw: amountIn.quotient.toString(),
+        chainId,
+        rpcLabel,
+        rpcUrl: rpcOrigin,
+        rpcOrigin,
+      })
+    }
+    return null
+  }
+
   try {
     const quoterAddress = getQuoterAddress(chainId) as `0x${string}`
-    const quoterInterface = new Interface(QUOTER_V2_ABI)
+    const amountInRaw = BigInt(amountIn.quotient.toString())
 
-    const callData = quoterInterface.encodeFunctionData('quoteExactInputSingle', [
-      {
-        tokenIn: hop.tokenIn.address as `0x${string}`,
-        tokenOut: hop.tokenOut.address as `0x${string}`,
-        amountIn: amountIn.quotient.toString(),
-        fee: hop.fee,
-        sqrtPriceLimitX96: '0',
-      },
-    ]) as `0x${string}`
-
-    const result = await publicClient.call({
-      to: quoterAddress,
-      data: callData,
+    // Prefer viem readContract to ensure correct encoding/decoding
+    const result = await publicClient.readContract({
+      address: quoterAddress,
+      abi: QUOTER_V2_ABI as any,
+      functionName: 'quoteExactInputSingle',
+      args: [
+        {
+          tokenIn: hop.tokenIn.address as `0x${string}`,
+          tokenOut: hop.tokenOut.address as `0x${string}`,
+          amountIn: amountInRaw,
+          fee: BigInt(hop.fee),
+          sqrtPriceLimitX96: 0n,
+        },
+      ],
     })
 
-    if (!result.data) {
+    if (!result) {
       return null
     }
 
-    const decoded = quoterInterface.decodeFunctionResult('quoteExactInputSingle', result.data)
+    const [amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate] = result as any
+
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('validateRouteWithQuoter', 'quoteSingleHop', 'Single-hop quote succeeded', {
+        fee: hop.fee,
+        tokenIn: hop.tokenIn.symbol,
+        tokenOut: hop.tokenOut.symbol,
+        tokenInAddress: hop.tokenIn.address,
+        tokenOutAddress: hop.tokenOut.address,
+        amountInRaw: amountIn.quotient.toString(),
+        amountInExact: amountIn.toExact(),
+        amountOut: amountOut?.toString?.(),
+        chainId,
+        rpcLabel,
+        rpcUrl: rpcOrigin,
+        rpcOrigin,
+        quoterAddress: getQuoterAddress(chainId),
+        pool,
+      })
+    }
 
     return {
-      amountOut: decoded.amountOut.toString(),
-      sqrtPriceX96After: decoded.sqrtPriceX96After.toString(),
-      initializedTicksCrossed: Number(decoded.initializedTicksCrossed),
-      gasEstimate: decoded.gasEstimate.toString(),
+      amountOut: amountOut.toString(),
+      sqrtPriceX96After: sqrtPriceX96After.toString(),
+      initializedTicksCrossed: Number(initializedTicksCrossed),
+      gasEstimate: gasEstimate.toString(),
     }
   } catch (error) {
     // Route doesn't exist or has insufficient liquidity
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('validateRouteWithQuoter', 'quoteSingleHop', 'Single-hop quote reverted', {
+        fee: hop.fee,
+        tokenIn: hop.tokenIn.symbol,
+        tokenOut: hop.tokenOut.symbol,
+        tokenInAddress: hop.tokenIn.address,
+        tokenOutAddress: hop.tokenOut.address,
+        amountInRaw: amountIn.quotient.toString(),
+        amountInExact: amountIn.toExact(),
+        chainId,
+        rpcLabel,
+        rpcUrl: rpcOrigin,
+        rpcOrigin,
+        quoterAddress: getQuoterAddress(chainId),
+        pool,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
     return null
   }
 }
@@ -183,42 +335,124 @@ async function quoteMultiHop(
   amountIn: CurrencyAmount<Currency>,
   chainId: EVMUniverseChainId,
   publicClient: PublicClient,
+  rpcLabel?: string,
+  rpcOrigin?: string,
 ): Promise<{
   amountOut: string
   sqrtPriceX96AfterList: string[]
   initializedTicksCrossedList: number[]
   gasEstimate: string
 } | null> {
+  // Verify all hops have pools; bail early if any hop is missing
+  for (const hop of route.hops) {
+    const pool = await getPoolAddress(
+      chainId,
+      publicClient,
+      hop.tokenIn.address as `0x${string}`,
+      hop.tokenOut.address as `0x${string}`,
+      hop.fee,
+    )
+    if (!pool) {
+      if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+        logger.debug('validateRouteWithQuoter', 'quoteMultiHop', 'Skipped: pool does not exist', {
+          tokenIn: hop.tokenIn.symbol,
+          tokenOut: hop.tokenOut.symbol,
+        tokenInAddress: hop.tokenIn.address,
+        tokenOutAddress: hop.tokenOut.address,
+        fee: hop.fee,
+        chainId,
+        rpcLabel,
+        rpcUrl: rpcOrigin,
+        rpcOrigin,
+        })
+      }
+      return null
+    }
+  }
+
+  if (amountIn.quotient <= 0n) {
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('validateRouteWithQuoter', 'quoteMultiHop', 'Skipped zero amountIn', {
+        tokenIn: route.hops[0]?.tokenIn.symbol,
+        tokenOut: route.hops[route.hops.length - 1]?.tokenOut.symbol,
+        tokenInAddress: route.hops[0]?.tokenIn.address,
+        tokenOutAddress: route.hops[route.hops.length - 1]?.tokenOut.address,
+        amountInRaw: amountIn.quotient.toString(),
+        amountInExact: amountIn.toExact(),
+        hopCount: route.hops.length,
+        fees: route.hops.map((h) => h.fee),
+        chainId,
+        rpcLabel,
+        rpcUrl: rpcOrigin,
+        rpcOrigin,
+      })
+    }
+    return null
+  }
+
   try {
     const quoterAddress = getQuoterAddress(chainId) as `0x${string}`
     const quoterInterface = new Interface(QUOTER_V2_ABI)
 
     const path = encodePath(route.hops)
+    const amountInRaw = BigInt(amountIn.quotient.toString())
 
-    const callData = quoterInterface.encodeFunctionData('quoteExactInput', [
-      path,
-      amountIn.quotient.toString(),
-    ]) as `0x${string}`
-
-    const result = await publicClient.call({
-      to: quoterAddress,
-      data: callData,
+    // Prefer viem readContract for consistent encoding/decoding
+    const result = await publicClient.readContract({
+      address: quoterAddress,
+      abi: QUOTER_V2_ABI as any,
+      functionName: 'quoteExactInput',
+      args: [path, amountInRaw],
     })
 
-    if (!result.data) {
+    if (!result) {
       return null
     }
 
-    const decoded = quoterInterface.decodeFunctionResult('quoteExactInput', result.data)
+    const [amountOut, sqrtPriceX96AfterList, initializedTicksCrossedList, gasEstimate] = result as any
+
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('validateRouteWithQuoter', 'quoteMultiHop', 'Multi-hop quote succeeded', {
+        tokenIn: route.hops[0]?.tokenIn.symbol,
+        tokenOut: route.hops[route.hops.length - 1]?.tokenOut.symbol,
+        fees: route.hops.map((h) => h.fee),
+        amountInRaw: amountIn.quotient.toString(),
+        amountInExact: amountIn.toExact(),
+        amountOut: amountOut?.toString?.(),
+        chainId,
+        rpcLabel,
+        rpcUrl: rpcOrigin,
+        rpcOrigin,
+        quoterAddress: getQuoterAddress(chainId),
+      })
+    }
 
     return {
-      amountOut: decoded.amountOut.toString(),
-      sqrtPriceX96AfterList: decoded.sqrtPriceX96AfterList.map((p: bigint) => p.toString()),
-      initializedTicksCrossedList: decoded.initializedTicksCrossedList.map((t: bigint) => Number(t)),
-      gasEstimate: decoded.gasEstimate.toString(),
+      amountOut: amountOut.toString(),
+      sqrtPriceX96AfterList: (sqrtPriceX96AfterList as bigint[]).map((p) => p.toString()),
+      initializedTicksCrossedList: (initializedTicksCrossedList as bigint[]).map((t) => Number(t)),
+      gasEstimate: gasEstimate.toString(),
     }
   } catch (error) {
     // Route doesn't exist or has insufficient liquidity
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('validateRouteWithQuoter', 'quoteMultiHop', 'Multi-hop quote reverted', {
+        tokenIn: route.hops[0]?.tokenIn.symbol,
+        tokenOut: route.hops[route.hops.length - 1]?.tokenOut.symbol,
+        tokenInAddress: route.hops[0]?.tokenIn.address,
+        tokenOutAddress: route.hops[route.hops.length - 1]?.tokenOut.address,
+        amountInRaw: amountIn.quotient.toString(),
+        amountInExact: amountIn.toExact(),
+        hopCount: route.hops.length,
+        fees: route.hops.map((h) => h.fee),
+        chainId,
+        rpcLabel,
+        rpcUrl: rpcOrigin,
+        rpcOrigin,
+        quoterAddress: getQuoterAddress(chainId),
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
     return null
   }
 }
@@ -233,11 +467,13 @@ export async function validateRouteWithQuoter(
   tokenOut: Currency,
   chainId: EVMUniverseChainId,
   publicClient: PublicClient,
+  rpcLabel?: string,
+  rpcOrigin?: string,
 ): Promise<ValidatedRoute | null> {
   try {
     // Single hop route
     if (route.hops.length === 1) {
-      const quoteResult = await quoteSingleHop(route.hops[0], amountIn, chainId, publicClient)
+      const quoteResult = await quoteSingleHop(route.hops[0], amountIn, chainId, publicClient, rpcLabel, rpcOrigin)
       if (!quoteResult) {
         return null
       }
@@ -258,7 +494,7 @@ export async function validateRouteWithQuoter(
     }
 
     // Multi-hop route
-    const quoteResult = await quoteMultiHop(route, amountIn, chainId, publicClient)
+    const quoteResult = await quoteMultiHop(route, amountIn, chainId, publicClient, rpcLabel, rpcOrigin)
     if (!quoteResult) {
       return null
     }

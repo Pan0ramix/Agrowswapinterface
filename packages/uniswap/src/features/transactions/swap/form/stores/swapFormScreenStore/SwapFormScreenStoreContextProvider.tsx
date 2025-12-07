@@ -4,6 +4,7 @@ import type { TextInputProps } from 'react-native'
 import type { CurrencyInputPanelRef } from 'uniswap/src/components/CurrencyInputPanel/types'
 import { WarningSeverity } from 'uniswap/src/components/modals/WarningModal/types'
 import { usePrefetchSwappableTokens } from 'uniswap/src/data/apiClients/tradingApi/useTradingApiSwappableTokensQuery'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { getTokenWarningSeverity } from 'uniswap/src/features/tokens/safetyUtils'
 import type { DecimalPadInputRef } from 'uniswap/src/features/transactions/components/DecimalPadInput/DecimalPadInput'
 import {
@@ -83,9 +84,10 @@ export const SwapFormScreenStoreContextProvider = ({
   // React to network changes
   useSwapNetworkChangeEffect({ inputChainId: input?.chainId, outputChainId: output?.chainId })
 
-  // Prefetch swappable tokens
-  usePrefetchSwappableTokens(input)
-  usePrefetchSwappableTokens(output)
+  // Prefetch swappable tokens only when Trading API is relevant (non on-chain chains)
+  const onChainEnabled = isOnChainRouterEnabled(input?.chainId ?? output?.chainId)
+  usePrefetchSwappableTokens(input, onChainEnabled)
+  usePrefetchSwappableTokens(output, onChainEnabled)
 
   const { outputTokenHasBuyTax, exactOutputWillFail, exactOutputWouldFailIfCurrenciesSwitched } = useMemo(
     () => getExactOutputWillFail({ currencies }),

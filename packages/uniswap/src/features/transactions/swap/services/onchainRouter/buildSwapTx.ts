@@ -12,6 +12,7 @@ import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { getSwapRouterAddress } from 'uniswap/src/constants/v3Addresses'
 import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
 import { ValidatedRoute } from './validateRouteWithQuoter'
+import { logger } from 'utilities/src/logger/logger'
 
 /**
  * Transaction payload for swap
@@ -158,6 +159,24 @@ export function buildSwapTx(params: BuildSwapTxParams): SwapTransactionPayload {
   const amountInRaw = amountIn.quotient.toString()
   const amountOutMinimumRaw = minAmountOut.quotient.toString()
   const priceLimit = sqrtPriceLimitX96 || '0'
+
+  if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+    logger.debug('buildSwapTx', 'buildSwapTx', 'Building swap tx payload', {
+      chainId,
+      routerAddress,
+      hops: (route.route?.hops ?? []).map((h) => ({
+        tokenIn: h.tokenIn.symbol,
+        tokenOut: h.tokenOut.symbol,
+        fee: h.fee,
+      })),
+      amountInRaw,
+      amountOutMinimumRaw,
+      recipient,
+      deadline,
+      priceLimit,
+      gasEstimate: route.gasEstimate,
+    })
+  }
 
   // Single hop swap
   if (route.route.hops.length === 1) {

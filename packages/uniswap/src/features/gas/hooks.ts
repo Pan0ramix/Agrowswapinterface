@@ -1,6 +1,6 @@
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
 import { GasStrategy } from '@universe/api'
-import { GasStrategyType, useStatsigClientStatus } from '@universe/gating'
+import { GasStrategyType } from '@universe/gating'
 import { BigNumber, providers } from 'ethers/lib/ethers'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -37,8 +37,11 @@ export type CancellationGasFeeDetails = {
 
 // Hook to use active GasStrategy for a specific chain.
 export function useActiveGasStrategy(chainId: number | undefined, type: GasStrategyType): GasStrategy {
-  const { isStatsigReady } = useStatsigClientStatus()
-  return useMemo(() => getActiveGasStrategy({ chainId, type, isStatsigReady }), [isStatsigReady, chainId, type])
+  // Statsig-free, deterministic; compute directly to avoid dependency-array churn.
+  // If flag-based gas strategies are needed later, reintroduce Statsig here behind
+  // a guard that tolerates an absent provider.
+  const isStatsigReady = false
+  return getActiveGasStrategy({ chainId, type, isStatsigReady })
 }
 
 /**

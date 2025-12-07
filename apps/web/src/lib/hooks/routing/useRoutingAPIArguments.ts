@@ -11,6 +11,7 @@ import { GetQuoteArgs } from 'state/routing/types'
 import { useIsMismatchAccountQuery } from 'uniswap/src/features/smartWallet/mismatch/hooks'
 import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { useUniswapXPriorityOrderFlag } from 'uniswap/src/features/transactions/swap/utils/protocols'
+import { logger } from 'utilities/src/logger/logger'
 
 /**
  * Returns query arguments for the Routing API query or undefined if the
@@ -50,9 +51,11 @@ export function useRoutingAPIArguments(input: RoutingAPIInput): GetQuoteArgs | S
   return useMemo(() => {
     // Skip Trading API if on-chain router is enabled for this chain
     if (isOnChainEnabled) {
-      // Development warning only
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[useRoutingAPIArguments] Skipping Trading API for on-chain enabled chain:', tokenIn?.chainId)
+      // Development debug only; deduped per chainId to avoid spam.
+      if (process.env.NODE_ENV !== 'production' && logOnChainSkipOnce(tokenIn?.chainId)) {
+        logger.debug('useRoutingAPIArguments', 'useRoutingAPIArguments', 'Skipping Trading API for on-chain chain', {
+          chainId: tokenIn?.chainId,
+        })
       }
       return skipToken
     }
@@ -80,4 +83,17 @@ export function useRoutingAPIArguments(input: RoutingAPIInput): GetQuoteArgs | S
     tradeType,
     inputValidated,
   ])
+}
+
+// Deduplicate debug logging for on-chain skip per chainId
+let lastOnChainSkipChainId: number | undefined
+function logOnChainSkipOnce(chainId?: number): boolean {
+  if (!chainId) {
+    return false
+  }
+  if (lastOnChainSkipChainId === chainId) {
+    return false
+  }
+  lastOnChainSkipChainId = chainId
+  return true
 }

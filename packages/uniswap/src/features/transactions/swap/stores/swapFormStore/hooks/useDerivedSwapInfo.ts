@@ -1,7 +1,8 @@
 import { Percent, TradeType } from '@uniswap/sdk-core'
 import { FeeAmount, Route } from '@uniswap/v3-sdk'
 import { FeatureFlags, useFeatureFlag } from '@universe/gating'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import JSBI from 'jsbi'
 import { useUniswapContextSelector } from 'uniswap/src/contexts/UniswapContext'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
@@ -14,6 +15,7 @@ import { usePriceUXEnabled } from 'uniswap/src/features/transactions/swap/hooks/
 import { useTrade } from 'uniswap/src/features/transactions/swap/hooks/useTrade'
 import { useOnChainSwapQuote } from 'uniswap/src/features/transactions/swap/hooks/useOnChainSwapQuote'
 import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { logger } from 'utilities/src/logger/logger'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import { getWrapType } from 'uniswap/src/features/transactions/swap/utils/wrap'
 import type { TransactionState } from 'uniswap/src/features/transactions/types/transactionState'
@@ -108,6 +110,26 @@ export function useDerivedSwapInfo({
     return isOnChainRouterEnabled(chainId as number)
   }, [isExactIn, chainId, currencyIn, currencyOut, amountSpecified])
 
+  // Debug: track the parsed amount we will pass to the on-chain router (Base Sepolia only, non-prod)
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      chainId === UniverseChainId.BaseSepolia &&
+      useOnChainQuote &&
+      amountSpecified
+    ) {
+      logger.debug('useDerivedSwapInfo', 'useDerivedSwapInfo', 'On-chain amountSpecified parsed', {
+        chainId,
+        isExactIn,
+        exactAmountToken,
+        amountSpecifiedRaw: amountSpecified.quotient.toString(),
+        amountSpecifiedExact: amountSpecified.toExact(),
+        tokenIn: currencyIn?.symbol,
+        tokenOut: currencyOut?.symbol,
+      })
+    }
+  }, [chainId, useOnChainQuote, amountSpecified, exactAmountToken, isExactIn, currencyIn, currencyOut])
+
   // Get slippage tolerance
   const slippageTolerance = useMemo(() => {
     if (customSlippageTolerance !== undefined) {
@@ -121,19 +143,38 @@ export function useDerivedSwapInfo({
   const onChainQuote = useOnChainSwapQuote({
     tokenIn: currencyIn,
     tokenOut: currencyOut,
-    amountIn: amountSpecified,
+    amountIn: amountSpecified ?? undefined,
     slippageTolerance,
     chainId: chainId as EVMUniverseChainId | undefined,
     recipient: account?.address,
-    enabled: useOnChainQuote && !!amountSpecified && !!currencyIn && !!currencyOut,
+    enabled:
+      useOnChainQuote &&
+      !!amountSpecified &&
+      JSBI.greaterThan(amountSpecified.quotient, JSBI.BigInt(0)) &&
+      !!currencyIn &&
+      !!currencyOut,
   })
 
   // Use existing Trading API trade hook (disabled when using on-chain)
   // When on-chain is enabled, we skip the Trading API entirely
-  // Development warning if Trading API would be called for on-chain enabled chain
-  if (process.env.NODE_ENV !== 'production' && useOnChainQuote && account && amountSpecified && otherCurrency) {
-    console.warn('[useDerivedSwapInfo] Trading API trade hook disabled for on-chain enabled chain:', chainId)
-  }
+  // Development debug (deduped) if Trading API would be called for on-chain enabled chain
+  const lastWarnedChainIdRef = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      useOnChainQuote &&
+      account &&
+      amountSpecified &&
+      otherCurrency &&
+      chainId &&
+      lastWarnedChainIdRef.current !== chainId
+    ) {
+      logger.debug('useDerivedSwapInfo', 'useDerivedSwapInfo', 'Trading API disabled for on-chain chain', {
+        chainId,
+      })
+      lastWarnedChainIdRef.current = chainId
+    }
+  }, [useOnChainQuote, account, amountSpecified, otherCurrency, chainId])
 
   const trade = useTrade({
     account: useOnChainQuote ? undefined : account, // Disable by passing undefined account
@@ -154,6 +195,26 @@ export function useDerivedSwapInfo({
     if (useOnChainQuote && onChainQuote.data) {
       const { quoteAmountOut, txPayload, route: routeResult, priceImpact } = onChainQuote.data
 
+      if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
+        logger.debug('useDerivedSwapInfo', 'useDerivedSwapInfo', 'Using on-chain quote', {
+          chainId,
+          amountInRaw: amountSpecified?.quotient.toString(),
+          amountInExact: amountSpecified?.toExact(),
+          amountOutRaw: quoteAmountOut.quotient.toString(),
+          amountOutExact: quoteAmountOut.toExact(),
+          routeDescription: routeResult.route?.description,
+          hops: (routeResult.route?.hops ?? []).map((h) => ({
+            tokenIn: h.tokenIn.symbol,
+            tokenOut: h.tokenOut.symbol,
+            fee: h.fee,
+          })),
+          txTo: txPayload.to,
+          txValue: txPayload.value,
+          txDataLen: txPayload.data?.length,
+          txGasLimit: txPayload.gasLimit,
+        })
+      }
+
       // Create execution price
       const executionPrice = quoteAmountOut.divide(amountSpecified!)
 
@@ -168,6 +229,8 @@ export function useDerivedSwapInfo({
       // Return a trade-like object that works with existing UI
       return {
         ...trade,
+        // Expose full on-chain quote for downstream tx builder
+        onChainQuote: onChainQuote.data,
         trade: {
           inputAmount: amountSpecified!,
           outputAmount: quoteAmountOut,
@@ -188,12 +251,29 @@ export function useDerivedSwapInfo({
     // Otherwise, use the regular trade (Trading API or no trade)
     // When on-chain is enabled but quote failed, still show error from on-chain hook
     if (useOnChainQuote && onChainQuote.isError) {
+      if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
+        logger.debug('useDerivedSwapInfo', 'useDerivedSwapInfo', 'On-chain quote errored', {
+          chainId,
+          error: onChainQuote.error?.message,
+        })
+      }
       return {
         ...trade,
         isLoading: onChainQuote.isLoading,
         isFetching: onChainQuote.isLoading,
         error: onChainQuote.error,
       }
+    }
+
+    // Debug when no on-chain quote is adopted
+    if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
+      logger.debug('useDerivedSwapInfo', 'useDerivedSwapInfo', 'On-chain quote not used', {
+        chainId,
+        useOnChainQuote,
+        hasOnChainQuoteData: !!onChainQuote.data,
+        isOnChainQuoteLoading: onChainQuote.isLoading,
+        isOnChainQuoteError: onChainQuote.isError,
+      })
     }
 
     return trade
@@ -260,7 +340,7 @@ export function useDerivedSwapInfo({
       txId,
       outputAmountUserWillReceive: displayableTrade?.quoteOutputAmountUserWillReceive,
       // Store on-chain quote data for transaction building
-      onChainQuote: useOnChainQuote && onChainQuote.txPayload ? onChainQuote : undefined,
+      onChainQuote: useOnChainQuote && onChainQuote.data ? onChainQuote.data : undefined,
     }
   }, [
     chainId,

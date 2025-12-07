@@ -10,7 +10,7 @@
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
 import { PublicClient } from 'viem'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { generateCandidateRoutes, CandidateRoute } from './generateCandidateRoutes'
 import { validateRouteWithQuoter, ValidatedRoute } from './validateRouteWithQuoter'
 import { chooseBestRoute } from './chooseBestRoute'
@@ -46,6 +46,22 @@ export async function findRoute(
   fees: FeeAmount[] = [FeeAmount.LOWEST, FeeAmount.LOW, FeeAmount.MEDIUM, FeeAmount.HIGH],
 ): Promise<RouteResult | null> {
   try {
+    const rpcUrl =
+      (publicClient as any)?.__agroswapEffectiveRpcUrl ?? publicClient?.transport?.config?.url
+    const rpcLabel = rpcUrl?.includes?.('sepolia.base.org') ? 'base-public' : 'alt-public'
+    let rpcOrigin: string | undefined
+    if (rpcUrl) {
+      try {
+        const parsed = new URL(rpcUrl)
+        rpcOrigin = `${parsed.protocol}//${parsed.host}`
+      } catch {
+        rpcOrigin = undefined
+      }
+    }
+    const allowTestnetFallback =
+      chainId === UniverseChainId.BaseSepolia ||
+      process.env.NEXT_PUBLIC_ENABLE_TESTNET_ONCHAIN_FALLBACK === 'true'
+
     // Step 1: Generate candidate routes
     const candidateRoutes = await generateCandidateRoutes(
       tokenIn,
@@ -56,17 +72,64 @@ export async function findRoute(
     )
 
     if (candidateRoutes.length === 0) {
-      logger.warn('findRoute', 'findRoute', 'No candidate routes generated', {
+      logger.debug('findRoute', 'findRoute', 'No candidate routes generated', {
         tokenIn: tokenIn.symbol,
         tokenOut: tokenOut.symbol,
         chainId,
       })
+
+      if (allowTestnetFallback) {
+        logger.debug('findRoute', 'findRoute', 'Attempting testnet direct single-hop fallback (no candidates)', {
+          tokenIn: tokenIn.symbol,
+          tokenOut: tokenOut.symbol,
+          chainId,
+        })
+
+        for (const fee of fees) {
+          const directRoute: CandidateRoute = {
+            hops: [
+              {
+                tokenIn: tokenIn.wrapped,
+                tokenOut: tokenOut.wrapped,
+                fee,
+              },
+            ],
+            description: `Fallback direct: ${tokenIn.symbol} → ${tokenOut.symbol} (fee ${fee})`,
+          }
+
+          const validated = await validateRouteWithQuoter(
+            directRoute,
+            amountIn,
+            tokenOut,
+            chainId,
+            publicClient,
+            rpcLabel,
+            rpcOrigin,
+          )
+          if (validated) {
+            logger.debug('findRoute', 'findRoute', 'Testnet fallback route succeeded', {
+              tokenIn: tokenIn.symbol,
+              tokenOut: tokenOut.symbol,
+              chainId,
+              fee,
+              amountIn: amountIn.toExact(),
+              amountOut: validated.amountOutCurrency.toExact(),
+            })
+            return {
+              route: validated,
+              amountIn,
+              amountOut: validated.amountOutCurrency,
+            }
+          }
+        }
+      }
+
       return null
     }
 
     // Step 2: Validate routes with QuoterV2 (in parallel for performance)
     const validationPromises = candidateRoutes.map((route) =>
-      validateRouteWithQuoter(route, amountIn, tokenOut, chainId, publicClient),
+      validateRouteWithQuoter(route, amountIn, tokenOut, chainId, publicClient, rpcLabel, rpcOrigin),
     )
 
     const validatedRoutes = (await Promise.all(validationPromises)).filter(
@@ -74,46 +137,62 @@ export async function findRoute(
     )
 
     if (validatedRoutes.length === 0) {
-      logger.warn('findRoute', 'findRoute', 'No valid routes after validation; attempting direct fallback', {
+      logger.debug('findRoute', 'findRoute', 'No valid routes after validation', {
         tokenIn: tokenIn.symbol,
         tokenOut: tokenOut.symbol,
         chainId,
         candidateCount: candidateRoutes.length,
         feesTried: fees,
       })
-      // Fallback: explicitly try a direct single-hop route across provided fee tiers.
-      // This covers cases where candidate generation or multi-hop construction misses a valid direct pool.
-      for (const fee of fees) {
-        const directRoute: CandidateRoute = {
-          hops: [
-            {
-              tokenIn: tokenIn.wrapped,
-              tokenOut: tokenOut.wrapped,
-              fee,
-            },
-          ],
-          description: `Fallback direct: ${tokenIn.symbol} → ${tokenOut.symbol} (fee ${fee})`,
-        }
 
-        const validated = await validateRouteWithQuoter(directRoute, amountIn, tokenOut, chainId, publicClient)
-        if (validated) {
-          logger.info('findRoute', 'findRoute', 'Direct fallback route succeeded', {
-            tokenIn: tokenIn.symbol,
-            tokenOut: tokenOut.symbol,
-            chainId,
-            fee,
-            amountIn: amountIn.toExact(),
-            amountOut: validated.amountOutCurrency.toExact(),
-          })
-          return {
-            route: validated,
+      // Testnet-only (or explicitly enabled) direct single-hop fallback.
+      if (allowTestnetFallback) {
+        logger.debug('findRoute', 'findRoute', 'Attempting testnet direct single-hop fallback', {
+          tokenIn: tokenIn.symbol,
+          tokenOut: tokenOut.symbol,
+          chainId,
+        })
+
+        for (const fee of fees) {
+          const directRoute: CandidateRoute = {
+            hops: [
+              {
+                tokenIn: tokenIn.wrapped,
+                tokenOut: tokenOut.wrapped,
+                fee,
+              },
+            ],
+            description: `Fallback direct: ${tokenIn.symbol} → ${tokenOut.symbol} (fee ${fee})`,
+          }
+
+          const validated = await validateRouteWithQuoter(
+            directRoute,
             amountIn,
-            amountOut: validated.amountOutCurrency,
+            tokenOut,
+            chainId,
+            publicClient,
+            rpcLabel,
+            rpcOrigin,
+          )
+          if (validated) {
+            logger.debug('findRoute', 'findRoute', 'Testnet fallback route succeeded', {
+              tokenIn: tokenIn.symbol,
+              tokenOut: tokenOut.symbol,
+              chainId,
+              fee,
+              amountIn: amountIn.toExact(),
+              amountOut: validated.amountOutCurrency.toExact(),
+            })
+            return {
+              route: validated,
+              amountIn,
+              amountOut: validated.amountOutCurrency,
+            }
           }
         }
       }
 
-      logger.warn('findRoute', 'findRoute', 'No valid routes found after validation', {
+      logger.debug('findRoute', 'findRoute', 'No valid routes found after validation (returning null)', {
         tokenIn: tokenIn.symbol,
         tokenOut: tokenOut.symbol,
         chainId,
@@ -127,6 +206,25 @@ export async function findRoute(
 
     if (!bestRoute) {
       return null
+    }
+
+    if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
+      logger.debug('findRoute', 'findRoute', 'Selected best on-chain route', {
+        tokenIn: tokenIn.symbol,
+        tokenOut: tokenOut.symbol,
+        chainId,
+        validatedCount: validatedRoutes.length,
+        routeDescription: bestRoute.route.description,
+        hops: bestRoute.route.hops.map((h) => ({
+          tokenIn: h.tokenIn.symbol,
+          tokenOut: h.tokenOut.symbol,
+          fee: h.fee,
+        })),
+        amountIn: amountIn.toExact(),
+        amountOut: bestRoute.amountOutCurrency.toExact(),
+        rpcLabel,
+        rpcOrigin,
+      })
     }
 
     // Step 4: Calculate price impact (optional, for informational purposes)

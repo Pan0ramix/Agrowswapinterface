@@ -21,6 +21,8 @@ import {
 import { getSymbolDisplayText } from 'uniswap/src/utils/currency'
 import { currencyId } from 'uniswap/src/utils/currencyId'
 import { NumberType } from 'utilities/src/format/types'
+import { swapDebug } from 'uniswap/src/utils/swapDebug'
+import { logger } from 'utilities/src/logger/logger'
 
 export function tradeToTransactionInfo({
   trade,
@@ -198,10 +200,39 @@ export function getProtocolVersionFromTrade(trade: Trade): Protocol | undefined 
     return undefined
   }
 
-  if (trade.routes.every((r) => r.protocol === Protocol.V2)) {
+  // Defensive check: routes might be undefined or not an array in fork scenarios
+  const routes = (trade as any).routes
+  if (!routes || !Array.isArray(routes) || routes.length === 0) {
+    // Log fallback when debug is enabled
+    const chainId = trade.inputAmount?.currency?.chainId
+    if (chainId && process.env.NODE_ENV !== 'production') {
+      logger.debugDeduped(
+        'trade',
+        'tradeToTransactionInfo',
+        '[ANALYTICS] protocolVersion fallback',
+        {
+          chainId,
+          hasTrade: !!trade,
+          keys: Object.keys(trade ?? {}),
+          reason: 'missing routes or routes not array',
+          routesType: typeof routes,
+          routesLength: routes?.length,
+        },
+        {
+          ttlMs: 10000,
+          minIntervalMs: 10000,
+          keyParts: ['ANALYTICS-protocolVersion-fallback', chainId],
+        }
+      )
+    }
+    // Return undefined as safe default (callers should handle undefined)
+    return undefined
+  }
+
+  if (routes.every((r: any) => r.protocol === Protocol.V2)) {
     return Protocol.V2
   }
-  if (trade.routes.every((r) => r.protocol === Protocol.V3)) {
+  if (routes.every((r: any) => r.protocol === Protocol.V3)) {
     return Protocol.V3
   }
   return Protocol.MIXED

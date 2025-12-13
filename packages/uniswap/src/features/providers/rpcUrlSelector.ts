@@ -8,6 +8,39 @@ import {
 } from 'uniswap/src/features/providers/FlashbotsCommon'
 import { logger } from 'utilities/src/logger/logger'
 
+// Deduplication for RPC selection logs (module-level cache)
+const rpcLogCache = new Map<string, number>()
+const RPC_LOG_DEDUPE_WINDOW_MS = 5000 // 5 seconds
+
+function shouldLogRpcSelection(chainId: number, rpcType: RPCType, rpcUrl: string): boolean {
+  // Create stable key from selection parameters
+  const logKey = `${chainId}:${rpcType}:${rpcUrl}`
+  const now = Date.now()
+  const lastLogTime = rpcLogCache.get(logKey)
+
+  // Log if:
+  // 1. Never logged before, OR
+  // 2. Last log was more than DEDUPE_WINDOW_MS ago, OR
+  // 3. Values have changed (new key)
+  if (!lastLogTime || now - lastLogTime >= RPC_LOG_DEDUPE_WINDOW_MS) {
+    rpcLogCache.set(logKey, now)
+
+    // Clean old entries (keep cache size reasonable)
+    if (rpcLogCache.size > 50) {
+      const cutoff = now - RPC_LOG_DEDUPE_WINDOW_MS * 10
+      for (const [key, timestamp] of rpcLogCache.entries()) {
+        if (timestamp < cutoff) {
+          rpcLogCache.delete(key)
+        }
+      }
+    }
+
+    return true
+  }
+
+  return false
+}
+
 // Types of configurations for RPC providers
 export interface RpcConfig {
   rpcUrl: string
@@ -60,8 +93,26 @@ export function selectRpcUrl(chainId: UniverseChainId, rpcType: RPCType = RPCTyp
     try {
       const publicRPCUrl = getChainInfo(chainId).rpcUrls[RPCType.Public]?.http[0]
       if (publicRPCUrl) {
-        if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
-          logger.debug('rpcUrlSelector', 'selectRpcUrl', 'Selected Public RPC', { chainId, rpcType, rpcUrl: publicRPCUrl })
+        if (
+          process.env.NODE_ENV !== 'production' &&
+          chainId === UniverseChainId.BaseSepolia &&
+          shouldLogRpcSelection(chainId, rpcType, publicRPCUrl)
+        ) {
+          logger.debugDeduped(
+            'rpcUrlSelector',
+            'selectRpcUrl',
+            'Selected Public RPC',
+            {
+              chainId,
+              rpcType,
+              rpcUrl: publicRPCUrl,
+            },
+            {
+              ttlMs: 10000,
+              minIntervalMs: 10000,
+              keyParts: ['Selected-Public-RPC', chainId, rpcType],
+            }
+          )
         }
         return { rpcUrl: publicRPCUrl }
       }
@@ -70,7 +121,11 @@ export function selectRpcUrl(chainId: UniverseChainId, rpcType: RPCType = RPCTyp
       // Fall back to alternative public RPC URL if available
       const altPublicRPCUrl = getChainInfo(chainId).rpcUrls[RPCType.PublicAlt]?.http[0]
       if (altPublicRPCUrl) {
-        if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
+        if (
+          process.env.NODE_ENV !== 'production' &&
+          chainId === UniverseChainId.BaseSepolia &&
+          shouldLogRpcSelection(chainId, rpcType, altPublicRPCUrl)
+        ) {
           logger.debug('rpcUrlSelector', 'selectRpcUrl', 'Selected PublicAlt RPC', {
             chainId,
             rpcType,

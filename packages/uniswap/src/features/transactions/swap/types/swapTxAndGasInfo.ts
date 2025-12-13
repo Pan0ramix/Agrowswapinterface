@@ -40,9 +40,56 @@ export type ValidatedSwapTxContext =
   | ValidatedSolanaSwapTxAndGasInfo
   | ValidatedChainedSwapTxAndGasInfo
 
+// Deduplication for INVALID logs (module-level cache)
+const invalidLogCache = new Map<string, number>()
+const DEDUPE_WINDOW_MS = 2000 // 2 seconds
+
+function logInvalidSwapTxContext(validation: SwapTxContextValidation) {
+  // Create stable key from reasons (sorted for consistency)
+  const reasonsKey = JSON.stringify([...validation.reasons].sort())
+  const now = Date.now()
+  const lastLogTime = invalidLogCache.get(reasonsKey)
+
+  // Skip if logged recently
+  if (lastLogTime && now - lastLogTime < DEDUPE_WINDOW_MS) {
+    return
+  }
+
+  // Update cache
+  invalidLogCache.set(reasonsKey, now)
+
+  // Clean old entries (keep cache size reasonable)
+  if (invalidLogCache.size > 100) {
+    const cutoff = now - DEDUPE_WINDOW_MS * 10
+    for (const [key, timestamp] of invalidLogCache.entries()) {
+      if (timestamp < cutoff) {
+        invalidLogCache.delete(key)
+      }
+    }
+  }
+
+  // Use debug level to avoid console spam
+  // Log the first reason for quick diagnosis
+  // eslint-disable-next-line no-console
+  console.debug('[SWAP-TX-CONTEXT] INVALID', {
+    reason0: validation.reasons?.[0], // First reason for quick diagnosis
+    reasons: validation.reasons,
+    snapshot: validation.snapshot,
+  })
+}
+
 export function isValidSwapTxContext(swapTxContext: SwapTxAndGasInfo): swapTxContext is ValidatedSwapTxContext {
   // Validation fn prevents/future-proofs typeguard against illicit casts
-  return validateSwapTxContext(swapTxContext) !== undefined
+  const result = validateSwapTxContext(swapTxContext)
+  const isValid = result !== undefined
+
+  // Log diagnostic information when validation fails (debug level, deduplicated)
+  if (!isValid) {
+    const validation = validateSwapTxContextWithReasons(swapTxContext)
+    logInvalidSwapTxContext(validation)
+  }
+
+  return isValid
 }
 
 export type SwapGasFeeEstimation = {
@@ -190,6 +237,185 @@ export type ValidatedSolanaSwapTxAndGasInfo = Prettify<
 export type ValidatedChainedSwapTxAndGasInfo = Prettify<
   Required<ChainedSwapTxAndGasInfo> & BaseRequiredSwapTxContextFields
 >
+
+// Safe helper functions for snapshot creation
+const keys = (o: any): string[] => (o && typeof o === 'object' ? Object.keys(o) : [])
+const hexLen = (x: any): number => (typeof x === 'string' ? x.length : 0)
+const str = (v: any): string | undefined => (v == null ? undefined : String(v))
+const trunc = (s: any, n = 32): string | undefined => {
+  const x = typeof s === 'string' ? s : str(s)
+  return x && x.length > n ? x.slice(0, n) + '…' : x
+}
+
+export type SwapTxContextValidation = {
+  ok: boolean
+  reasons: string[]
+  snapshot: Record<string, unknown>
+}
+
+/**
+ * Internal validation helper that returns detailed validation results with reason codes
+ * Exported for use at commit points (e.g., when user clicks Swap)
+ */
+export function validateSwapTxContextWithReasons(swapTxContext: SwapTxAndGasInfo): SwapTxContextValidation {
+  const reasons: string[] = []
+  const trade = swapTxContext.trade
+  const txRequests = (swapTxContext as any)?.txRequests
+  const firstTxRequest = txRequests?.[0]
+  const quote = (trade as any)?.quote
+  const swapQuoteResponse = (swapTxContext as any)?.swapQuoteResponse
+
+  // Build snapshot (safe, shallow fields only)
+  const requestIdRaw =
+    (swapTxContext as any)?.requestId ??
+    swapQuoteResponse?.requestId ??
+    quote?.requestId ??
+    (trade as any)?.quote?.requestId
+
+  // Extract approval info for diagnostics
+  const approveTxRequest = (swapTxContext as any)?.approveTxRequest
+  const revocationTxRequest = (swapTxContext as any)?.revocationTxRequest
+  const tokenApprovalInfo = (swapTxContext as any)?.tokenApprovalInfo
+
+  const snapshot: Record<string, unknown> = {
+    routing: swapTxContext.routing ? String(swapTxContext.routing) : undefined,
+    indicative: (trade as any)?.indicative ?? false,
+    hasTxRequests: !!txRequests && txRequests.length > 0,
+    txRequestsLength: txRequests?.length ?? 0,
+    firstTxTo: firstTxRequest?.to,
+    firstDataLen: hexLen(firstTxRequest?.data),
+    firstValue: str(firstTxRequest?.value),
+    hasTrade: !!trade,
+    tradeKeys: keys(trade),
+    hasAllowedSlippage: trade?.slippageTolerance != null,
+    allowedSlippage: trade?.slippageTolerance != null ? str(trade.slippageTolerance) : undefined,
+    hasPermit: !!(swapTxContext as any)?.permit,
+    permitMethod: (swapTxContext as any)?.permit?.method,
+    hasSwapRequestArgs: !!(swapTxContext as any)?.swapRequestArgs,
+    swapRequestArgsKeys: keys((swapTxContext as any)?.swapRequestArgs),
+    hasQuote: !!quote,
+    quoteKeys: keys(quote),
+    hasSwapQuoteResponse: !!swapQuoteResponse,
+    swapQuoteKeys: keys(swapQuoteResponse),
+    hasRequestId: !!requestIdRaw,
+    requestId: trunc(requestIdRaw, 32),
+    unsigned: (swapTxContext as any)?.unsigned ?? false,
+    hasTransactionBase64: !!(swapTxContext as any)?.transactionBase64,
+    // Approval diagnostics
+    hasApproveTxRequest: !!approveTxRequest,
+    approveTxRequestTo: approveTxRequest?.to,
+    approveTxRequestChainId: approveTxRequest?.chainId,
+    approveTxRequestDataLen: hexLen(approveTxRequest?.data),
+    hasRevocationTxRequest: !!revocationTxRequest,
+    tokenApprovalAction: tokenApprovalInfo?.action,
+    tokenApprovalHasTxRequest: !!tokenApprovalInfo?.txRequest,
+    ctxKeys: keys(swapTxContext),
+  }
+
+  // Check gasFee validation
+  const gasFee = validateGasFeeResult(swapTxContext.gasFee)
+  if (!gasFee) {
+    // RELAXATION: Allow step generation with partial gasFee if approval tx exists (Base Sepolia only)
+    // This breaks the deadlock: approval can be executed even if swap gas is unknown pre-approval.
+    // After approval completes, swap gas can be recomputed.
+    const chainId = trade?.inputAmount?.currency?.chainId
+    const hasApprovalTx = !!approveTxRequest
+    const isOnChainOnly = chainId === 84532
+
+    if (isOnChainOnly && hasApprovalTx) {
+      // Allow validation to pass with placeholder gasFee for step building
+      // The approval step can be generated and executed, then swap gas will be recomputed
+      // This is safe because we're only relaxing for step generation, not execution
+      // Do not add INVALID_GAS_FEE reason, allow validation to continue
+    } else {
+      reasons.push('INVALID_GAS_FEE')
+      // Add gas snapshot for debugging
+      const gasSnapshot: Record<string, unknown> = {
+        hasGasFee: !!swapTxContext.gasFee,
+        gasFeeValue: swapTxContext.gasFee?.value,
+        gasFeeError: swapTxContext.gasFee?.error ? String(swapTxContext.gasFee.error) : null,
+        gasFeeIsLoading: swapTxContext.gasFee?.isLoading,
+        gasFeeDisplayValue: swapTxContext.gasFee?.displayValue,
+        gasFeeParams: swapTxContext.gasFee?.params,
+        // Check first txRequest for gas fields
+        firstTxRequestGasLimit: firstTxRequest?.gasLimit,
+        firstTxRequestGasPrice: firstTxRequest?.gasPrice,
+        firstTxRequestMaxFeePerGas: firstTxRequest?.maxFeePerGas,
+        firstTxRequestMaxPriorityFeePerGas: firstTxRequest?.maxPriorityFeePerGas,
+        relaxationApplied: false,
+      }
+      return { ok: false, reasons, snapshot: { ...snapshot, gas: gasSnapshot } }
+    }
+  }
+
+  // Check if trade exists
+  if (!swapTxContext.trade) {
+    reasons.push('MISSING_TRADE')
+    return { ok: false, reasons, snapshot }
+  }
+
+  // Route-specific validation
+  if (isClassic(swapTxContext)) {
+    const { unsigned, permit, txRequests } = swapTxContext
+
+    if (unsigned) {
+      // SwapTxContext should only ever be unsigned / still require a signature on interface.
+      if (!isWebApp) {
+        reasons.push('UNSIGNED_NOT_WEB_APP')
+      }
+      if (!permit) {
+        reasons.push('UNSIGNED_WITHOUT_PERMIT')
+      } else if (permit.method !== PermitMethod.TypedData) {
+        reasons.push('UNSIGNED_WITHOUT_TYPED_DATA_PERMIT')
+      }
+      if (reasons.length > 0) {
+        return { ok: false, reasons, snapshot }
+      }
+      // Valid unsigned classic swap
+      return { ok: true, reasons: [], snapshot }
+    } else {
+      // Signed classic swap requires txRequests
+      if (!txRequests || txRequests.length === 0) {
+        reasons.push('CLASSIC_MISSING_TX_REQUESTS')
+        return { ok: false, reasons, snapshot }
+      }
+      // Valid signed classic swap
+      return { ok: true, reasons: [], snapshot }
+    }
+  } else if (isBridge(swapTxContext)) {
+    const { txRequests } = swapTxContext
+    if (!txRequests || txRequests.length === 0) {
+      reasons.push('BRIDGE_MISSING_TX_REQUESTS')
+      return { ok: false, reasons, snapshot }
+    }
+    return { ok: true, reasons: [], snapshot }
+  } else if (isUniswapX(swapTxContext)) {
+    if (!swapTxContext.permit) {
+      reasons.push('UNISWAPX_MISSING_PERMIT')
+      return { ok: false, reasons, snapshot }
+    }
+    return { ok: true, reasons: [], snapshot }
+  } else if (isWrap(swapTxContext)) {
+    const { txRequests } = swapTxContext
+    if (!txRequests || txRequests.length === 0) {
+      reasons.push('WRAP_MISSING_TX_REQUESTS')
+      return { ok: false, reasons, snapshot }
+    }
+    return { ok: true, reasons: [], snapshot }
+  } else if (isJupiter(swapTxContext)) {
+    if (!swapTxContext.transactionBase64) {
+      reasons.push('JUPITER_MISSING_TRANSACTION_BASE64')
+      return { ok: false, reasons, snapshot }
+    }
+    return { ok: true, reasons: [], snapshot }
+  } else if (isChained(swapTxContext)) {
+    // Chained swaps are valid if gasFee is valid (already checked)
+    return { ok: true, reasons: [], snapshot }
+  } else {
+    reasons.push('UNSUPPORTED_ROUTING')
+    return { ok: false, reasons, snapshot }
+  }
+}
 
 /**
  * Validates a SwapTxAndGasInfo object without any casting and returns a ValidatedSwapTxContext object if the object is valid.

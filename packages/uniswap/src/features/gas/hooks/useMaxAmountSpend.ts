@@ -1,11 +1,12 @@
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
-import { DynamicConfigs, SwapConfigKey, useDynamicConfigValue } from '@universe/gating'
+import { DynamicConfigs, SwapConfigKey } from '@universe/gating'
 import JSBI from 'jsbi'
 import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
 import { GENERIC_L2_GAS_CONFIG } from 'uniswap/src/features/chains/gasDefaults'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { getCurrencyAmount, ValueType } from 'uniswap/src/features/tokens/getCurrencyAmount'
 import { TransactionType } from 'uniswap/src/features/transactions/types/transactionDetails'
+import { useDynamicConfigValueSafe } from 'uniswap/src/features/experiments/useDynamicConfigValueSafe'
 
 /**
  * Given some token amount, return the max that can be spent of it
@@ -67,11 +68,12 @@ export function useMinGasAmount(chainId?: UniverseChainId, txType?: TransactionT
 }
 
 export function useLowBalanceWarningGasPercentage(): number {
-  return useDynamicConfigValue({
-    config: DynamicConfigs.Swap,
-    key: SwapConfigKey.LowBalanceWarningGasPercentage,
-    defaultValue: 100,
-  })
+  // Use safe wrapper to avoid Statsig hook ordering issues
+  return useDynamicConfigValueSafe(
+    DynamicConfigs.Swap,
+    SwapConfigKey.LowBalanceWarningGasPercentage,
+    100,
+  )
 }
 
 export function useCalculateMinForGas(config: {
@@ -80,7 +82,8 @@ export function useCalculateMinForGas(config: {
   chainId?: UniverseChainId
 }): JSBI {
   const { key, defaultAmount, chainId } = config
-  const multiplier = useDynamicConfigValue({ config: DynamicConfigs.Swap, key, defaultValue: defaultAmount })
+  // Use safe wrapper to avoid Statsig hook ordering issues
+  const multiplier = useDynamicConfigValueSafe(DynamicConfigs.Swap, key, defaultAmount)
 
   // Get the native currency decimals for the specific chain
   const decimals = chainId ? getChainInfo(chainId).nativeCurrency.decimals : 18

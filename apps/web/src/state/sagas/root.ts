@@ -20,6 +20,13 @@ export function* rootWebSaga() {
   // wait until redux-persist has finished rehydration
   yield* call(waitForRehydration)
 
+  // eslint-disable-next-line no-console
+  console.log('[SAGAS] swap saga registered', {
+    hasSwapSaga: !!swapSaga.wrappedSaga,
+    hasPlanSaga: !!planSaga.wrappedSaga,
+    sagasCount: sagas.length,
+  })
+
   for (const wrappedSaga of sagas) {
     yield* spawn(wrappedSaga)
   }

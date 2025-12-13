@@ -79,12 +79,23 @@ export function createViemClient({
 
     if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
       const rpcLabel = effectiveRpcUrl.includes('sepolia.base.org') ? 'base-public' : 'alt-public'
-      logger.debug('createViemClient', 'createViemClient', 'Initialized viem client', {
-        chainId,
-        rpcType,
-        rpcLabel,
-        rpcUrl: effectiveRpcUrl,
-      })
+      logger.debugDeduped(
+        'createViemClient',
+        'createViemClient',
+        'Initialized viem client',
+        {
+          chainId,
+          rpcType,
+          rpcLabel,
+        },
+        {
+          ttlMs: 10000,
+          minIntervalMs: 10000,
+          maxPerWindow: 1,
+          windowMs: 5000,
+          includeKeys: ['chainId', 'rpcType', 'rpcLabel'],
+        }
+      )
     }
 
     return client

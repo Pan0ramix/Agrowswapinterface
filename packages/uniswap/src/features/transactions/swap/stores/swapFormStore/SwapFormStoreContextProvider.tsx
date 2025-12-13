@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from 'react'
-import { Fragment, useContext, useEffect, useMemo, useState } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import type { TradeableAsset } from 'uniswap/src/entities/assets'
 import { useMaxAmountSpend } from 'uniswap/src/features/gas/hooks/useMaxAmountSpend'
@@ -30,6 +30,7 @@ import {
   LocalizationContext,
   LocalizationContextProvider,
 } from 'uniswap/src/features/language/LocalizationContext'
+import { logger } from 'utilities/src/logger/logger'
 
 const useCalculatedInitialDerivedSwapInfo = (
   partialSwapFormState: Pick<
@@ -110,6 +111,38 @@ function SwapFormStoreContextProviderBase({
   initialStateToUse: SwapFormState
   initialDerivedSwapInfo: DerivedSwapInfo
 }>): JSX.Element {
+  // CRITICAL: All hooks must be called unconditionally and in the same order on every render.
+  // No early returns before hooks. No conditional hook calls. Dependency arrays must always be arrays.
+
+  // Render signature logging (dev-only, no hooks) to diagnose hook ordering issues
+  // CONSOLE-PROBE removed: No longer needed, using boundaryLog for all instrumentation
+
+  // CRITICAL: This logging happens BEFORE any hooks to avoid affecting hook order
+  if (process.env.NODE_ENV !== 'production') {
+    const chainId = initialDerivedSwapInfo?.chainId
+    const renderSignature = {
+      chainId,
+      hasInput: !!initialDerivedSwapInfo?.currencies?.[CurrencyField.INPUT],
+      hasOutput: !!initialDerivedSwapInfo?.currencies?.[CurrencyField.OUTPUT],
+      hasTrade: !!initialDerivedSwapInfo?.trade,
+      hasOnChainQuote: !!initialDerivedSwapInfo?.onChainQuote,
+      hideFooter: !!hideFooter,
+      hideSettings: !!hideSettings,
+      hasPrefilledState: !!prefilledState,
+    }
+    logger.debugDeduped(
+      'SwapFormStoreContextProvider',
+      'SwapFormStoreContextProviderBase',
+      '[SwapFormStoreContextProviderBase] Render signature',
+      renderSignature,
+      {
+        ttlMs: 10000,
+        minIntervalMs: 10000,
+        keyParts: ['SwapFormStore-Render-signature', chainId],
+      }
+    )
+  }
+
   // Safeguard: ensure localization context is present even if parent tree forgot to wrap.
   const localizationContext = useContext(LocalizationContext)
   const MaybeLocalizationProvider = localizationContext ? Fragment : LocalizationContextProvider
@@ -189,6 +222,32 @@ function SwapFormStoreContextProviderBase({
     setSwapForm: setSwapFormState,
   })
 
+  // CRITICAL: All hooks must be called unconditionally, regardless of useOnChainQuote state.
+  // useOnChainQuote may flip from true to false after swap submission (e.g., when amounts clear),
+  // but this must NOT affect which hooks are called or their order.
+  // All branching based on useOnChainQuote must happen INSIDE hook bodies or memo callbacks, not in hook calls themselves.
+
+  // Hook probe utility (dev-only) to diagnose hook order changes
+  // CRITICAL: useRef must be called unconditionally, but logging is gated
+  const hookProbeH01 = useRef(0)
+  if (process.env.NODE_ENV !== 'production') {
+    hookProbeH01.current += 1
+    const chainId = initialDerivedSwapInfo?.chainId
+    logger.debugDeduped(
+      'SwapFormStoreContextProvider',
+      'SwapFormStoreContextProviderBase',
+      '[HookProbe] H01: After store hooks',
+      {
+        chainId,
+      },
+      {
+        ttlMs: 10000,
+        minIntervalMs: 10000,
+        keyParts: ['H01', chainId],
+      }
+    )
+  }
+
   const latestDerivedSwapInfo = useCalculatedInitialDerivedSwapInfo({
     exactAmountFiat,
     exactAmountToken,
@@ -200,27 +259,157 @@ function SwapFormStoreContextProviderBase({
     txId,
   })
 
+  const hookProbeH02 = useRef(0)
+  if (process.env.NODE_ENV !== 'production') {
+    hookProbeH02.current += 1
+    const chainId = latestDerivedSwapInfo?.chainId
+    logger.debugDeduped(
+      'SwapFormStoreContextProvider',
+      'SwapFormStoreContextProviderBase',
+      '[HookProbe] H02: After useCalculatedInitialDerivedSwapInfo',
+      {
+        chainId,
+      },
+      {
+        ttlMs: 10000,
+        minIntervalMs: 10000,
+        keyParts: ['H02', chainId],
+      }
+    )
+  }
+
   // This prevents the swap form from displaying a new trade while an old one is still being submitted.
   const derivedSwapInfo = useFreezeWhileSubmitting(latestDerivedSwapInfo, isSubmitting)
 
-  const inputAmount = derivedSwapInfo.currencyAmounts[CurrencyField.INPUT]
-  const inputBalanceAmount = derivedSwapInfo.currencyBalances[CurrencyField.INPUT]
+  const hookProbeH03 = useRef(0)
+  if (process.env.NODE_ENV !== 'production') {
+    hookProbeH03.current += 1
+    const chainId = derivedSwapInfo?.chainId
+    logger.debugDeduped(
+      'SwapFormStoreContextProvider',
+      'SwapFormStoreContextProviderBase',
+      '[HookProbe] H03: After useFreezeWhileSubmitting',
+      {
+        chainId,
+        hasOnChainQuote: !!derivedSwapInfo.onChainQuote,
+      },
+      {
+        ttlMs: 10000,
+        minIntervalMs: 10000,
+        keyParts: ['H03', chainId],
+      }
+    )
+  }
 
+  // Extract values for logging (no hooks, pure data extraction)
+  // CRITICAL: inputAmount and inputBalanceAmount must be extracted AFTER all hooks that might affect them
+  // These are used in dependency arrays, so they must be stable references
+  const inputAmount = derivedSwapInfo.currencyAmounts[CurrencyField.INPUT] ?? null
+  const inputBalanceAmount = derivedSwapInfo.currencyBalances[CurrencyField.INPUT] ?? null
+
+  // Hook probe before useSwapAnalytics (dev-only)
+  const hookProbeH03b = useRef(0)
+  if (process.env.NODE_ENV !== 'production') {
+    hookProbeH03b.current += 1
+    const chainId = derivedSwapInfo?.chainId
+    logger.debugDeduped(
+      'SwapFormStoreContextProvider',
+      'SwapFormStoreContextProviderBase',
+      '[HookProbe] H03b: before useSwapAnalytics',
+      {
+        chainId,
+      },
+      {
+        ttlMs: 10000,
+        minIntervalMs: 10000,
+        keyParts: ['H03b', chainId],
+      }
+    )
+  }
+
+  // All hooks called unconditionally - no branching on useOnChainQuote
   useSwapAnalytics(derivedSwapInfo)
+
+  // Hook probe after useSwapAnalytics (dev-only)
+  const hookProbeH03c = useRef(0)
+  if (process.env.NODE_ENV !== 'production') {
+    hookProbeH03c.current += 1
+    const chainId = derivedSwapInfo?.chainId
+    logger.debugDeduped(
+      'SwapFormStoreContextProvider',
+      'SwapFormStoreContextProviderBase',
+      '[HookProbe] H03c: after useSwapAnalytics',
+      {
+        chainId,
+      },
+      {
+        ttlMs: 10000,
+        minIntervalMs: 10000,
+        keyParts: ['H03c', chainId],
+      }
+    )
+  }
+
+  // Hook probe before useMaxAmountSpend/useValueAsRef (dev-only)
+  const hookProbeH03d = useRef(0)
+  if (process.env.NODE_ENV !== 'production') {
+    hookProbeH03d.current += 1
+    const chainId = derivedSwapInfo?.chainId
+    logger.debugDeduped(
+      'SwapFormStoreContextProvider',
+      'SwapFormStoreContextProviderBase',
+      '[HookProbe] H03d: before useValueAsRef',
+      {
+        chainId,
+      },
+      {
+        ttlMs: 10000,
+        minIntervalMs: 10000,
+        keyParts: ['H03d', chainId],
+      }
+    )
+  }
 
   // for native transfers, this is the balance - (estimated gas fee for one transaction * multiplier from flag);
   // for ERC20 transfers, this is the balance
-  const maxInputAmountAsRef = useValueAsRef(
-    useMaxAmountSpend({
-      currencyAmount: inputBalanceAmount,
-      txType: TransactionType.Swap,
-      isExtraTx: true,
-    })?.toExact(),
-  )
+  // CRITICAL: useMaxAmountSpend is always called, regardless of useOnChainQuote state
+  // CRITICAL: inputBalanceAmount is normalized to null (never undefined) to ensure stable dependency arrays
+  // CRITICAL: useValueAsRef must be called unconditionally - pass null if value is missing
+  const maxAmountSpendResult = useMaxAmountSpend({
+    currencyAmount: inputBalanceAmount ?? undefined,
+    txType: TransactionType.Swap,
+    isExtraTx: true,
+  })
+  // CRITICAL: Always call useValueAsRef, even if maxAmountSpendResult is undefined
+  // Normalize to null to ensure stable ref value
+  const maxInputAmountAsRef = useValueAsRef(maxAmountSpendResult?.toExact() ?? null)
 
+  // Hook probe after useValueAsRef (dev-only)
+  const hookProbeH03e = useRef(0)
+  if (process.env.NODE_ENV !== 'production') {
+    hookProbeH03e.current += 1
+    const chainId = derivedSwapInfo?.chainId
+    logger.debugDeduped(
+      'SwapFormStoreContextProvider',
+      'SwapFormStoreContextProviderBase',
+      '[HookProbe] H03e: after useValueAsRef',
+      {
+        chainId,
+      },
+      {
+        ttlMs: 10000,
+        minIntervalMs: 10000,
+        keyParts: ['H03e', chainId],
+      }
+    )
+  }
+
+  // CRITICAL: Dependency array must always be a stable array with consistent length.
+  // All values are normalized to null instead of undefined to ensure stable array shape.
+  // inputAmount is normalized to null (never undefined) to prevent dependency array shape changes.
   const maybeUpdatedIsMax = useMemo((): boolean => {
     // exact-input-field forms are handled in `updateSwapForm()`
-    const inputAmountString = inputAmount?.toExact()
+    const inputAmountString = inputAmount?.toExact?.() ?? null
 
     if (
       derivedSwapInfo.exactCurrencyField === CurrencyField.OUTPUT &&
@@ -236,7 +425,31 @@ function SwapFormStoreContextProviderBase({
     }
 
     return isMax
-  }, [derivedSwapInfo.exactCurrencyField, inputAmount, isMax, maxInputAmountAsRef])
+  }, [
+    derivedSwapInfo.exactCurrencyField,
+    inputAmount, // Normalized to null, never undefined
+    isMax,
+    // maxInputAmountAsRef is a ref (stable), read via .current inside memo body
+  ])
+
+  const hookProbeH06 = useRef(0)
+  if (process.env.NODE_ENV !== 'production') {
+    hookProbeH06.current += 1
+    const chainId = derivedSwapInfo?.chainId
+    logger.debugDeduped(
+      'SwapFormStoreContextProvider',
+      'SwapFormStoreContextProviderBase',
+      '[HookProbe] H06: After maybeUpdatedIsMax useMemo',
+      {
+        chainId,
+      },
+      {
+        ttlMs: 10000,
+        minIntervalMs: 10000,
+        keyParts: ['H06', chainId],
+      }
+    )
+  }
 
   // Create `updateSwapForm` function, to be set, once, in the store
   const updateSwapForm = useEvent((newState: Partial<SwapFormState>): void => {
@@ -276,9 +489,10 @@ function SwapFormStoreContextProviderBase({
     // These are fine as they're both referentially stable
   }, [setUpdateSwapForm, updateSwapForm])
 
+  // CRITICAL: Normalize to null to ensure stable dependency array
   const prefilledCurrencies = useMemo(
     () => [prefilledState?.input, prefilledState?.output].filter((asset): asset is TradeableAsset => Boolean(asset)),
-    [prefilledState?.input, prefilledState?.output],
+    [prefilledState?.input ?? null, prefilledState?.output ?? null],
   )
 
   const derivedState: Partial<SwapFormStateForConsumers> = useMemo(

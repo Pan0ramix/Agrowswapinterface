@@ -161,6 +161,8 @@ export function buildSwapTx(params: BuildSwapTxParams): SwapTransactionPayload {
   const priceLimit = sqrtPriceLimitX96 || '0'
 
   if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    const deadlineSeconds = typeof deadline === 'bigint' ? Number(deadline) : deadline
     logger.debug('buildSwapTx', 'buildSwapTx', 'Building swap tx payload', {
       chainId,
       routerAddress,
@@ -172,7 +174,9 @@ export function buildSwapTx(params: BuildSwapTxParams): SwapTransactionPayload {
       amountInRaw,
       amountOutMinimumRaw,
       recipient,
-      deadline,
+      deadline: deadlineSeconds,
+      nowSeconds,
+      deadlineAgeSeconds: deadlineSeconds - nowSeconds,
       priceLimit,
       gasEstimate: route.gasEstimate,
     })
@@ -256,10 +260,25 @@ export function calculateAmountOutMinimum(
 }
 
 /**
+ * Get deadline timestamp (current time + TTL seconds)
+ * Uniswap-like behavior: deadline is computed fresh at tx build time.
+ * 
+ * @param ttlSeconds - Time-to-live in seconds (default 1200 = 20 minutes)
+ * @returns Unix timestamp in seconds (BigInt)
+ */
+export function getDeadlineSecondsFromNow(ttlSeconds: number = 1200): bigint {
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const deadlineSeconds = nowSeconds + ttlSeconds
+  return BigInt(deadlineSeconds)
+}
+
+/**
  * Get deadline timestamp (current time + minutes)
+ * @deprecated Use getDeadlineSecondsFromNow for consistency
  */
 export function getDeadline(minutesFromNow: number = 20): number {
-  return Math.floor(Date.now() / 1000) + minutesFromNow * 60
+  const deadline = getDeadlineSecondsFromNow(minutesFromNow * 60)
+  return Number(deadline)
 }
 
 

@@ -2,6 +2,7 @@
 import { datadogEnabledBuild, localDevDatadogEnabled } from 'utilities/src/environment/constants'
 import { isDevEnv, isTestEnv } from 'utilities/src/environment/env'
 import { logErrorToDatadog, logToDatadog, logWarningToDatadog } from 'utilities/src/logger/datadog/Datadog'
+import { dedupeLog, type DedupeOptions } from 'utilities/src/logger/dedupeLog'
 import { LoggerErrorContext, LogLevel } from 'utilities/src/logger/types'
 import { isMobileApp, isWebApp, isWebPlatform } from 'utilities/src/platform'
 
@@ -33,6 +34,10 @@ let datadogEnabled = false
  * @param message Message to log
  * @param args Additional values to log
  */
+// Check if deduplication is enabled (default on in dev)
+const isDedupEnabled =
+  typeof process !== 'undefined' && process.env.REACT_APP_DEDUP_LOGS !== '0'
+
 export const logger = {
   debug: (fileName: string, functionName: string, message: string, ...args: unknown[]): void =>
     logMessage('debug', fileName, functionName, message, ...args),
@@ -43,6 +48,58 @@ export const logger = {
   error: (error: unknown, captureContext: LoggerErrorContext): void => logException(error, captureContext),
   setDatadogEnabled: (enabled: boolean): void => {
     datadogEnabled = enabled || localDevDatadogEnabled
+  },
+  debugDeduped: (
+    fileName: string,
+    functionName: string,
+    message: string,
+    payload?: unknown,
+    options?: DedupeOptions
+  ): void => {
+    if (!isDedupEnabled) {
+      logger.debug(fileName, functionName, message, payload)
+      return
+    }
+    // Extract chainId from payload if available
+    const chainId = (payload as any)?.chainId ?? (payload as any)?.extra?.chainId
+    dedupeLog(
+      (msg, pld) => {
+        logger.debug(fileName, functionName, msg, pld)
+      },
+      message,
+      payload,
+      chainId,
+      {
+        level: 'debug',
+        ...options,
+      }
+    )
+  },
+  infoDeduped: (
+    fileName: string,
+    functionName: string,
+    message: string,
+    payload?: unknown,
+    options?: DedupeOptions
+  ): void => {
+    if (!isDedupEnabled) {
+      logger.info(fileName, functionName, message, payload)
+      return
+    }
+    // Extract chainId from payload if available
+    const chainId = (payload as any)?.chainId ?? (payload as any)?.extra?.chainId
+    dedupeLog(
+      (msg, pld) => {
+        logger.info(fileName, functionName, msg, pld)
+      },
+      message,
+      payload,
+      chainId,
+      {
+        level: 'info',
+        ...options,
+      }
+    )
   },
 }
 

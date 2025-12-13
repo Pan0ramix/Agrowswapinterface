@@ -72,7 +72,7 @@ import { noop } from 'utilities/src/react/noop'
 import { signTypedData } from 'utils/signing'
 import { didUserReject } from 'utils/swapErrorToUserReadableMessage'
 import type { Transaction } from 'viem'
-import { getConnectorClient, getTransaction } from 'wagmi/actions'
+import { getAccount, getConnectorClient, getTransaction } from 'wagmi/actions'
 
 export enum TransactionBreadcrumbStatus {
   Initiated = 'initiated',
@@ -120,6 +120,18 @@ export function* handleOnChainStep<T extends OnChainTransactionStep>(params: Han
   } = params
   const { chainId } = step.txRequest
 
+  // Hard entry log - must log unconditionally for chainId 84532
+  // eslint-disable-next-line no-console
+  console.log('[HANDLE-ONCHAIN] ENTER', {
+    chainId,
+    stepType: step.type,
+    to: step.txRequest.to,
+    dataLen: (step.txRequest.data as string | undefined)?.length,
+    from: address,
+    infoType: info.type,
+  })
+
+  // eslint-disable-next-line no-console
   console.log('[handleOnChainStep] Starting on-chain transaction', {
     stepType: step.type,
     chainId,
@@ -197,6 +209,15 @@ export function* handleOnChainStep<T extends OnChainTransactionStep>(params: Han
   // If should wait for confirmation, we block until the transaction is confirmed
   // Otherwise, we submit the transaction and return the hash immediately and spawn a detection task to check for modifications
   if (blockedAsyncSubmissionChainIds.includes(chainId) || shouldWaitForConfirmation) {
+    // eslint-disable-next-line no-console
+    console.log('[handleOnChainStep] calling-submitTransaction', {
+      chainId,
+      stepType: step.type,
+      address,
+      to: step.txRequest.to,
+      dataLen: (step.txRequest.data as string | undefined)?.length,
+    })
+
     const { hash, data, nonce } = yield* call(submitTransaction, params)
     transaction = createTransaction(hash)
 
@@ -276,29 +297,58 @@ function* handleOnModificationAsync({
 /** Submits a transaction and handles potential wallet errors */
 function* submitTransaction(params: HandleOnChainStepParams): SagaGenerator<VitalTxFields> {
   const { address, step } = params
-  console.log('[handleOnChainStep] Submitting transaction via signer.sendTransaction', {
-    chainId: step.txRequest.chainId,
+  const chainId = step.txRequest.chainId
+
+  // Hard entry log - must log unconditionally for chainId 84532
+  // eslint-disable-next-line no-console
+  console.log('[SEND-TX] ENTER', {
+    chainId,
     to: step.txRequest.to,
-    data: step.txRequest.data ? `${step.txRequest.data.substring(0, 20)}...` : undefined,
-    value: step.txRequest.value,
+    dataLen: (step.txRequest.data as string | undefined)?.length,
     from: address,
   })
+
+  const normalizedValue =
+    typeof step.txRequest.value === 'bigint'
+      ? `0x${step.txRequest.value.toString(16)}`
+      : step.txRequest.value ?? '0x0'
+
+  // Get connector info for logging
+  const wagmiAccount = getAccount(wagmiConfig)
+  const connector = wagmiAccount?.connector
+
+  // eslint-disable-next-line no-console
+  console.log('[SEND-TX] about-to-send', {
+    chainId,
+    from: address,
+    to: step.txRequest.to,
+    value: normalizedValue,
+    dataLen: (step.txRequest.data as string | undefined)?.length,
+    connectorName: connector?.name,
+  })
+
   const signer = yield* call(getSigner, address)
 
   try {
     const response = yield* call([signer, 'sendTransaction'], step.txRequest)
-    console.log('[handleOnChainStep] Transaction submitted successfully', {
-      hash: response.hash,
+    // eslint-disable-next-line no-console
+    console.log('[SEND-TX] success', {
+      txHash: response.hash,
       chainId: response.chainId,
       to: response.to,
     })
     return transformTransactionResponse(response)
   } catch (error) {
-    console.error('[handleOnChainStep] Transaction submission failed', {
-      error: error instanceof Error ? error.message : String(error),
-      errorStack: error instanceof Error ? error.stack : undefined,
-      chainId: step.txRequest.chainId,
-      to: step.txRequest.to,
+    const errorObj = error instanceof Error ? error : new Error(String(error))
+    const shortStack = errorObj.stack?.split('\n').slice(0, 2).join('\n')
+
+    // eslint-disable-next-line no-console
+    console.error('[SEND-TX] error', {
+      name: errorObj.name,
+      message: errorObj.message,
+      code: (error as any)?.code,
+      shortStack,
+      chainId,
     })
     if (error && typeof error === 'object' && 'transactionHash' in error && isValidHexString(error.transactionHash)) {
       console.log('[handleOnChainStep] Recovering transaction from hash', {
@@ -551,7 +601,37 @@ async function getProvider(): Promise<Web3Provider> {
 }
 
 export async function getSigner(account: string): Promise<JsonRpcSigner> {
-  return (await getProvider()).getSigner(account)
+  // Hard entry log - must log unconditionally for chainId 84532
+  const wagmiAccount = getAccount(wagmiConfig)
+  const connector = wagmiAccount?.connector
+  const chainId = wagmiAccount?.chainId
+
+  // eslint-disable-next-line no-console
+  console.log('[SIGNER] ENTER', {
+    chainId,
+    connectorName: connector?.name,
+    accountAddress: account,
+  })
+
+  // eslint-disable-next-line no-console
+  console.log('[SIGNER] resolving-wallet-client', {
+    chainId,
+    connectorName: connector?.name,
+    accountAddress: account,
+  })
+
+  const provider = await getProvider()
+  const signer = provider.getSigner(account)
+
+  // eslint-disable-next-line no-console
+  console.log('[SIGNER] resolved', {
+    walletClientPresent: Boolean(signer),
+    signerPresent: Boolean(signer),
+    providerType: provider.connection?.url || String(provider),
+    chainId,
+  })
+
+  return signer
 }
 
 type SwapInfo = ExactInputSwapTransactionInfo | ExactOutputSwapTransactionInfo

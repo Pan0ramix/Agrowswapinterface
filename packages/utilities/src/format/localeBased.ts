@@ -71,8 +71,45 @@ export function formatCurrencyAmount({
   type?: NumberType
   placeholder?: string
 }): string {
+  if (!amount) {
+    return placeholder ?? PLACEHOLDER_TEXT
+  }
+
+  // Safely extract numeric value from CurrencyAmount object
+  let numericValue: number | undefined
+
+  // CurrencyAmount objects have toExact() method (preferred for precision)
+  if (typeof amount.toExact === 'function') {
+    try {
+      numericValue = parseFloat(amount.toExact())
+    } catch {
+      // Fallback to toSignificant if toExact fails
+      if (typeof amount.toSignificant === 'function') {
+        try {
+          numericValue = parseFloat(amount.toSignificant())
+        } catch {
+          numericValue = undefined
+        }
+      }
+    }
+  }
+  // Fallback to toSignificant if toExact is not available
+  else if (typeof amount.toSignificant === 'function') {
+    try {
+      numericValue = parseFloat(amount.toSignificant())
+    } catch {
+      numericValue = undefined
+    }
+  }
+  // Handle edge cases: if amount is already a number or string
+  else if (typeof amount === 'number') {
+    numericValue = amount
+  } else if (typeof amount === 'string') {
+    numericValue = parseFloat(amount)
+  }
+
   return formatNumber({
-    input: amount ? parseFloat(amount.toFixed()) : undefined,
+    input: numericValue,
     locale,
     type,
     placeholder,

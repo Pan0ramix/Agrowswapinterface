@@ -9,6 +9,7 @@ import { currencyIdToContractInput } from 'uniswap/src/features/dataApi/utils/cu
 import { gqlTokenToCurrencyInfo } from 'uniswap/src/features/dataApi/utils/gqlTokenToCurrencyInfo'
 import { fetchOnChainCurrencyBalance } from 'uniswap/src/features/portfolio/api'
 import { getCurrencyAmount, ValueType } from 'uniswap/src/features/tokens/getCurrencyAmount'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { toTradingApiSupportedChainId } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
 import { CurrencyId } from 'uniswap/src/types/currency'
 import { currencyIdToAddress, currencyIdToChain, isNativeCurrencyAddress } from 'uniswap/src/utils/currencyId'
@@ -137,6 +138,16 @@ async function getDenominatedValue({
     return inferredDenominatedValue
   }
 
+  // CRITICAL: Skip Trading API indicative quotes in on-chain-only mode
+  const universeChainId = fromGraphQLChain(token.chain)
+  if (universeChainId && isOnChainOnlyChain(universeChainId)) {
+    logger.debug('[ITBU] Skipping indicative quote in on-chain-only mode', {
+      chainId: universeChainId,
+      tokenAddress: token.address,
+    })
+    return undefined
+  }
+
   // If we don't have enough data to calculate the USD value, we continue by fetching an indicative quote.
 
   // For logging purposes.
@@ -158,8 +169,6 @@ async function getDenominatedValue({
     })
     return undefined
   }
-
-  const universeChainId = fromGraphQLChain(token.chain)
 
   // Skip any unsupported chains
   if (!universeChainId) {

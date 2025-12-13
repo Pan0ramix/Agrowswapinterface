@@ -296,13 +296,54 @@ export function doesGetPortfolioQueryMatchAddress({
   address: string
   platform: Platform
 }): boolean {
+  // Harden: validate queryKey is an array with expected shape before destructuring
+  // React Query queryKeys should always be arrays, but defensive programming prevents crashes
+  // Expected shape: [ReactQueryCacheKey.GetPortfolio, AccountAddressesByPlatform]
+  // We've seen unexpected shapes: array length 1, Symbol(), etc.
+  if (!Array.isArray(queryKey)) {
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.debug('[getPortfolio] doesGetPortfolioQueryMatchAddress: queryKey is not an array', {
+        queryKeyType: typeof queryKey,
+        queryKeyValue: queryKey,
+        queryKeyConstructor: queryKey?.constructor?.name,
+      })
+    }
+    return false
+  }
+
+  // Must have at least 2 elements: [key, accountAddressesByPlatform]
+  if (queryKey.length < 2) {
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.debug('[getPortfolio] doesGetPortfolioQueryMatchAddress: queryKey array too short', {
+        queryKeyLength: queryKey.length,
+        queryKey: queryKey,
+      })
+    }
+    return false
+  }
+
+  // Safe to destructure now that we've validated array shape
   const [key, accountAddressesByPlatform] = queryKey
 
-  if (
-    key !== ReactQueryCacheKey.GetPortfolio ||
-    !accountAddressesByPlatform ||
-    !isAccountAddressesByPlatform(accountAddressesByPlatform)
-  ) {
+  // Validate first element is the expected cache key
+  if (key !== ReactQueryCacheKey.GetPortfolio) {
+    // Not a portfolio query, return false (no match) without logging
+    return false
+  }
+
+  // Validate second element has expected shape
+  if (!accountAddressesByPlatform || !isAccountAddressesByPlatform(accountAddressesByPlatform)) {
+    // Invalid shape for second element, return false (no match)
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.debug('[getPortfolio] doesGetPortfolioQueryMatchAddress: invalid accountAddressesByPlatform shape', {
+        accountAddressesByPlatformType: typeof accountAddressesByPlatform,
+        accountAddressesByPlatformValue: accountAddressesByPlatform,
+        isAccountAddressesByPlatform: isAccountAddressesByPlatform(accountAddressesByPlatform),
+      })
+    }
     return false
   }
 

@@ -11,7 +11,7 @@ import type {
 } from '@universe/api'
 import { TradingApi } from '@universe/api'
 import type { providers } from 'ethers/lib/ethers'
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { getTradeSettingsDeadline } from 'uniswap/src/data/apiClients/tradingApi/utils/getTradeSettingsDeadline'
 import { getChainLabel } from 'uniswap/src/features/chains/utils'
 import { convertGasFeeToDisplayValue, useActiveGasStrategy } from 'uniswap/src/features/gas/hooks'
@@ -352,6 +352,36 @@ export function createApprovalFields({
   const approveTxRequest = validateTransactionRequest(tokenApprovalInfo.txRequest)
   const revocationTxRequest = validateTransactionRequest(tokenApprovalInfo.cancelTxRequest)
 
+  // Debug logging for approval fields (dev-only, Base Sepolia)
+  if (process.env.NODE_ENV !== 'production') {
+    const chainId = (tokenApprovalInfo.txRequest as any)?.chainId
+    if (chainId === 84532) {
+      const txTo = tokenApprovalInfo.txRequest?.to ? String(tokenApprovalInfo.txRequest.to).toLowerCase() : undefined
+      const dataLen = (tokenApprovalInfo.txRequest?.data as string | undefined)?.length ?? 0
+      logger.debugDeduped(
+        'createApprovalFields',
+        'createApprovalFields',
+        'Approval fields created',
+        {
+          chainId,
+          approvalAction: tokenApprovalInfo.action,
+          hasTokenApprovalTxRequest: !!tokenApprovalInfo.txRequest,
+          txTo,
+          dataLen,
+          hasValidatedApproveTxRequest: !!approveTxRequest,
+          hasRevocationTxRequest: !!revocationTxRequest,
+        },
+        {
+          ttlMs: 3000,
+          minIntervalMs: 1500,
+          maxPerWindow: 2,
+          windowMs: 5000,
+          includeKeys: ['chainId', 'approvalAction', 'hasTokenApprovalTxRequest', 'txTo', 'dataLen'],
+        }
+      )
+    }
+  }
+
   return {
     approveTxRequest,
     revocationTxRequest,
@@ -380,11 +410,59 @@ export function getClassicSwapTxAndGasInfo({
       ? ({ method: PermitMethod.Transaction, txRequest: permitTxInfo.permitTxRequest } as const)
       : undefined
 
+  const approvalFields = createApprovalFields({ approvalTxInfo })
+
+  // CRITICAL: Verify spender address matches swap tx request (for on-chain-only swaps)
+  // This ensures the approval is for the correct router/spender
+  if (process.env.NODE_ENV !== 'production' && approvalFields.approveTxRequest && txRequests?.[0]) {
+    const swapTxTo = txRequests[0].to
+    const approvalTxTo = approvalFields.approveTxRequest.to
+
+    // Extract spender from approval calldata (first 4 bytes are function selector, next 32 bytes are spender)
+    const approvalData = approvalFields.approveTxRequest.data as string | undefined
+    if (approvalData && approvalData.length >= 138) {
+      // approve(address,uint256) selector: 0x095ea7b3
+      // Spender is at offset 36-75 (32 bytes, padded)
+      const spenderFromCalldata = `0x${approvalData.slice(34, 74)}`
+
+      if (spenderFromCalldata.toLowerCase() !== swapTxTo?.toLowerCase()) {
+        logger.warn('getClassicSwapTxAndGasInfo', 'getClassicSwapTxAndGasInfo', 'Spender mismatch detected', {
+          chainId: trade.inputAmount.currency.chainId,
+          approvalSpender: spenderFromCalldata,
+          swapTxTo,
+          approvalTxTo,
+          note: 'Approval spender should match swap tx to address',
+        })
+      } else {
+        const chainId = trade.inputAmount.currency.chainId
+        const spender = spenderFromCalldata.toLowerCase()
+        const swapTxToLower = swapTxTo?.toLowerCase()
+        logger.debugDeduped(
+          'getClassicSwapTxAndGasInfo',
+          'getClassicSwapTxAndGasInfo',
+          'Spender verification passed',
+          {
+            chainId,
+            spender,
+            swapTxTo: swapTxToLower,
+          },
+          {
+            ttlMs: 3000,
+            minIntervalMs: 1500,
+            maxPerWindow: 2,
+            windowMs: 5000,
+            includeKeys: ['chainId', 'spender', 'swapTxTo'],
+          }
+        )
+      }
+    }
+  }
+
   return {
     routing: trade.routing,
     trade,
     ...createGasFields({ swapTxInfo, approvalTxInfo, permitTxInfo }),
-    ...createApprovalFields({ approvalTxInfo }),
+    ...approvalFields,
     swapRequestArgs: swapTxInfo.swapRequestArgs,
     unsigned,
     txRequests,
@@ -409,14 +487,70 @@ const EMPTY_PERMIT_TX_INFO: PermitTxInfo = {
   },
 }
 
+// CRITICAL: All hooks must be called unconditionally. Early returns must happen AFTER all hooks.
 export function usePermitTxInfo({
   quote,
 }: {
   quote?: DiscriminatedQuoteResponse | SolanaTrade['quote']
 }): PermitTxInfo {
+  // Hook probe: before useActiveGasStrategy
+  // CRITICAL: useRef must be called unconditionally at the very top, before any conditional logic
+  const hookProbePermitH01 = useRef(0)
+  hookProbePermitH01.current += 1 // Always increment, even in production (no-op if not logged)
+  if (process.env.NODE_ENV !== 'production') {
+    // Use deduped logging for HookProbe
+    // Extract chainId from quote if it's a classic quote, otherwise undefined
+    const chainId = quote && isClassic(quote) ? (quote as ClassicQuoteResponse).quote.chainId : undefined
+    logger.debugDeduped(
+      'usePermitTxInfo',
+      'usePermitTxInfo',
+      '[HookProbe] PERMIT-H01: before useActiveGasStrategy',
+      {
+        chainId,
+        hasQuote: !!quote,
+        isClassic: quote ? isClassic(quote) : false,
+      },
+      {
+        ttlMs: 15000,
+        minIntervalMs: 3000,
+        keyParts: ['PERMIT-H01', chainId, !!quote],
+      }
+    )
+  }
+
+  // CRITICAL: Call ALL hooks unconditionally, regardless of quote state
+  // When useOnChainQuote flips, quote might become undefined, but hooks must still be called
   const classicQuote = quote && isClassic(quote) ? quote : undefined
+  // CRITICAL: useActiveGasStrategy must be called unconditionally
+  // Pass undefined chainId if classicQuote is missing, but still call the hook
   const gasStrategy = useActiveGasStrategy(classicQuote?.quote.chainId, 'swap')
 
+  // Hook probe: after useActiveGasStrategy
+  // CRITICAL: useRef must be called unconditionally
+  const hookProbePermitH02 = useRef(0)
+  hookProbePermitH02.current += 1 // Always increment, even in production (no-op if not logged)
+  if (process.env.NODE_ENV !== 'production') {
+    // Use deduped logging for HookProbe
+    // Extract chainId from classicQuote if available, otherwise from quote
+    const chainId = classicQuote?.quote.chainId ?? (quote && isClassic(quote) ? (quote as ClassicQuoteResponse).quote.chainId : undefined)
+    logger.debugDeduped(
+      'usePermitTxInfo',
+      'usePermitTxInfo',
+      '[HookProbe] PERMIT-H02: after useActiveGasStrategy',
+      {
+        chainId,
+        hasClassicQuote: !!classicQuote,
+      },
+      {
+        ttlMs: 15000,
+        minIntervalMs: 3000,
+        keyParts: ['PERMIT-H02', chainId, !!classicQuote],
+      }
+    )
+  }
+
+  // CRITICAL: Early return check happens AFTER all hooks
+  // If no classicQuote, return empty permit info (but hooks were already called)
   if (!classicQuote) {
     return EMPTY_PERMIT_TX_INFO
   }
@@ -488,9 +622,11 @@ export function getWrapTxAndGasInfo({
 }
 
 export function getFallbackSwapTxAndGasInfo({
+  trade,
   swapTxInfo,
   approvalTxInfo,
 }: {
+  trade?: ClassicTrade | null
   swapTxInfo: TransactionRequestInfo
   approvalTxInfo: ApprovalTxInfo
 }): ClassicSwapTxAndGasInfo {
@@ -498,6 +634,7 @@ export function getFallbackSwapTxAndGasInfo({
 
   return {
     routing: TradingApi.Routing.CLASSIC,
+    trade: trade ?? undefined,
     ...createGasFields({ swapTxInfo, approvalTxInfo }),
     ...createApprovalFields({ approvalTxInfo }),
     txRequests,

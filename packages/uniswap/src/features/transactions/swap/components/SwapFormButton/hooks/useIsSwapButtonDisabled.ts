@@ -8,7 +8,9 @@ import {
   useSwapFormStore,
   useSwapFormStoreDerivedSwapInfo,
 } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { useIsBlocked } from 'uniswap/src/features/trm/hooks'
+import { boundaryLogDeduped } from 'uniswap/src/utils/boundaryLog'
 
 const useIsReviewButtonDisabled = (): boolean => {
   const isSubmitting = useSwapFormStore((s) => s.isSubmitting)
@@ -24,15 +26,45 @@ const useIsReviewButtonDisabled = (): boolean => {
   const { isBlocked: isBlockedAccount, isBlockedLoading: isBlockedAccountLoading } = useIsBlocked(activeAccountAddress)
   const { walletNeedsRestore } = useTransactionModalContext()
 
-  return (
-    !!blockingWarning ||
-    isBlockedAccount ||
-    isBlockedAccountLoading ||
-    walletNeedsRestore ||
-    isSubmitting ||
-    isTradeMissing ||
-    isMissingPlatformWallet
+  // Build structured reasons array
+  const reasons: string[] = []
+  if (blockingWarning) reasons.push('BLOCKING_WARNING')
+  if (isBlockedAccount) reasons.push('BLOCKED_ACCOUNT')
+  if (isBlockedAccountLoading) reasons.push('BLOCKED_ACCOUNT_LOADING')
+  if (walletNeedsRestore) reasons.push('WALLET_NEEDS_RESTORE')
+  if (isSubmitting) reasons.push('IS_SUBMITTING')
+  if (isTradeMissing) reasons.push('NO_TRADE')
+  if (isMissingPlatformWallet) reasons.push('MISSING_PLATFORM_WALLET')
+
+  const disabled = reasons.length > 0
+  const reasonsString = reasons.join('|')
+
+  // Use deduped log to reduce spam (TTL: 3000ms, key includes reasonsString)
+  boundaryLogDeduped(
+    '[SWAP-BUTTON] disabled state',
+    {
+      tags: { file: 'useIsSwapButtonDisabled', function: 'useIsReviewButtonDisabled' },
+      extra: {
+        chainId,
+        isOnChainOnly: isOnChainOnlyChain(chainId),
+        reasonsString,
+        blockingWarning: !!blockingWarning,
+        isBlockedAccount,
+        isBlockedAccountLoading,
+        walletNeedsRestore,
+        isSubmitting,
+        isTradeMissing,
+        isMissingPlatformWallet,
+      },
+    },
+    chainId,
+    {
+      ttlMs: 3000,
+      includeKeys: ['chainId', 'isOnChainOnly', 'reasonsString', 'blockingWarning'],
+    }
   )
+
+  return disabled
 }
 
 // TODO(WEB-5090): Simplify logic, deduplicate disabled vs isReviewButtonDisabled

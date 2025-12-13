@@ -32,11 +32,15 @@ import {
 } from 'uniswap/src/features/transactions/swap/review/stores/swapReviewTransactionStore/useSwapReviewTransactionStore'
 import { SwapReviewWarningStoreContextProvider } from 'uniswap/src/features/transactions/swap/review/stores/swapReviewWarningStore/SwapReviewWarningStoreContextProvider'
 import { useSwapDependenciesStore } from 'uniswap/src/features/transactions/swap/stores/swapDependenciesStore/useSwapDependenciesStore'
-import { useSwapFormStore } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
+import {
+  useSwapFormStore,
+  useSwapFormStoreDerivedSwapInfo,
+} from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import { useSwapTxStore } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/useSwapTxStore'
 import { isChained } from 'uniswap/src/features/transactions/swap/utils/routing'
-import { logger } from 'utilities/src/logger/logger'
+import { useEffect } from 'react'
 import { isWebPlatform } from 'utilities/src/platform'
+import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
 
 interface SwapReviewScreenProps {
   hideContent: boolean
@@ -48,6 +52,19 @@ export function SwapReviewScreen({ hideContent, onSubmitSwap }: SwapReviewScreen
 }
 
 export function SwapReviewScreenProviders({ hideContent, onSubmitSwap }: SwapReviewScreenProps): JSX.Element {
+  const chainId = useSwapFormStoreDerivedSwapInfo((s) => s.chainId)
+
+  // Mount log: Prove SwapReviewScreen is mounted (Base Sepolia only) - only log once per mount
+  useEffect(() => {
+    boundaryLog(
+      '[MOUNT-REVIEW] SwapReviewScreen mounted',
+      {
+        tags: { file: 'SwapReviewScreen', function: 'SwapReviewScreenProviders' },
+        extra: { chainId, hideContent },
+      },
+      chainId
+    )
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- only log on mount
   const { onClose, authTrigger, setScreen } = useTransactionModalContext()
   const isSubmitting = useSwapFormStore((s) => s.isSubmitting)
   const { derivedSwapInfo, getExecuteSwapService } = useSwapDependenciesStore((s) => ({

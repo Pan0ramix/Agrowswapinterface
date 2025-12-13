@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, Button, Flex, useIsShortMobileDevice } from 'ui/src'
 import { Passkey } from 'ui/src/components/icons/Passkey'
@@ -22,6 +22,10 @@ import { isChained, isClassic } from 'uniswap/src/features/transactions/swap/uti
 import { WrapType } from 'uniswap/src/features/transactions/types/wrap'
 import { TestID } from 'uniswap/src/test/fixtures/testIDs'
 import { isWebApp } from 'utilities/src/platform'
+import { swapDebug } from 'uniswap/src/utils/swapDebug'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { useEvent } from 'utilities/src/react/hooks'
+import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
 
 interface SubmitSwapButtonProps {
   disabled: boolean
@@ -37,6 +41,47 @@ export function SubmitSwapButton({ disabled, onSubmit, showPendingUI, warning }:
   const isSubmitting = useSwapFormStore((s) => s.isSubmitting)
   const isConfirmed = useSwapFormStore((s) => s.isConfirmed)
   const chainId = useSwapFormStoreDerivedSwapInfo((s) => s.chainId)
+  const isOnChainOnly = chainId ? isOnChainOnlyChain(chainId) : false
+
+  // Mount log: Prove this component is actually mounted (Base Sepolia only) - only log once per mount
+  useEffect(() => {
+    boundaryLog(
+      '[MOUNT-0] SubmitSwapButton mounted',
+      {
+        tags: { file: 'SubmitSwapButton', function: 'SubmitSwapButton' },
+        extra: {
+          chainId,
+          disabled,
+          hasOnSubmit: !!onSubmit,
+          isSubmitting,
+          showPendingUI: !!showPendingUI,
+          hasWarning: !!warning,
+        },
+      },
+      chainId
+    )
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- only log on mount
+
+  // Boundary log 0: Actual Swap button click (Base Sepolia only)
+  const handleSubmit = useEvent(() => {
+    // Single unmissable trace: UI entry point
+    boundaryLog(
+      '[CONFIRM-UI] SubmitSwapButton pressed',
+      {
+        tags: { file: 'SubmitSwapButton', function: 'handleSubmit' },
+        extra: {
+          chainId,
+          disabled,
+          hasTrade: !!trade,
+          hasOnChainQuote: !!(trade as any)?.quote,
+          hasTxRequests: !!swapTxContext?.txRequests,
+          txRequestsLength: swapTxContext?.txRequests?.length ?? 0,
+        },
+      },
+      chainId
+    )
+    onSubmit()
+  })
   const isFlashblocksEnabled = useIsUnichainFlashblocksEnabled(chainId)
   const {
     wrapType,
@@ -69,6 +114,16 @@ export function SubmitSwapButton({ disabled, onSubmit, showPendingUI, warning }:
     return undefined
   }, [renderBiometricsIcon, passkeyAuthStatus?.isSignedInWithPasskey, passkeyAuthStatus?.isSessionAuthenticated])
 
+  // Log mousedown to detect if clicks are blocked by disabled state
+  const handleMouseDown = useMemo(() => {
+    return () => {
+      swapDebug(chainId, '[SWAP-CTA] mousedown', {
+        disabled,
+        chainId,
+      })
+    }
+  }, [chainId, disabled])
+
   switch (true) {
     case indicative: {
       return (
@@ -79,7 +134,7 @@ export function SubmitSwapButton({ disabled, onSubmit, showPendingUI, warning }:
     }
     case showPendingUI: {
       if (isChainedTrade && !isWebApp) {
-        return <PendingSwapButton disabled={disabled} onSubmit={onSubmit} />
+        return <PendingSwapButton disabled={disabled} onSubmit={handleSubmit} />
       }
       return (
         <Button loading variant="branded" emphasis="primary" size={size}>
@@ -107,7 +162,22 @@ export function SubmitSwapButton({ disabled, onSubmit, showPendingUI, warning }:
           icon={icon}
           size={size}
           testID={TestID.Swap}
-          onPress={onSubmit}
+          onMouseDown={handleMouseDown}
+          onPressIn={
+            chainId === 84532
+              ? () => {
+                  boundaryLog(
+                    '[POINTER] confirm onPressIn fired (source=SubmitSwapButton)',
+                    {
+                      tags: { file: 'SubmitSwapButton', function: 'onPressIn' },
+                      extra: { chainId, disabled },
+                    },
+                    chainId
+                  )
+                }
+              : undefined
+          }
+          onPress={handleSubmit}
         >
           {actionText}
         </Button>
@@ -122,7 +192,22 @@ export function SubmitSwapButton({ disabled, onSubmit, showPendingUI, warning }:
           icon={icon}
           size={size}
           testID={TestID.Swap}
-          onPress={onSubmit}
+          onMouseDown={handleMouseDown}
+          onPressIn={
+            chainId === 84532
+              ? () => {
+                  boundaryLog(
+                    '[POINTER] confirm onPressIn fired (source=SubmitSwapButton)',
+                    {
+                      tags: { file: 'SubmitSwapButton', function: 'onPressIn' },
+                      extra: { chainId, disabled },
+                    },
+                    chainId
+                  )
+                }
+              : undefined
+          }
+          onPress={handleSubmit}
         >
           {actionText}
         </Button>

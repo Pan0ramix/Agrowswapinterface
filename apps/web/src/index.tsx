@@ -48,6 +48,7 @@ import { isDevEnv, isTestEnv } from 'utilities/src/environment/env'
 import { getLogger } from 'utilities/src/logger/logger'
 import { isBrowserRouterEnabled } from 'utils/env'
 import { unregister as unregisterServiceWorker } from 'utils/serviceWorker'
+import { silenceReactDevNoise } from 'utils/silenceReactDevNoise'
 import { getCanonicalUrl } from 'utils/urlRoutes'
 // biome-ignore lint/style/noRestrictedImports: custom useAccount hook requires statsig
 import { useAccount } from 'wagmi'
@@ -55,6 +56,9 @@ import { useAccount } from 'wagmi'
 if (window.ethereum) {
   window.ethereum.autoRefreshOnNetworkChange = false
 }
+
+// Silence React StrictMode passive effect spam in development
+silenceReactDevNoise()
 
 if (__DEV__ && !isTestEnv()) {
   configureReanimatedLogger({

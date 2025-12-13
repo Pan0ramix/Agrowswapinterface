@@ -5,6 +5,7 @@ import { useIndicativeTradeQuery } from 'uniswap/src/features/transactions/swap/
 import { useTradeQuery } from 'uniswap/src/features/transactions/swap/hooks/useTrade/useTradeQuery'
 import type { TradeWithGasEstimates } from 'uniswap/src/features/transactions/swap/services/tradeService/tradeService'
 import { TradeWithStatus, UseTradeArgs } from 'uniswap/src/features/transactions/swap/types/trade'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 
 // error strings hardcoded in @uniswap/unified-routing-api
 // https://github.com/Uniswap/unified-routing-api/blob/020ea371a00d4cc25ce9f9906479b00a43c65f2c/lib/util/errors.ts#L4
@@ -13,12 +14,34 @@ export const SWAP_QUOTE_ERROR = 'QUOTE_ERROR'
 export const API_RATE_LIMIT_ERROR = 'TOO_MANY_REQUESTS'
 
 export function useTrade(params: UseTradeArgs): TradeWithStatus {
-  const { error, data, isLoading: queryIsLoading, isFetching } = useTradeQuery(params)
+  const chainIdFromParams =
+    params.amountSpecified?.currency.chainId ??
+    params.otherCurrency?.chainId ??
+    // optional downstream account hint
+    (params.account as any)?.chainId
+
+  const onChainOnly = isOnChainOnlyChain(chainIdFromParams as number | undefined)
+  const paramsWithSkip: UseTradeArgs = onChainOnly ? { ...params, skip: true } : params
+
+  const { error, data, isLoading: queryIsLoading, isFetching } = useTradeQuery(paramsWithSkip)
   const isLoading = (params.amountSpecified && params.isDebouncing) || queryIsLoading
   const indicative = useIndicativeTradeQuery(params)
-  const { currencyIn, currencyOut } = parseQuoteCurrencies(params)
+  const { currencyIn, currencyOut } = parseQuoteCurrencies(paramsWithSkip)
 
   return useMemo(() => {
+    if (onChainOnly) {
+      return {
+        isLoading: false,
+        isFetching: false,
+        trade: null,
+        indicativeTrade: undefined,
+        isIndicativeLoading: false,
+        error: null,
+        gasEstimate: undefined,
+        quoteHash: undefined,
+      }
+    }
+
     return parseTradeResult({
       data,
       currencyIn,
@@ -29,7 +52,7 @@ export function useTrade(params: UseTradeArgs): TradeWithStatus {
       error,
       isDebouncing: params.isDebouncing,
     })
-  }, [currencyIn, currencyOut, data, error, indicative, isFetching, isLoading, params.isDebouncing])
+  }, [currencyIn, currencyOut, data, error, indicative, isFetching, isLoading, params.isDebouncing, onChainOnly])
 }
 
 function parseTradeResult(input: {

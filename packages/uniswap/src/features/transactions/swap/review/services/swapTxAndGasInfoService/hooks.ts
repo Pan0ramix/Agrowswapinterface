@@ -28,10 +28,12 @@ import type {
 import { createSwapTxAndGasInfoService } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/swapTxAndGasInfoService'
 import { createUniswapXSwapTxAndGasInfoService } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/uniswapx/uniswapXSwapTxAndGasInfoService'
 import { createWrapTxAndGasInfoService } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/wrap/wrapTxAndGasInfoService'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import {
   useSwapFormStore,
   useSwapFormStoreDerivedSwapInfo,
 } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
+import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import type { SwapTxAndGasInfo } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
 import type { Trade } from 'uniswap/src/features/transactions/swap/types/trade'
@@ -236,13 +238,22 @@ function createGetQueryOptions(ctx: {
     SwapTxAndGasInfo | null,
     [ReactQueryCacheKey.SwapTxAndGasInfo, SwapQueryKeyParams]
   > {
-    const { trade } = params
+    const { trade, derivedSwapInfo } = params
+    const chainId = derivedSwapInfo.chainId
+    const isOnChainOnly = chainId ? isOnChainOnlyChain(chainId) : false
+
+    // Disable query for on-chain-only chains when trade.quote is undefined (on-chain-only trade)
+    // This prevents the classic service from trying to access trade.quote.quote which doesn't exist
+    const shouldDisableOnChainOnly =
+      isOnChainOnly && trade && !trade.quote
+
+    const enabled = !!trade && !shouldDisableOnChainOnly
 
     return queryOptions({
       queryKey: [ReactQueryCacheKey.SwapTxAndGasInfo, parseQueryKeyParams(params)],
       queryFn: async () => (trade ? ctx.swapTxAndGasInfoService.getSwapTxAndGasInfo({ ...params, trade }) : null),
       refetchInterval: ctx.refetchInterval,
-      enabled: !!trade,
+      enabled,
     })
   }
 }
@@ -263,6 +274,14 @@ export function useSwapParams(): {
     trade: { trade },
   } = derivedSwapInfo
 
+  // Get router address for on-chain-only chains to pass to approval check
+  const routerAddress = useMemo(() => {
+    if (isOnChainOnlyChain(chainId) && chainId === 84532) {
+      return getAgroswapSwapRouterAddress(chainId)
+    }
+    return undefined
+  }, [chainId])
+
   const approvalTxInfo = useTokenApprovalInfo({
     account,
     chainId,
@@ -270,6 +289,7 @@ export function useSwapParams(): {
     currencyInAmount: currencyAmounts[CurrencyField.INPUT],
     currencyOutAmount: currencyAmounts[CurrencyField.OUTPUT],
     routing: trade?.routing,
+    routerAddress,
   })
 
   return {

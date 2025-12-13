@@ -10,6 +10,8 @@ import {
 } from 'uniswap/src/features/transactions/swap/types/swapHandlers'
 import { isWrap } from 'uniswap/src/features/transactions/swap/utils/routing'
 import { WrapType } from 'uniswap/src/features/transactions/types/wrap'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { swapDebug } from 'uniswap/src/utils/swapDebug'
 
 /**
  * Validates that all required parameters for a wrap transaction are present.
@@ -60,6 +62,33 @@ export function useSwapHandlers(): SwapHandlers {
         isFiatInputMode,
       } = params
 
+      const chainId =
+        swapTxContext?.trade?.inputAmount?.currency.chainId ??
+        swapTxContext?.trade?.outputAmount?.currency.chainId ??
+        (swapTxContext?.txRequests?.[0]?.chainId as number | undefined)
+      const txRequest = swapTxContext?.txRequests?.[0]
+      const isOnChainOnly = isOnChainOnlyChain(chainId)
+
+      const normalizedValue =
+        typeof txRequest?.value === 'bigint'
+          ? `0x${txRequest.value.toString(16)}`
+          : txRequest?.value ?? '0x0'
+
+      swapDebug(chainId, '[SWAP-HANDLERS] execute', {
+        routing: swapTxContext?.routing ? String(swapTxContext.routing) : undefined,
+        isOnChainOnly,
+        hasTxRequest: !!txRequest,
+        txTo: txRequest?.to,
+        txDataLen: (txRequest?.data as string | undefined)?.length,
+        txValue: normalizedValue,
+        accountAddress: account?.address,
+      })
+
+      if (isOnChainOnly && !txRequest) {
+        onFailure(new Error('On-chain swap missing tx request'))
+        return
+      }
+
       // Route to appropriate callback based on transaction type
       if (isWrap(swapTxContext)) {
         // Handle wrap transactions
@@ -83,6 +112,12 @@ export function useSwapHandlers(): SwapHandlers {
         }
       } else {
         // Handle regular swap transactions
+        swapDebug(chainId, '[SWAP-HANDLERS] calling-swapCallback', {
+          accountAddress: account?.address,
+          routing: swapTxContext?.routing ? String(swapTxContext.routing) : undefined,
+          hasTxRequest: !!txRequest,
+        })
+
         swapCallback({
           account,
           swapTxContext,

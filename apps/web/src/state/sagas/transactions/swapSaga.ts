@@ -74,9 +74,22 @@ import {
 import { createSaga } from 'uniswap/src/utils/saga'
 import { logger } from 'utilities/src/logger/logger'
 import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
+import { boundaryLog, boundaryLogDeduped } from 'uniswap/src/utils/boundaryLog'
+import { estimateGasFee } from 'uniswap/src/features/transactions/swap/utils/estimateGasFee'
+import { validateSwapTxContextWithReasons } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
+import type { TransactionEip1559FeeParams, TransactionLegacyFeeParams } from 'uniswap/src/features/gas/types'
 
 function* handleSwapTransactionStep(params: HandleSwapStepParams): SagaGenerator<string> {
   const { trade, step, signature, analytics, onTransactionHash } = params
+
+  const chainId = trade.inputAmount.currency.chainId
+
+  // eslint-disable-next-line no-console
+  console.log('[SWAP-SAGA] calling-submitTransaction', {
+    chainId,
+    stepType: step.type,
+    address: params.address,
+  })
 
   const info = getSwapTransactionInfo({
     trade,
@@ -96,6 +109,16 @@ function* handleSwapTransactionStep(params: HandleSwapStepParams): SagaGenerator
 
   // Now that we have the txRequest, we can create a definitive SwapTransactionStep, incase we started with an async step.
   const onChainStep = { ...step, txRequest }
+
+  // eslint-disable-next-line no-console
+  console.log('[SWAP-SAGA] calling-handleOnChainStep', {
+    chainId,
+    stepType: onChainStep.type,
+    address: params.address,
+    to: onChainStep.txRequest.to,
+    dataLen: (onChainStep.txRequest.data as string | undefined)?.length,
+  })
+
   const hash = yield* call(handleOnChainStep, {
     ...params,
     info,
@@ -107,7 +130,6 @@ function* handleSwapTransactionStep(params: HandleSwapStepParams): SagaGenerator
 
   handleSwapTransactionAnalytics({ ...params, hash })
 
-  const chainId = trade.inputAmount.currency.chainId
   const { shouldLogQualifyingEvent, shouldShowModal } = getFlashblocksExperimentStatus({
     chainId,
     routing: trade.routing,
@@ -223,92 +245,510 @@ function* swap(params: SwapParams) {
   } = params
   const { trade } = swapTxContext
 
-  const { chainSwitchFailed } = yield* call(handleSwitchChains, {
-    selectChain: params.selectChain,
-    startChainId: params.startChainId,
-    swapTxContext,
+  const chainId = trade.inputAmount.currency.chainId
+  const txRequests = (swapTxContext as any)?.txRequests
+  const firstTxRequest = txRequests?.[0]
+  const routing = trade.routing ? String(trade.routing) : undefined
+  const indicative = (trade as any)?.indicative ?? false
+
+  // Single unmissable trace: Saga handler entry
+  boundaryLog(
+    '[SWAP-SAGA] handler-enter',
+    {
+      tags: { file: 'swapSaga', function: 'swap' },
+      extra: {
+        chainId,
+        routing,
+        indicative,
+        hasTrade: !!trade,
+        hasTxRequests: !!(swapTxContext as any)?.txRequests,
+        txRequestsLength: (swapTxContext as any)?.txRequests?.length ?? 0,
+        swapTxContextKeys: swapTxContext ? Object.keys(swapTxContext as any) : [],
+      },
+    },
+    chainId
+  )
+
+  // eslint-disable-next-line no-console
+  console.log('[SWAP-SAGA] ENTER', {
+    chainId,
+    accountAddress: account.address,
+    txRequestTo: firstTxRequest?.to,
+    txRequestValue: firstTxRequest?.value,
+    txRequestDataLen: (firstTxRequest?.data as string | undefined)?.length,
+    routing: trade.routing ? String(trade.routing) : undefined,
   })
-  if (chainSwitchFailed) {
-    onFailure()
-    return
-  }
 
-  const steps = yield* call(generateSwapTransactionSteps, swapTxContext, v4Enabled)
-  setSteps(steps)
-
-  let signature: string | undefined
-  let step: TransactionStep | undefined
+  // Comprehensive params dump for debugging
+  // eslint-disable-next-line no-console
+  console.log('[SWAP-SAGA] PARAMS-SHAPE', {
+    chainId,
+    accountAddress: account.address,
+    routing: trade.routing ? String(trade.routing) : undefined,
+    indicative: (trade as any).indicative ?? false,
+    keys: Object.keys(params ?? {}),
+    hasTxRequest: !!firstTxRequest,
+    txRequestTo: firstTxRequest?.to,
+    txRequestDataLen: (firstTxRequest?.data as string | undefined)?.length,
+    txRequestValue: firstTxRequest?.value,
+    hasTrade: !!trade,
+    tradeKeys: trade ? Object.keys(trade) : null,
+    hasAllowedSlippage: trade.slippageTolerance != null,
+    allowedSlippage: trade.slippageTolerance,
+    hasRequestId: !!(
+      (params as any)?.requestId ??
+      (params as any)?.swapQuoteResponse?.requestId ??
+      (params as any)?.quote?.requestId ??
+      trade?.quote?.requestId
+    ),
+    requestId:
+      (params as any)?.requestId ??
+      (params as any)?.swapQuoteResponse?.requestId ??
+      (params as any)?.quote?.requestId ??
+      trade?.quote?.requestId,
+    hasConnectorName: !!(account as any)?.connector?.name,
+    connectorName: (account as any)?.connector?.name,
+    hasPermit: !!(swapTxContext as any)?.permit,
+    permitMethod: (swapTxContext as any)?.permit?.method,
+    hasApprovalTx: !!(swapTxContext as any)?.approveTxRequest,
+    hasRevokeTx: !!(swapTxContext as any)?.revocationTxRequest,
+    swapTxContextKeys: swapTxContext ? Object.keys(swapTxContext) : null,
+  })
 
   try {
-    // TODO(SWAP-287): Integrate jupiter swap into TransactionStep, rather than special-casing.
-    if (isJupiter(swapTxContext)) {
-      yield* call(jupiterSwap, { ...params, swapTxContext })
-      yield* call(onSuccess)
+    const { chainSwitchFailed } = yield* call(handleSwitchChains, {
+      selectChain: params.selectChain,
+      startChainId: params.startChainId,
+      swapTxContext,
+    })
+    if (chainSwitchFailed) {
+      // eslint-disable-next-line no-console
+      console.log('[SWAP-SAGA] EARLY-RETURN', {
+        reason: 'CHAIN_SWITCH_FAILED',
+        chainId,
+        accountAddress: account.address,
+        startChainId: params.startChainId,
+      })
+      onFailure()
       return
     }
 
-    for (step of steps) {
-      switch (step.type) {
-        case TransactionStepType.TokenRevocationTransaction:
-        case TransactionStepType.TokenApprovalTransaction: {
-          yield* call(handleApprovalTransactionStep, { address: account.address, step, setCurrentStep })
-          break
-        }
-        case TransactionStepType.Permit2Signature: {
-          signature = yield* call(handleSignatureStep, { address: account.address, step, setCurrentStep })
-          break
-        }
-        case TransactionStepType.Permit2Transaction: {
-          yield* call(handlePermitTransactionStep, { address: account.address, step, setCurrentStep })
-          break
-        }
-        case TransactionStepType.SwapTransaction:
-        case TransactionStepType.SwapTransactionAsync: {
-          requireRouting(trade, [TradingApi.Routing.CLASSIC, TradingApi.Routing.BRIDGE])
-          yield* call(handleSwapTransactionStep, {
-            address: account.address,
-            signature,
-            step,
-            setCurrentStep,
-            trade,
-            analytics,
-            onTransactionHash: params.onTransactionHash,
+    // Log inputs before calling generateSwapTransactionSteps
+    const txRequests = (swapTxContext as any)?.txRequests
+    const firstTxRequest = txRequests?.[0]
+    const trade = swapTxContext.trade
+    const quote = (trade as any)?.quote
+    const swapQuoteResponse = (params as any)?.swapQuoteResponse
+
+    // eslint-disable-next-line no-console
+    console.log('[SWAP-SAGA] STEPS-INPUT', {
+      chainId,
+      accountAddress: account.address,
+      routing: trade?.routing ? String(trade.routing) : undefined,
+      indicative: (trade as any)?.indicative ?? false,
+      hasTxRequest: !!firstTxRequest,
+      txTo: firstTxRequest?.to,
+      dataLen: (firstTxRequest?.data as string | undefined)?.length,
+      hasTrade: !!trade,
+      tradeKeys: trade ? Object.keys(trade) : null,
+      hasSwapQuoteResponse: !!swapQuoteResponse,
+      swapQuoteKeys: swapQuoteResponse ? Object.keys(swapQuoteResponse) : null,
+      hasQuote: !!quote,
+      quoteKeys: quote ? Object.keys(quote) : null,
+      requestId:
+        (params as any)?.requestId ??
+        swapQuoteResponse?.requestId ??
+        quote?.requestId ??
+        (trade as any)?.quote?.requestId,
+      hasAllowedSlippage: trade?.slippageTolerance != null,
+      allowedSlippage: trade?.slippageTolerance,
+      hasApproveTxRequest: !!(swapTxContext as any)?.approveTxRequest,
+      hasRevocationTxRequest: !!(swapTxContext as any)?.revocationTxRequest,
+      hasPermit: !!(swapTxContext as any)?.permit,
+      permitMethod: (swapTxContext as any)?.permit?.method,
+      txRequestsLength: txRequests?.length ?? 0,
+      swapTxContextKeys: swapTxContext ? Object.keys(swapTxContext) : null,
+    })
+
+    // Pre-validate and fix gasFee if invalid (Base Sepolia only)
+    let normalizedSwapTxContext = swapTxContext
+    if (chainId === 84532) {
+      const preValidation = validateSwapTxContextWithReasons(swapTxContext)
+      const reasonsString = preValidation.reasons.join('|')
+
+      boundaryLog(
+        '[SWAP-SAGA] pre-validate',
+        {
+          tags: { file: 'swapSaga', function: 'swap' },
+          extra: {
+            chainId,
+            reasonsString,
+            ok: preValidation.ok,
+          },
+        },
+        chainId
+      )
+
+      // If INVALID_GAS_FEE, attempt to repair by estimating gas
+      if (!preValidation.ok && preValidation.reasons.includes('INVALID_GAS_FEE')) {
+      const firstTxRequest = txRequests?.[0]
+      if (firstTxRequest?.to && firstTxRequest?.data) {
+        try {
+          const gasEstimate: Awaited<ReturnType<typeof estimateGasFee>> = yield* call(estimateGasFee, {
+            chainId,
+            txRequest: {
+              to: firstTxRequest.to,
+              data: firstTxRequest.data as string,
+              value: firstTxRequest.value,
+            },
+            account: account.address,
           })
-          break
-        }
-        case TransactionStepType.SwapTransactionBatched: {
-          requireRouting(trade, [TradingApi.Routing.CLASSIC, TradingApi.Routing.BRIDGE])
-          yield* call(handleSwapTransactionBatchedStep, {
-            address: account.address,
-            step,
-            setCurrentStep,
-            trade,
-            analytics,
-            disableOneClickSwap,
-          })
-          break
-        }
-        case TransactionStepType.UniswapXSignature: {
-          requireRouting(trade, UNISWAPX_ROUTING_VARIANTS)
-          yield* call(handleUniswapXSignatureStep, { address: account.address, step, setCurrentStep, trade, analytics })
-          break
-        }
-        default: {
-          throw new UnexpectedTransactionStateError(`Unexpected step type: ${step.type}`)
+
+          // Build params object based on fee type
+          let params: TransactionEip1559FeeParams | TransactionLegacyFeeParams | undefined
+          if (gasEstimate.maxFeePerGas) {
+            params = {
+              maxFeePerGas: gasEstimate.maxFeePerGas.toString(),
+              maxPriorityFeePerGas: gasEstimate.maxPriorityFeePerGas?.toString() ?? '0',
+              gasLimit: gasEstimate.gasLimit.toString(),
+            } as TransactionEip1559FeeParams
+          } else if (gasEstimate.gasPrice) {
+            params = {
+              gasPrice: gasEstimate.gasPrice.toString(),
+              gasLimit: gasEstimate.gasLimit.toString(),
+            } as TransactionLegacyFeeParams
+          }
+
+          // Create normalized context with estimated gasFee (matching ValidatedGasFeeResult shape)
+          normalizedSwapTxContext = {
+            ...swapTxContext,
+            gasFee: {
+              ...swapTxContext.gasFee,
+              value: gasEstimate.totalCostWei.toString(), // string, not bigint
+              error: null, // must be null for validation
+              params, // include params for completeness
+              isLoading: false,
+            },
+          } as typeof swapTxContext
+
+          // Re-validate the patched context
+          const postValidation = validateSwapTxContextWithReasons(normalizedSwapTxContext)
+          const postReasonsString = postValidation.reasons.join('|')
+
+          boundaryLog(
+            '[SWAP-SAGA] gas-fee-repair-attempt',
+            {
+              tags: { file: 'swapSaga', function: 'swap' },
+              extra: {
+                chainId,
+                estimationSource: gasEstimate.estimationSource,
+                totalCostWei: gasEstimate.totalCostWei.toString(),
+                gasLimit: gasEstimate.gasLimit.toString(),
+                maxFeePerGas: gasEstimate.maxFeePerGas?.toString(),
+                gasPrice: gasEstimate.gasPrice?.toString(),
+                hasParams: !!params,
+              },
+            },
+            chainId
+          )
+
+          boundaryLogDeduped(
+            '[SWAP-SAGA] post-validate',
+            {
+              tags: { file: 'swapSaga', function: 'swap' },
+              extra: {
+                chainId,
+                reasonsString: postReasonsString,
+                ok: postValidation.ok,
+                stillHasInvalidGasFee: postValidation.reasons.includes('INVALID_GAS_FEE'),
+              },
+            },
+            chainId,
+            {
+              ttlMs: 5000,
+              includeKeys: ['chainId', 'reasonsString', 'ok'],
+            }
+          )
+        } catch (error: any) {
+          // If estimation fails, set error and let validation fail normally
+          normalizedSwapTxContext = {
+            ...swapTxContext,
+            gasFee: {
+              ...swapTxContext.gasFee,
+              error: error instanceof Error ? error : new Error(String(error)),
+            },
+          } as typeof swapTxContext
+
+          boundaryLog(
+            '[SWAP-SAGA] gas fee estimation failed',
+            {
+              tags: { file: 'swapSaga', function: 'swap' },
+              extra: {
+                chainId,
+                error: error?.message,
+                stack: error?.stack,
+              },
+            },
+            chainId
+          )
+          // Continue - validation will catch the error
         }
       }
+      }
     }
+
+    // Single unmissable trace: About to call generateSwapTransactionSteps
+    let steps: TransactionStep[]
+    try {
+      boundaryLog(
+        '[SWAP-SAGA] calling generateSwapTransactionSteps',
+        {
+          tags: { file: 'swapSaga', function: 'swap' },
+          extra: {
+            chainId,
+            routing,
+            txRequestsLength: (normalizedSwapTxContext as any)?.txRequests?.length ?? 0,
+            hasGasFeeValue: !!normalizedSwapTxContext?.gasFee?.value,
+            gasFeeError: normalizedSwapTxContext?.gasFee?.error ? String(normalizedSwapTxContext.gasFee.error) : null,
+          },
+        },
+        chainId
+      )
+
+      steps = yield* call(generateSwapTransactionSteps, normalizedSwapTxContext, v4Enabled)
+
+      boundaryLog(
+        '[SWAP-SAGA] generateSwapTransactionSteps returned',
+        {
+          tags: { file: 'swapSaga', function: 'swap' },
+          extra: {
+            chainId,
+            stepsLength: steps?.length ?? 0,
+            stepsTypes: steps?.map((s: any) => s.type) ?? [],
+          },
+        },
+        chainId
+      )
+
+      // eslint-disable-next-line no-console
+      console.log('[SWAP-SAGA] STEPS-OUTPUT', {
+        stepsLength: steps?.length ?? null,
+        stepsTypes: steps?.map((s) => s.type) ?? null,
+      })
+    } catch (e: any) {
+      boundaryLog(
+        '[SWAP-SAGA] generateSwapTransactionSteps threw',
+        {
+          tags: { file: 'swapSaga', function: 'swap' },
+          extra: {
+            chainId,
+            message: e?.message,
+            name: e?.name,
+            stack: e?.stack,
+          },
+        },
+        chainId
+      )
+      const error = e instanceof Error ? e : new Error(String(e))
+      // eslint-disable-next-line no-console
+      console.error('[SWAP-SAGA] STEPS-THREW', {
+        message: error.message,
+        stack: error.stack,
+        chainId,
+        accountAddress: account.address,
+      })
+      throw e
+    }
+
+    setSteps(steps)
+
+    // eslint-disable-next-line no-console
+    console.log('[SWAP-SAGA] steps-generated', {
+      chainId,
+      accountAddress: account.address,
+      stepsLength: steps?.length ?? 0,
+      stepsTypes: steps?.map((s) => s.type) ?? [],
+    })
+
+    if (!steps || steps.length === 0) {
+      // Get validation reasons to surface real error (not silent failure)
+      const validation = validateSwapTxContextWithReasons(normalizedSwapTxContext)
+      const firstReason = validation.reasons?.[0] || 'UNKNOWN'
+      const reasonsString = validation.reasons.join('|')
+      const errorMessage = `No transaction steps generated: ${firstReason}${reasonsString !== firstReason ? ` (${reasonsString})` : ''}`
+
+      // eslint-disable-next-line no-console
+      console.error('[SWAP-SAGA] NO_STEPS', {
+        reason: 'NO_STEPS',
+        chainId,
+        accountAddress: account.address,
+        stepsLength: steps?.length ?? 0,
+        firstReason,
+        reasonsString,
+        validationSnapshot: validation.snapshot,
+      })
+
+      // Surface blocking error with real reason
+      const error = new Error(errorMessage)
+      if (firstReason === 'INVALID_GAS_FEE') {
+        // Include estimation error details if available
+        const gasError = normalizedSwapTxContext?.gasFee?.error
+        if (gasError) {
+          let gasErrorMessage: string
+          if (gasError instanceof Error) {
+            gasErrorMessage = gasError.message
+          } else if (typeof gasError === 'object' && gasError !== null && 'message' in gasError) {
+            gasErrorMessage = String((gasError as { message: unknown }).message)
+          } else {
+            gasErrorMessage = String(gasError)
+          }
+          if (gasErrorMessage.includes('STF') || gasErrorMessage.includes('revert')) {
+            error.message = `${errorMessage}. Gas estimation failed: ${gasErrorMessage.slice(0, 100)}`
+          }
+        }
+      }
+      onFailure(error)
+      return
+    }
+
+    let signature: string | undefined
+    let step: TransactionStep | undefined
+
+    try {
+      // TODO(SWAP-287): Integrate jupiter swap into TransactionStep, rather than special-casing.
+      if (isJupiter(swapTxContext)) {
+        // eslint-disable-next-line no-console
+        console.log('[SWAP-SAGA] EARLY-RETURN', {
+          reason: 'JUPITER_SWAP',
+          chainId,
+          accountAddress: account.address,
+        })
+        yield* call(jupiterSwap, { ...params, swapTxContext })
+        yield* call(onSuccess)
+        return
+      }
+
+      for (step of steps) {
+        switch (step.type) {
+          case TransactionStepType.TokenRevocationTransaction:
+          case TransactionStepType.TokenApprovalTransaction: {
+            yield* call(handleApprovalTransactionStep, { address: account.address, step, setCurrentStep })
+            break
+          }
+          case TransactionStepType.Permit2Signature: {
+            signature = yield* call(handleSignatureStep, { address: account.address, step, setCurrentStep })
+            break
+          }
+          case TransactionStepType.Permit2Transaction: {
+            yield* call(handlePermitTransactionStep, { address: account.address, step, setCurrentStep })
+            break
+          }
+          case TransactionStepType.SwapTransaction:
+          case TransactionStepType.SwapTransactionAsync: {
+            requireRouting(trade, [TradingApi.Routing.CLASSIC, TradingApi.Routing.BRIDGE])
+            
+            // Log right before calling handleSwapTransactionStep
+            const swapTxRequest = (step as any)?.txRequest
+            // eslint-disable-next-line no-console
+            console.log('[SWAP-SAGA] WILL-SEND', {
+              chainId,
+              accountAddress: account.address,
+              stepType: step.type,
+              to: swapTxRequest?.to,
+              dataLen: (swapTxRequest?.data as string | undefined)?.length,
+              value: swapTxRequest?.value,
+              hasSignature: !!signature,
+            })
+            
+            yield* call(handleSwapTransactionStep, {
+              address: account.address,
+              signature,
+              step,
+              setCurrentStep,
+              trade,
+              analytics,
+              onTransactionHash: params.onTransactionHash,
+            })
+            break
+          }
+          case TransactionStepType.SwapTransactionBatched: {
+            requireRouting(trade, [TradingApi.Routing.CLASSIC, TradingApi.Routing.BRIDGE])
+            yield* call(handleSwapTransactionBatchedStep, {
+              address: account.address,
+              step,
+              setCurrentStep,
+              trade,
+              analytics,
+              disableOneClickSwap,
+            })
+            break
+          }
+          case TransactionStepType.UniswapXSignature: {
+            requireRouting(trade, UNISWAPX_ROUTING_VARIANTS)
+            yield* call(handleUniswapXSignatureStep, { address: account.address, step, setCurrentStep, trade, analytics })
+            break
+          }
+          default: {
+            throw new UnexpectedTransactionStateError(`Unexpected step type: ${step.type}`)
+          }
+        }
+      }
+
+      // Log if we completed the loop without hitting a swap transaction step
+      // eslint-disable-next-line no-console
+      console.log('[SWAP-SAGA] steps-completed', {
+        chainId,
+        accountAddress: account.address,
+        stepsProcessed: steps.length,
+        hadSwapStep: steps.some(
+          (s) =>
+            s.type === TransactionStepType.SwapTransaction ||
+            s.type === TransactionStepType.SwapTransactionAsync ||
+            s.type === TransactionStepType.SwapTransactionBatched,
+        ),
+      })
+    } catch (error) {
+      const errorObj = error instanceof Error ? error : new Error(String(error))
+      const shortStack = errorObj.stack?.split('\n').slice(0, 3).join('\n')
+
+      // eslint-disable-next-line no-console
+      console.error('[SWAP-SAGA] ERROR', {
+        name: errorObj.name,
+        message: errorObj.message,
+        stackShort: shortStack,
+        chainId: trade.inputAmount.currency.chainId,
+      })
+
+      const displayableError = getDisplayableError({ error, step })
+      if (displayableError) {
+        logger.error(displayableError, { tags: { file: 'swapSaga', function: 'swap' } })
+      }
+      const onPressRetry = params.getOnPressRetry(displayableError)
+      onFailure(displayableError, onPressRetry)
+      return
+    }
+
+    yield* call(onSuccess)
   } catch (error) {
-    const displayableError = getDisplayableError({ error, step })
+    // Outer try-catch for handleSwitchChains and generateSwapTransactionSteps errors
+    const errorObj = error instanceof Error ? error : new Error(String(error))
+    const shortStack = errorObj.stack?.split('\n').slice(0, 3).join('\n')
+
+    // eslint-disable-next-line no-console
+    console.error('[SWAP-SAGA] OUTER ERROR', {
+      name: errorObj.name,
+      message: errorObj.message,
+      stackShort: shortStack,
+      chainId: trade.inputAmount.currency.chainId,
+    })
+
+    const displayableError = getDisplayableError({ error })
     if (displayableError) {
       logger.error(displayableError, { tags: { file: 'swapSaga', function: 'swap' } })
     }
     const onPressRetry = params.getOnPressRetry(displayableError)
     onFailure(displayableError, onPressRetry)
-    return
   }
-
-  yield* call(onSuccess)
 }
 
 export const swapSaga = createSaga(swap, 'swapSaga')
@@ -353,19 +793,33 @@ export function useSwapCallback(): SwapCallback {
       const isBatched = isClassicSwap && swapTxContext.txRequests && swapTxContext.txRequests.length > 1
       const includedPermitTransactionStep = isClassicSwap && swapTxContext.permit?.method === PermitMethod.Transaction
 
-      const analytics = getBaseTradeAnalyticsProperties({
-        formatter,
-        trade,
-        currencyInAmountUSD,
-        currencyOutAmountUSD,
-        presetPercentage,
-        preselectAsset,
-        portfolioBalanceUsd,
-        trace,
-        isBatched,
-        includedPermitTransactionStep,
-        swapStartTimestamp,
-      })
+      // Defensive: analytics must never crash swap flow
+      let analytics
+      try {
+        analytics = getBaseTradeAnalyticsProperties({
+          formatter,
+          trade,
+          currencyInAmountUSD,
+          currencyOutAmountUSD,
+          presetPercentage,
+          preselectAsset,
+          portfolioBalanceUsd,
+          trace,
+          isBatched,
+          includedPermitTransactionStep,
+          swapStartTimestamp,
+        })
+      } catch (error) {
+        // Log error and continue with minimal analytics
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        // eslint-disable-next-line no-console
+        console.log('[SWAP-SAGA] analytics-fallback', {
+          chainId: trade.inputAmount.currency.chainId,
+          errorMessage,
+        })
+        // Use empty object as fallback - swap continues without analytics
+        analytics = {}
+      }
 
       const account = isSVMChain(trade.inputAmount.currency.chainId) ? wallet.svmAccount : wallet.evmAccount
 
@@ -392,6 +846,22 @@ export function useSwapCallback(): SwapCallback {
         },
         swapStartTimestamp,
       }
+
+      const chainId = trade.inputAmount.currency.chainId
+      const txRequests = (swapTxContext as any)?.txRequests
+      const firstTxRequest = txRequests?.[0]
+
+      // eslint-disable-next-line no-console
+      console.log('[SWAP-CALLBACK] dispatching-saga', {
+        chainId,
+        accountAddress: account.address,
+        actionType: swapTxContext.trade.routing === TradingApi.Routing.CHAINED ? 'planSaga.trigger' : 'swapSaga.trigger',
+        routing: trade.routing ? String(trade.routing) : undefined,
+        txRequestTo: firstTxRequest?.to,
+        txRequestDataLen: (firstTxRequest?.data as string | undefined)?.length,
+        txRequestValue: firstTxRequest?.value,
+      })
+
       if (swapTxContext.trade.routing === TradingApi.Routing.CHAINED) {
         appDispatch(
           planSaga.actions.trigger({

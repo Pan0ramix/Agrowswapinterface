@@ -23,6 +23,7 @@ import { getSwapFeeUsd } from 'uniswap/src/features/transactions/swap/utils/getS
 import { isChained, isClassic, isJupiter, isUniswapX } from 'uniswap/src/features/transactions/swap/utils/routing'
 import { SwapEventType, timestampTracker } from 'uniswap/src/features/transactions/swap/utils/SwapEventTimestampTracker'
 import { getProtocolVersionFromTrade } from 'uniswap/src/features/transactions/swap/utils/trade'
+import { swapError } from 'uniswap/src/utils/swapDebug'
 import { getClassicQuoteFromResponse } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
 import { TransactionOriginType } from 'uniswap/src/features/transactions/types/transactionDetails'
 import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
@@ -191,7 +192,15 @@ export function getPriceImpact(trade: Trade | null | undefined): string | undefi
   if (!trade || isUniswapX(trade) || isChained(trade)) {
     return undefined
   }
-  return trade.priceImpact?.multiply(100).toSignificant()
+  // Defensive: ensure priceImpact is a Percent-like object with multiply and toSignificant
+  if (!trade.priceImpact || typeof trade.priceImpact.multiply !== 'function' || typeof trade.priceImpact.toSignificant !== 'function') {
+    return undefined
+  }
+  const multiplied = trade.priceImpact.multiply(100)
+  if (!multiplied || typeof multiplied.toSignificant !== 'function') {
+    return undefined
+  }
+  return multiplied.toSignificant()
 }
 
 function getFeeUsd({
@@ -243,40 +252,54 @@ function getQuoteRequestIdFields(trade: Trade): {
 }
 
 function getAnalyticsProtocolType(trade: Trade): string | undefined {
-  if (isJupiter(trade)) {
-    return trade.quote.quote.router.raw
-  }
+  try {
+    if (isJupiter(trade)) {
+      return trade.quote.quote.router.raw
+    }
 
-  return getProtocolVersionFromTrade(trade)
+    return getProtocolVersionFromTrade(trade)
+  } catch (error) {
+    // Defensive: analytics must never crash swap flow
+    swapError(undefined, '[ANALYTICS] getAnalyticsProtocolType failed', {
+      error,
+      tradeKeys: Object.keys(trade ?? {}),
+      hasQuote: !!trade?.quote,
+    })
+    return undefined
+  }
 }
 
 // hook-based analytics because this one is data-lifecycle dependent
+// CRITICAL: All hooks must be called unconditionally. Early returns must happen AFTER all hooks.
 export function useSwapAnalytics(derivedSwapInfo: DerivedSwapInfo): void {
+  // CRITICAL: Call ALL hooks unconditionally, regardless of trade/quoteId state
+  // When useOnChainQuote flips, trade/quoteId might become falsy, but hooks must still be called
   const formatter = useLocalizationContext()
   const trace = useTrace()
-  const {
-    trade: { trade },
-  } = derivedSwapInfo
-
-  // No trade or missing quote -> nothing to record
-  const quoteId = trade?.quote?.requestId
-  if (!trade || !quoteId) {
-    return
-  }
-
   const wallet = useWallet()
   const evmAddress = wallet.evmAccount?.address
   const svmAddress = wallet.svmAccount?.address
 
+  // CRITICAL: usePortfolioTotalValue must be called unconditionally
+  // Pass undefined addresses if not available, but still call the hook
   const { data: portfolioData } = usePortfolioTotalValue({
-    evmAddress,
-    svmAddress,
+    evmAddress: evmAddress ?? undefined,
+    svmAddress: svmAddress ?? undefined,
     fetchPolicy: 'cache-first',
   })
 
+  // Extract trade and quoteId AFTER all hooks are called
+  const {
+    trade: { trade },
+  } = derivedSwapInfo
+  const quoteId = trade?.quote?.requestId
+
+  // CRITICAL: Early return check happens AFTER all hooks
+  // If no trade or quoteId, still call useEffect but guard inside it
   // biome-ignore lint/correctness/useExhaustiveDependencies: we only want to re-run this when we get a new `quoteId`
   useEffect(() => {
-    if (!trade) {
+    // Guard inside effect body, not by skipping the hook
+    if (!trade || !quoteId) {
       return
     }
 
@@ -308,7 +331,10 @@ export function useSwapAnalytics(derivedSwapInfo: DerivedSwapInfo): void {
         error_message: trade.blockingError.message,
       })
     }
-  }, [quoteId])
+    // CRITICAL: Dependency array must always be an array, normalize quoteId to null if undefined
+    // We only want to re-run when quoteId changes, but must ensure array is always present
+    // biome-ignore lint/correctness/useExhaustiveDependencies: we only want to re-run this when we get a new `quoteId`
+  }, [quoteId ?? null])
 }
 
 // Typing is improved by using the actual return type instead of narrowing to `SwapTradeBaseProperties`
@@ -346,31 +372,62 @@ export function getBaseTradeAnalyticsProperties({
 }) {
   const portionAmount = trade.swapFee?.amount
 
-  const feeCurrencyAmount = getCurrencyAmount({
-    value: portionAmount,
-    valueType: ValueType.Raw,
-    currency: trade.outputAmount.currency,
-  })
+  const feeCurrencyAmount =
+    trade.outputAmount?.currency && portionAmount
+      ? getCurrencyAmount({
+          value: portionAmount,
+          valueType: ValueType.Raw,
+          currency: trade.outputAmount.currency,
+        })
+      : undefined
 
-  const finalOutputAmount = feeCurrencyAmount ? trade.outputAmount.subtract(feeCurrencyAmount) : trade.outputAmount
+  const finalOutputAmount =
+    trade.outputAmount && feeCurrencyAmount
+      ? trade.outputAmount.subtract(feeCurrencyAmount)
+      : trade.outputAmount
+
+  // Defensive: wrap analytics computation in try/catch to prevent swap flow crashes
+  let protocol: string | undefined
+  let routing: SwapRouting
+  try {
+    protocol = getAnalyticsProtocolType(trade)
+    routing = tradeRoutingToFillType({
+      routing: trade.routing,
+      indicative: trade.indicative ?? false,
+    })
+  } catch (error) {
+    // Log error but continue with minimal analytics
+    swapError(undefined, '[ANALYTICS] getBaseTradeAnalyticsProperties failed', {
+      error,
+      tradeKeys: Object.keys(trade ?? {}),
+      hasQuote: !!trade?.quote,
+      hasRouting: !!trade?.routing,
+    })
+    // Use safe defaults
+    protocol = undefined
+    routing = 'none'
+  }
 
   return {
     ...trace,
-    routing: tradeRoutingToFillType(trade),
-    protocol: getAnalyticsProtocolType(trade),
+    routing,
+    protocol,
     total_balances_usd: portfolioBalanceUsd,
-    token_in_symbol: trade.inputAmount.currency.symbol,
-    token_out_symbol: trade.outputAmount.currency.symbol,
-    token_in_address: getCurrencyAddressForAnalytics(trade.inputAmount.currency),
-    token_out_address: getCurrencyAddressForAnalytics(trade.outputAmount.currency),
+    token_in_symbol: trade.inputAmount?.currency?.symbol ?? '',
+    token_out_symbol: trade.outputAmount?.currency?.symbol ?? '',
+    token_in_address: trade.inputAmount?.currency ? getCurrencyAddressForAnalytics(trade.inputAmount.currency) : '',
+    token_out_address: trade.outputAmount?.currency ? getCurrencyAddressForAnalytics(trade.outputAmount.currency) : '',
     price_impact_basis_points: getPriceImpact(trade),
     chain_id:
-      trade.inputAmount.currency.chainId === trade.outputAmount.currency.chainId
-        ? trade.inputAmount.currency.chainId
+      trade.inputAmount?.currency?.chainId === trade.outputAmount?.currency?.chainId
+        ? trade.inputAmount?.currency?.chainId
         : undefined,
-    chain_id_in: trade.inputAmount.currency.chainId,
-    chain_id_out: trade.outputAmount.currency.chainId,
-    token_in_amount: trade.inputAmount.toExact(),
+    chain_id_in: trade.inputAmount?.currency?.chainId,
+    chain_id_out: trade.outputAmount?.currency?.chainId,
+    token_in_amount:
+      trade.inputAmount && typeof trade.inputAmount.toExact === 'function'
+        ? trade.inputAmount.toExact()
+        : '',
     token_out_amount: formatter.formatCurrencyAmount({
       value: finalOutputAmount,
       type: NumberType.SwapTradeAmount,
@@ -380,8 +437,20 @@ export function getBaseTradeAnalyticsProperties({
     preset_percentage: presetPercentage,
     preselect_asset: preselectAsset,
     allowed_slippage:
-      trade.slippageTolerance !== undefined ? parseFloat(trade.slippageTolerance.toFixed(2)) : undefined,
-    allowed_slippage_basis_points: trade.slippageTolerance ? trade.slippageTolerance * 100 : undefined,
+      trade.slippageTolerance !== undefined
+        ? typeof trade.slippageTolerance === 'number'
+          ? parseFloat(trade.slippageTolerance.toFixed(2))
+          : typeof trade.slippageTolerance?.toFixed === 'function'
+            ? parseFloat(trade.slippageTolerance.toFixed(2))
+            : undefined
+        : undefined,
+    allowed_slippage_basis_points: trade.slippageTolerance
+      ? typeof trade.slippageTolerance === 'number'
+        ? trade.slippageTolerance * 100
+        : typeof trade.slippageTolerance === 'object' && 'asFraction' in trade.slippageTolerance
+          ? trade.slippageTolerance.asFraction.toNumber() * 100
+          : undefined
+      : undefined,
     fee_amount: portionAmount,
     ...getQuoteRequestIdFields(trade),
     ura_block_number: getAnalyticsBlockNumber(trade),
@@ -390,11 +459,28 @@ export function getBaseTradeAnalyticsProperties({
     estimated_network_fee_usd: getAnalyticsNetworkFeeUSD(trade),
     fee_usd: getFeeUsd({ trade, currencyInAmountUSD, currencyOutAmountUSD }),
     type: trade.tradeType,
-    minimum_output_after_slippage: trade.minAmountOut.toSignificant(6),
-    token_in_amount_max: trade.maxAmountIn.toExact(),
-    token_out_amount_min: trade.minAmountOut.toExact(),
-    token_in_detected_tax: parseFloat(trade.inputTax.toFixed(2)),
-    token_out_detected_tax: parseFloat(trade.outputTax.toFixed(2)),
+    // Defensive: handle missing minAmountOut/maxAmountIn for on-chain trades
+    minimum_output_after_slippage:
+      trade.minAmountOut && typeof trade.minAmountOut.toSignificant === 'function'
+        ? trade.minAmountOut.toSignificant(6)
+        : trade.outputAmount && typeof trade.outputAmount.toSignificant === 'function'
+          ? trade.outputAmount.toSignificant(6)
+          : '0',
+    token_in_amount_max:
+      trade.maxAmountIn && typeof trade.maxAmountIn.toExact === 'function'
+        ? trade.maxAmountIn.toExact()
+        : trade.inputAmount && typeof trade.inputAmount.toExact === 'function'
+          ? trade.inputAmount.toExact()
+          : '0',
+    token_out_amount_min:
+      trade.minAmountOut && typeof trade.minAmountOut.toExact === 'function'
+        ? trade.minAmountOut.toExact()
+        : trade.outputAmount && typeof trade.outputAmount.toExact === 'function'
+          ? trade.outputAmount.toExact()
+          : '0',
+    // Defensive: handle missing tax fields (default to 0 for on-chain trades)
+    token_in_detected_tax: trade.inputTax ? parseFloat(trade.inputTax.toFixed(2)) : 0,
+    token_out_detected_tax: trade.outputTax ? parseFloat(trade.outputTax.toFixed(2)) : 0,
     simulation_failure_reasons: getAnalyticsSimulationFailures(trade),
     ...getRouteAnalyticsData(trade),
     is_batch: isBatched,

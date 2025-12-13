@@ -10,7 +10,7 @@ import JSBI from 'jsbi'
 import { skipToken, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { findRoute, buildSwapTx, calculateAmountOutMinimum, getDeadline } from '../services/onchainRouter'
+import { findRoute, buildSwapTx, calculateAmountOutMinimum, getDeadline, getDeadlineSecondsFromNow } from '../services/onchainRouter'
 import { isOnChainRouterEnabled } from '../services/onchainRouter/config'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { logger } from 'utilities/src/logger/logger'
@@ -190,7 +190,18 @@ export function useOnChainSwapQuote(
         )
 
         // Step 3: Build transaction payload
-        const deadline = getDeadline(20) // 20 minutes from now
+        // CRITICAL: Deadline must be computed fresh at build time (not reused from cache)
+        // This ensures deadline is always valid when estimateGas is called
+        const deadline = Number(getDeadlineSecondsFromNow(1200)) // 20 minutes TTL, computed fresh
+        const nowSeconds = Math.floor(Date.now() / 1000)
+        if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+          logger.debug('useOnChainSwapQuote', 'useOnChainSwapQuote', 'Building tx payload with deadline', {
+            chainId,
+            nowSeconds,
+            deadline,
+            deadlineAgeSeconds: deadline - nowSeconds,
+          })
+        }
         const txPayload = buildSwapTx({
           route: routeResult.route,
           amountIn,

@@ -18,7 +18,7 @@ const LocalLowNativeBalanceModal = (): JSX.Element => {
 
   const { handleHideMaxNativeTransferModal } = useSwapFormWarningStoreActions()
 
-  const { handleOnAcknowledgeLowNativeBalancePress } = useOnReviewPress()
+  const { handleOnAcknowledgeLowNativeBalancePress } = useOnReviewPress('LocalLowNativeBalanceModal')
 
   return (
     <LowNativeBalanceModal
@@ -42,7 +42,7 @@ const LocalBridgingModal = (): JSX.Element => {
 
   const derivedSwapInfo = useSwapFormStore((s) => s.derivedSwapInfo)
 
-  const { onReviewPress } = useOnReviewPress()
+  const { onReviewPress } = useOnReviewPress('LocalBridgingModal')
 
   const { handleBridgingOnContinue, handleBridgingOnClose } = useBridgingModalActions({
     handleHideBridgingWarningModal,
@@ -87,7 +87,7 @@ const LocalBridgedAssetModal = (): JSX.Element => {
   const { handleHideBridgedAssetModal } = useSwapFormWarningStoreActions()
 
   const { currencyInfo0, currencyInfo1 } = useCurrenciesWithBridgingWarnings()
-  const { handleOnAcknowledgeBridgedAssetPress } = useOnReviewPress()
+  const { handleOnAcknowledgeBridgedAssetPress } = useOnReviewPress('LocalBridgedAssetModal')
 
   return (
     <BridgedAssetModal

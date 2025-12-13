@@ -13,6 +13,8 @@ import { useResetOverrideOneClickSwapFlag } from 'pages/Swap/settings/OneClickSw
 import { useWebSwapSettings } from 'pages/Swap/settings/useWebSwapSettings'
 import { TDPContext } from 'pages/TokenDetails/TDPContext'
 import { useCallback, useContext, useEffect, useMemo } from 'react'
+import { useSwapFormStoreDerivedSwapInfo } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
+import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
 import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 import { useLocation, useNavigate } from 'react-router'
@@ -251,6 +253,50 @@ function UniversalSwapFlow({
   tokenColor?: string
 }) {
   const { currentTab, setCurrentTab } = useSwapAndLimitContext()
+  const chainId = useSwapFormStoreDerivedSwapInfo((s) => s.chainId)
+
+  // Document-level pointer event listener: Prove whether an overlay is blocking clicks (Base Sepolia only)
+  useEffect(() => {
+    if (chainId !== 84532) return
+    const pointerHandler = (e: PointerEvent) => {
+      boundaryLog(
+        '[DOC] pointerdown capture',
+        {
+          tags: { file: 'Swap/index', function: 'document-pointerdown' },
+          extra: {
+            targetTagName: (e.target as HTMLElement)?.tagName,
+            targetId: (e.target as HTMLElement)?.id,
+            targetClassName: (e.target as HTMLElement)?.className,
+            eventPhase: e.eventPhase,
+            composedPath: e.composedPath().slice(0, 3).map((el) => (el as HTMLElement)?.tagName),
+          },
+        },
+        chainId
+      )
+    }
+    const clickHandler = (e: MouseEvent) => {
+      boundaryLog(
+        '[DOC] click capture',
+        {
+          tags: { file: 'Swap/index', function: 'document-click' },
+          extra: {
+            targetTagName: (e.target as HTMLElement)?.tagName,
+            targetId: (e.target as HTMLElement)?.id,
+            targetClassName: (e.target as HTMLElement)?.className,
+            eventPhase: e.eventPhase,
+            composedPath: e.composedPath().slice(0, 3).map((el) => (el as HTMLElement)?.tagName),
+          },
+        },
+        chainId
+      )
+    }
+    document.addEventListener('pointerdown', pointerHandler, true) // capture phase
+    document.addEventListener('click', clickHandler, true) // capture phase
+    return () => {
+      document.removeEventListener('pointerdown', pointerHandler, true)
+      document.removeEventListener('click', clickHandler, true)
+    }
+  }, [chainId])
 
   // Get TDP currency if available (will be null if not in TDP context)
   const tdpCurrency = currencyToAsset(useContext(TDPContext)?.currency)

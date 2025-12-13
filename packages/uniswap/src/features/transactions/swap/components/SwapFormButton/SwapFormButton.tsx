@@ -14,14 +14,17 @@ import { useSwapFormButtonText } from 'uniswap/src/features/transactions/swap/co
 import { SwapFormButtonTrace } from 'uniswap/src/features/transactions/swap/components/SwapFormButton/SwapFormButtonTrace'
 import { TestID } from 'uniswap/src/test/fixtures/testIDs'
 import { useEvent } from 'utilities/src/react/hooks'
+import { useSwapFormStoreDerivedSwapInfo } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
+import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
 
 export const SWAP_BUTTON_TEXT_VARIANT = 'buttonLabel1'
 
 // TODO(SWAP-573): Co-locate button action/color/text logic instead of separating the very-coupled UI state
 export function SwapFormButton({ tokenColor }: { tokenColor?: string }): JSX.Element {
+  const chainId = useSwapFormStoreDerivedSwapInfo((s) => s.chainId)
   const isShortMobileDevice = useIsShortMobileDevice()
   const indicative = useIsTradeIndicative()
-  const { handleOnReviewPress } = useOnReviewPress()
+  const { handleOnReviewPress } = useOnReviewPress('SwapFormButton')
   const disabled = useIsSwapButtonDisabled()
   const buttonText = useSwapFormButtonText()
   const { swapRedirectCallback } = useTransactionModalContext()
@@ -59,6 +62,20 @@ export function SwapFormButton({ tokenColor }: { tokenColor?: string }): JSX.Ele
             size={isShortMobileDevice ? 'small' : 'large'}
             testID={TestID.ReviewSwap}
             animation="simple"
+            onPressIn={
+              chainId === 84532
+                ? () => {
+                    boundaryLog(
+                      '[POINTER] review onPressIn fired (source=SwapFormButton)',
+                      {
+                        tags: { file: 'SwapFormButton', function: 'onPressIn' },
+                        extra: { chainId, disabled },
+                      },
+                      chainId
+                    )
+                  }
+                : undefined
+            }
             onPress={promptWebFORNudge ? setIsShowingWebFORNudgeHandler : handleOnReviewPress}
           >
             {buttonTextColor ? <Button.Text color={buttonTextColor}>{buttonText}</Button.Text> : buttonText}

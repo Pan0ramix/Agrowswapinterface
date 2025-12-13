@@ -7,6 +7,7 @@ import { UserPropertyUpdater } from 'pages/App/utils/UserPropertyUpdater'
 import { useDynamicMetatags } from 'pages/metatags'
 import { findRouteByPath } from 'pages/RouteDefinitions'
 import { useEffect, useLayoutEffect } from 'react'
+import * as ReactNS from 'react'
 import { Helmet } from 'react-helmet-async/lib/index'
 import { Navigate, useLocation } from 'react-router'
 import DarkModeQueryParamReader from 'theme/components/DarkModeQueryParamReader'
@@ -21,6 +22,9 @@ import { getCurrentPageFromLocation } from 'utils/urlRoutes'
 const OVERRIDE_PAGE_LAYOUT = [EXTENSION_PASSKEY_AUTH_PATH]
 
 export default function App() {
+  // React instance check - compare with SwapTxStoreContextProvider
+  console.debug('[App] React instance', ReactNS.version, ReactNS.useState)
+
   const colors = useSporeColors()
 
   const location = useLocation()

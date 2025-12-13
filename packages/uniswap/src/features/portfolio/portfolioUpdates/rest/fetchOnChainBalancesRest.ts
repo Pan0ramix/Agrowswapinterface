@@ -3,6 +3,7 @@ import { GetPortfolioResponse } from '@uniswap/client-data-api/dist/data/v1/api_
 import { Balance } from '@uniswap/client-data-api/dist/data/v1/types_pb'
 import { CurrencyAmount, NativeCurrency, Token } from '@uniswap/sdk-core'
 import { TradingApi } from '@universe/api'
+import { DEFAULT_NATIVE_ADDRESS_LEGACY } from 'uniswap/src/features/chains/evm/defaults'
 import { getNativeAddress } from 'uniswap/src/constants/addresses'
 import { fetchTokenByAddress, searchTokenToCurrencyInfo } from 'uniswap/src/data/rest/searchTokensAndPools'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
@@ -15,6 +16,7 @@ import {
 } from 'uniswap/src/features/portfolio/portfolioUpdates/fetchOnChainBalances'
 import { getCurrencyAmount, ValueType } from 'uniswap/src/features/tokens/getCurrencyAmount'
 import { SolanaToken } from 'uniswap/src/features/tokens/SolanaToken'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { toTradingApiSupportedChainId } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
 import { CurrencyId } from 'uniswap/src/types/currency'
 import { areAddressesEqual } from 'uniswap/src/utils/addresses'
@@ -146,6 +148,13 @@ async function getDenominatedValueRest({
     return inferredDenominatedValue
   }
 
+  // CRITICAL: Skip Trading API indicative quotes in on-chain-only mode
+  const universeChainId = onchainQuantityCurrencyAmount.currency.chainId as UniverseChainId
+  if (isOnChainOnlyChain(universeChainId)) {
+    log.debug('Skipping indicative quote in on-chain-only mode', { chainId: universeChainId, currencyId })
+    return undefined
+  }
+
   // If we don't have enough data to calculate the USD value, we continue by fetching an indicative quote.
 
   const chainId = toTradingApiSupportedChainId(onchainQuantityCurrencyAmount.currency.chainId)
@@ -154,8 +163,6 @@ async function getDenominatedValueRest({
     log.error(new Error('No `chainId` found'), { currencyId, onchainQuantityCurrencyAmount })
     return undefined
   }
-
-  const universeChainId = onchainQuantityCurrencyAmount.currency.chainId as UniverseChainId
 
   const tokenAddress = onchainQuantityCurrencyAmount.currency.isNative
     ? getNativeAddress(universeChainId)
@@ -296,6 +303,13 @@ async function fetchTokenCurrencyInfo(
   return searchToken ? searchTokenToCurrencyInfo(searchToken) : null
 }
 
+/**
+ * Check if an address is the native currency sentinel (0xeeee...)
+ */
+export const isNativeSentinelAddress = (address?: string): boolean => {
+  return !!address && address.toLowerCase() === DEFAULT_NATIVE_ADDRESS_LEGACY.toLowerCase()
+}
+
 // Resolves `CurrencyInfo` either from cache or via REST search
 async function resolveCurrency({
   token,
@@ -321,6 +335,31 @@ async function resolveCurrency({
   if (!chainId || !currencyAddress) {
     log.error(new Error('Invalid currencyId in `resolveCurrency`'), { currencyId })
     return null
+  }
+
+  // CRITICAL: Handle native sentinel address (0xeeee...) - never call REST search for it
+  if (isNativeSentinelAddress(currencyAddress)) {
+    log.debug('Native sentinel resolved locally', { chainId, currencyId, currencyAddress })
+    // Return native currency representation
+    if (isSVMChain(chainId)) {
+      return {
+        currency: new SolanaToken(
+          chainId,
+          getNativeAddress(chainId),
+          9, // Native tokens typically have 9 decimals on Solana
+          'SOL',
+          'Solana',
+        ),
+        tokenInfo: null,
+      }
+    } else {
+      // For EVM chains, return wrapped native token
+      const nativeCurrency = NativeCurrency.onChain(chainId)
+      return {
+        currency: nativeCurrency.wrapped,
+        tokenInfo: null,
+      }
+    }
   }
 
   const tokenInfo = await fetchTokenCurrencyInfo(chainId, currencyAddress)

@@ -6,6 +6,22 @@ import { BaseDerivedInfo } from 'uniswap/src/features/transactions/types/baseDer
 import { WrapType } from 'uniswap/src/features/transactions/types/wrap'
 import { CurrencyField } from 'uniswap/src/types/currency'
 
+/**
+ * On-chain quote data structure (matches useOnChainSwapQuote return type)
+ */
+export type OnChainQuoteData = {
+  quoteAmountOut: CurrencyAmount<Currency>
+  route: any // Route result from findRoute
+  priceImpact?: number
+  txPayload: {
+    to: string
+    data: string
+    value: string
+    gasLimit?: string
+  }
+  amountOutMinimum: CurrencyAmount<Currency>
+}
+
 export type DerivedSwapInfo<
   TInput = CurrencyInfo,
   TOutput extends CurrencyInfo = CurrencyInfo,
@@ -30,4 +46,9 @@ export type DerivedSwapInfo<
   wrapType: WrapType
   selectingCurrencyField?: CurrencyField
   txId?: string
+  /**
+   * On-chain quote data for transaction building (on-chain-only chains)
+   * This is populated when useOnChainQuote is enabled and a quote is successfully fetched
+   */
+  onChainQuote?: OnChainQuoteData
 }

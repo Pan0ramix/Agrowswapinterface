@@ -39,6 +39,11 @@ export function createGetEVMSwapTransactionRequestInfo(ctx: {
   }) => {
     const { tokenApprovalInfo } = approvalTxInfo
 
+    // Guard: fail safely if Trading API quote is missing (on-chain-only chains don't have trade.quote)
+    if (!trade?.quote?.quote) {
+      throw new Error('Missing Trading API quote for classic tx request build')
+    }
+
     const swapQuoteResponse = trade.quote
     const swapQuote = swapQuoteResponse.quote
 

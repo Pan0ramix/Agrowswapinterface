@@ -23,7 +23,29 @@ function _TokenCard({
   const { currency, logoUrl } = token.currencyInfo
 
   const onPress = (): void => {
-    onSelectCurrency(token.currencyInfo, section, index)
+    window.console.error('[TokenCard] onPress called', {
+      currency: {
+        address: currency.isToken ? currency.address : 'native',
+        symbol: currency.symbol,
+        chainId: currency.chainId,
+      },
+      section: section.sectionKey,
+      index,
+    })
+    console.error('[TokenCard] onPress called', {
+      currency: {
+        address: currency.isToken ? currency.address : 'native',
+        symbol: currency.symbol,
+        chainId: currency.chainId,
+      },
+    })
+    try {
+      onSelectCurrency(token.currencyInfo, section, index)
+    } catch (error) {
+      window.console.error('[TokenCard] Error calling onSelectCurrency', error)
+      console.error('[TokenCard] Error calling onSelectCurrency', error)
+      throw error
+    }
   }
 
   const tokenLabel = getSymbolDisplayText(currency.symbol)

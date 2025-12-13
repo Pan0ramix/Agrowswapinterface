@@ -3,6 +3,7 @@ import type {
   ChainDelegationDetails,
   DelegationRepository,
 } from 'uniswap/src/features/smartWallet/delegation/delegationRepository'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import type { Logger } from 'utilities/src/logger/logger'
 
 interface TradingApiClient {
@@ -25,16 +26,34 @@ export function createTradingApiDelegationRepository(ctx: {
    */
   const getWalletDelegations: DelegationRepository['getWalletDelegations'] = async (input) => {
     const result: ChainDelegationDetails = {}
+    
+    // Filter out on-chain-only chains (Trading API disabled for these)
+    const filteredChainIds = input.chainIds.filter((chainId) => !isOnChainOnlyChain(chainId))
+    
+    // If all chains are on-chain-only, return empty result
+    if (filteredChainIds.length === 0) {
+      for (const chainId of input.chainIds) {
+        result[String(chainId)] = null
+      }
+      return result
+    }
+    
     try {
       const response = await ctx.tradingApiClient.checkWalletDelegation({
         walletAddresses: [input.address],
-        chainIds: input.chainIds,
+        chainIds: filteredChainIds,
       })
 
       const walletDelegationDetails = response.delegationDetails[input.address]
 
       // Populate the record with results for each requested chain
       for (const chainId of input.chainIds) {
+        // On-chain-only chains return null (no delegation check needed)
+        if (isOnChainOnlyChain(chainId)) {
+          result[String(chainId)] = null
+          continue
+        }
+        
         const delegationDetails = walletDelegationDetails?.[chainId]
         if (delegationDetails) {
           result[String(chainId)] = {

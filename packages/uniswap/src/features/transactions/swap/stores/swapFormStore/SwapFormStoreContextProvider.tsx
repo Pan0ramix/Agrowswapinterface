@@ -136,8 +136,8 @@ function SwapFormStoreContextProviderBase({
       '[SwapFormStoreContextProviderBase] Render signature',
       renderSignature,
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['SwapFormStore-Render-signature', chainId],
       }
     )
@@ -241,8 +241,8 @@ function SwapFormStoreContextProviderBase({
         chainId,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['H01', chainId],
       }
     )
@@ -271,8 +271,8 @@ function SwapFormStoreContextProviderBase({
         chainId,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['H02', chainId],
       }
     )
@@ -294,8 +294,8 @@ function SwapFormStoreContextProviderBase({
         hasOnChainQuote: !!derivedSwapInfo.onChainQuote,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['H03', chainId],
       }
     )
@@ -320,8 +320,8 @@ function SwapFormStoreContextProviderBase({
         chainId,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['H03b', chainId],
       }
     )
@@ -343,8 +343,8 @@ function SwapFormStoreContextProviderBase({
         chainId,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['H03c', chainId],
       }
     )
@@ -363,8 +363,8 @@ function SwapFormStoreContextProviderBase({
         chainId,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['H03d', chainId],
       }
     )
@@ -397,8 +397,8 @@ function SwapFormStoreContextProviderBase({
         chainId,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['H03e', chainId],
       }
     )
@@ -444,8 +444,8 @@ function SwapFormStoreContextProviderBase({
         chainId,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['H06', chainId],
       }
     )

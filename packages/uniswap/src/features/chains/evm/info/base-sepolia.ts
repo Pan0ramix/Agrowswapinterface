@@ -34,12 +34,28 @@ const BASE_SEPOLIA_EURC = new Token(
   'EURC',
   'EURC',
 )
+const BASE_SEPOLIA_FEUR = new Token(
+  UniverseChainId.BaseSepolia,
+  '0xe0671aA8Ec0523f5b9247E51bF41e42AcC85ccfe',
+  18,
+  'FEUR',
+  'FakeEURO',
+)
+const BASE_SEPOLIA_FUSDT = new Token(
+  UniverseChainId.BaseSepolia,
+  '0xf4094ba16Bc9Ee080a8bFb201bCCC3cc23892C7B',
+  6,
+  'FUSDT',
+  'FakeUSDT',
+)
 
 const tokens = buildChainTokens({
   stables: {
     USDC: BASE_SEPOLIA_USDC,
     USDT: BASE_SEPOLIA_USDT,
     EURC: BASE_SEPOLIA_EURC,
+    FEUR: BASE_SEPOLIA_FEUR,
+    FUSDT: BASE_SEPOLIA_FUSDT,
   },
 })
 

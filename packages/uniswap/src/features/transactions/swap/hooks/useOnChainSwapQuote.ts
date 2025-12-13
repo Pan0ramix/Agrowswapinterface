@@ -14,6 +14,7 @@ import { findRoute, buildSwapTx, calculateAmountOutMinimum, getDeadline, getDead
 import { isOnChainRouterEnabled } from '../services/onchainRouter/config'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { logger } from 'utilities/src/logger/logger'
+import { isOnChainDebug, makeOnChainDebugId, debugOnChain } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
 
 /**
  * Hook parameters
@@ -140,6 +141,18 @@ export function useOnChainSwapQuote(
     }
 
     return async (): Promise<OnChainSwapQuoteResult> => {
+      // Create debug bundle for this quote cycle
+      const isDebug = isOnChainDebug(chainId)
+      const debugId = isDebug ? makeOnChainDebugId('quote') : undefined
+      const debugBundle: Record<string, unknown> = isDebug ? {
+        header: {
+          debugId,
+          chainId,
+          mode: 'onchain-only',
+          timestamp: Date.now(),
+        },
+      } : {}
+      
       try {
         if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
           logger.debug('useOnChainSwapQuote', 'useOnChainSwapQuote', 'Executing on-chain quote', {
@@ -223,6 +236,21 @@ export function useOnChainSwapQuote(
           })
         }
 
+        // Emit debug bundle if enabled (quote-level data)
+        if (isDebug) {
+          debugBundle.quoteOutputs = {
+            amountInRaw: amountIn.quotient.toString(),
+            amountOutRaw: routeResult.amountOut.quotient.toString(),
+            amountInExact: amountIn.toExact(),
+            amountOutExact: routeResult.amountOut.toExact(),
+            quotedRoute: routeResult.route?.description ?? null,
+            routerAddress: txPayload.to, // Router address from tx payload
+          }
+          
+          // Emit quote-level bundle (details will be added later in getOnChainSwapDetails)
+          debugOnChain(chainId, debugBundle)
+        }
+        
         return {
           quoteAmountOut: routeResult.amountOut,
           route: routeResult,

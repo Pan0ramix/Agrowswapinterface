@@ -14,10 +14,25 @@ const CLOUDFLARE_DEV_NOISE_PATTERNS = [
   // More specific patterns to avoid suppressing legitimate fetch errors
   'undici/index.js',
   'miniflare/dist/src/index.js',
+  'miniflare/node_modules/undici',
+  'miniflare/node_modules',
   'ProxyClientBridge.dispatchFetch',
   '@cloudflare/vite-plugin/dist/index.js',
+  '@cloudflare/vite-plugin',
   // Only suppress "fetch failed" if it's in the Cloudflare/Miniflare context
-  /fetch failed[\s\S]*miniflare|fetch failed[\s\S]*@cloudflare\/vite-plugin|fetch failed[\s\S]*ProxyClientBridge/,
+  /fetch failed[\s\S]*miniflare|fetch failed[\s\S]*@cloudflare\/vite-plugin|fetch failed[\s\S]*ProxyClientBridge|fetch failed[\s\S]*undici/,
+  // Also catch the error message itself and stack traces
+  /^fetch failed$/,
+  /at.*miniflare.*undici/,
+  /at.*@cloudflare\/vite-plugin/,
+  /at async fetch4.*miniflare/,
+  /at async ProxyClientBridge\.dispatchFetch/,
+  /node_modules\/miniflare/,
+  // Catch the full error stack pattern
+  /\/node_modules\/miniflare\/node_modules\/undici\/index\.js/,
+  /at async.*miniflare.*dist.*index\.js/,
+  // Catch "Failed to fetch dynamically imported module" errors from Cloudflare plugin interference
+  /Failed to fetch dynamically imported module.*Chrome/,
 ]
 
 export function silenceReactDevNoise() {
@@ -51,7 +66,7 @@ export function silenceReactDevNoise() {
       // Check error objects for stack traces and messages
       if (arg instanceof Error) {
         // Combine stack, message, and string representation for comprehensive checking
-        const errorText = [arg.stack, arg.message, String(arg)].filter(Boolean).join('\n')
+        const errorText = [arg.stack, arg.message, String(arg), arg.name].filter(Boolean).join('\n')
         if (REACT_PASSIVE_EFFECT_PATTERNS.some(pattern => errorText.includes(pattern))) {
           return true
         }
@@ -121,7 +136,13 @@ export function silenceReactDevNoise() {
   }
 
   console.error = (...args: unknown[]) => {
-    if (shouldSuppress(args)) return
+    if (shouldSuppress(args)) {
+      // Optionally log at debug level in development (commented out to fully silence)
+      // if (process.env.NODE_ENV === 'development' && process.env.VITE_DEBUG_CLOUDFLARE_ERRORS === 'true') {
+      //   originalLog('[Suppressed Cloudflare/Miniflare error]', ...args)
+      // }
+      return
+    }
     originalError(...args)
   }
 

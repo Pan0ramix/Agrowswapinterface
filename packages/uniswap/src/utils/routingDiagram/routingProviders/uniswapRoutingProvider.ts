@@ -58,12 +58,27 @@ export const uniswapRoutingProvider: RoutingProvider = {
       throw new Error(`Invalid call to uniswapProvider.getRoutingEntries with non-classic trade: ${trade.routing}`)
     }
 
-    return trade.swaps.map(({ route, inputAmount, outputAmount }) => {
+    // Guard against undefined swaps (can happen in on-chain-only mode)
+    const swaps = trade.swaps
+    if (!swaps || !Array.isArray(swaps) || swaps.length === 0) {
+      return []
+    }
+
+    return swaps.map(({ route, inputAmount, outputAmount }) => {
       const portion =
         trade.tradeType === TradeType.EXACT_INPUT
           ? inputAmount.divide(trade.inputAmount)
           : outputAmount.divide(trade.outputAmount)
       const percent = new Percent(portion.numerator, portion.denominator)
+
+      // Guard against undefined route or pools
+      if (!route || !route.pools || !Array.isArray(route.pools) || !route.path || !Array.isArray(route.path)) {
+        return {
+          percent: new Percent(0, 1),
+          path: [],
+          protocolLabel: 'Unknown',
+        }
+      }
 
       const path: RoutingHop[] = route.pools.map((pool, i) => {
         const inputCurrency = route.path[i]

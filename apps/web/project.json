@@ -97,14 +97,14 @@
       ]
     },
     "start": {
-      "command": "ROLLDOWN_OPTIONS_VALIDATION=loose vite dev",
+      "command": "VITE_ENABLE_CLOUDFLARE_PLUGIN=false ROLLDOWN_OPTIONS_VALIDATION=loose vite dev",
       "options": {
         "cwd": "{projectRoot}"
       },
       "continuous": true
     },
     "dev": {
-      "command": "ROLLDOWN_OPTIONS_VALIDATION=loose vite dev",
+      "command": "VITE_ENABLE_CLOUDFLARE_PLUGIN=false ROLLDOWN_OPTIONS_VALIDATION=loose vite dev",
       "options": {
         "cwd": "{projectRoot}"
       }

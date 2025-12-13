@@ -58,6 +58,7 @@ export function useSwapFormScreenCallbacks({
   const {
     amountUpdatedTimeRef,
     exactAmountTokenRef,
+    exactAmountToken,
     exactCurrencyField,
     focusOnCurrencyField,
     input,
@@ -67,6 +68,7 @@ export function useSwapFormScreenCallbacks({
   } = useSwapFormStore((s) => ({
     amountUpdatedTimeRef: s.amountUpdatedTimeRef,
     exactAmountTokenRef: s.exactAmountTokenRef,
+    exactAmountToken: s.exactAmountToken,
     exactCurrencyField: s.exactCurrencyField,
     focusOnCurrencyField: s.focusOnCurrencyField,
     isFiatMode: s.isFiatMode,
@@ -226,15 +228,31 @@ export function useSwapFormScreenCallbacks({
           newFilteredChainIds: undefined,
         }
 
+    // Determine which amount to preserve based on the field switch direction
+    // When switching from INPUT to OUTPUT: preserve current exactAmountToken (old INPUT) as new OUTPUT
+    // When switching from OUTPUT to INPUT: preserve formattedDerivedValueRef (old OUTPUT) as new INPUT
+    let newExactAmountToken: string | undefined = undefined
+    
+    if (!isFiatMode) {
+      if (exactOutputWouldFailIfCurrenciesSwitched && exactFieldIsInput) {
+        // Special case: force exact field to INPUT, preserve derived value
+        newExactAmountToken = formattedDerivedValueRef.current
+      } else if (exactFieldIsInput && newExactCurrencyField === CurrencyField.OUTPUT) {
+        // Switching from INPUT to OUTPUT: preserve current exactAmountToken (old INPUT value becomes new OUTPUT value)
+        newExactAmountToken = exactAmountToken
+      } else if (!exactFieldIsInput && newExactCurrencyField === CurrencyField.INPUT) {
+        // Switching from OUTPUT to INPUT: preserve derived value (old OUTPUT value becomes new INPUT value)
+        newExactAmountToken = formattedDerivedValueRef.current
+      }
+      // If switching from INPUT to INPUT (cross-chain case) or OUTPUT to OUTPUT, don't preserve (let it recalculate)
+    }
+
     updateSwapForm({
       exactCurrencyField: newExactCurrencyField,
       focusOnCurrencyField: newExactCurrencyField,
       input: output,
       output: input,
-      // Preserve the derived output amount if we force exact field to be input to keep USD value of the trade constant after switching
-      ...(exactOutputWouldFailIfCurrenciesSwitched && exactFieldIsInput && !isFiatMode
-        ? { exactAmountToken: formattedDerivedValueRef.current }
-        : undefined),
+      ...(newExactAmountToken !== undefined ? { exactAmountToken: newExactAmountToken } : undefined),
       ...(isCrossChain ? { filteredChainIds: newFilteredChainIds } : undefined),
     })
 

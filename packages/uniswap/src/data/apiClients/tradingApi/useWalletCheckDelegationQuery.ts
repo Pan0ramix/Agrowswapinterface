@@ -2,6 +2,7 @@ import { type QueryFunction, type QueryKey, skipToken, type UseQueryResult, useQ
 import { type TradingApi, type UseQueryApiHelperHookArgs } from '@universe/api'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
 import { checkWalletDelegation } from 'uniswap/src/data/apiClients/tradingApi/TradingApiClient'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { ReactQueryCacheKey } from 'utilities/src/reactQuery/cache'
 
 export type WalletCheckDelegationParams = {
@@ -16,11 +17,16 @@ export function useWalletCheckDelegationQuery({
   WalletCheckDelegationParams,
   TradingApi.WalletCheckDelegationResponseBody
 >): UseQueryResult<TradingApi.WalletCheckDelegationResponseBody> {
+  // Gate Trading API for on-chain-only chains
+  const hasOnChainOnlyChain = params?.chainIds?.some((chainId) => isOnChainOnlyChain(chainId))
+  const shouldDisable = hasOnChainOnlyChain || !params
+
   const queryKey = walletCheckDelegationQueryKey(params)
 
   return useQuery<TradingApi.WalletCheckDelegationResponseBody>({
     queryKey,
-    queryFn: params ? walletCheckDelegationQueryFn(params) : skipToken,
+    queryFn: shouldDisable ? skipToken : (params ? walletCheckDelegationQueryFn(params) : skipToken),
+    enabled: !shouldDisable && (rest.enabled !== false),
     ...rest,
   })
 }

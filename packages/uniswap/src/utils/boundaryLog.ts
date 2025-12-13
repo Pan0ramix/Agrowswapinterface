@@ -61,8 +61,8 @@ export function boundaryLogDeduped(
     payload,
     chainId,
     {
-      ttlMs: 10000, // default TTL (10 seconds)
-      minIntervalMs: 10000, // default min interval (10 seconds)
+      ttlMs: 5000, // default TTL (5 seconds)
+      minIntervalMs: 5000, // default min interval (5 seconds)
       maxPerWindow: 3, // default max per window
       windowMs: 2000, // default window
       maxEntries: 250, // default max entries

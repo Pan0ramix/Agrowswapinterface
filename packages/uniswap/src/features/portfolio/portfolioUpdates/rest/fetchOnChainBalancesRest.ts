@@ -2,6 +2,7 @@ import { PartialMessage } from '@bufbuild/protobuf'
 import { GetPortfolioResponse } from '@uniswap/client-data-api/dist/data/v1/api_pb.d'
 import { Balance } from '@uniswap/client-data-api/dist/data/v1/types_pb'
 import { CurrencyAmount, NativeCurrency, Token } from '@uniswap/sdk-core'
+import { nativeOnChain } from 'uniswap/src/constants/tokens'
 import { TradingApi } from '@universe/api'
 import { DEFAULT_NATIVE_ADDRESS_LEGACY } from 'uniswap/src/features/chains/evm/defaults'
 import { getNativeAddress } from 'uniswap/src/constants/addresses'
@@ -17,6 +18,7 @@ import {
 import { getCurrencyAmount, ValueType } from 'uniswap/src/features/tokens/getCurrencyAmount'
 import { SolanaToken } from 'uniswap/src/features/tokens/SolanaToken'
 import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { isOnChainDebug } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
 import { toTradingApiSupportedChainId } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
 import { CurrencyId } from 'uniswap/src/types/currency'
 import { areAddressesEqual } from 'uniswap/src/utils/addresses'
@@ -354,7 +356,29 @@ async function resolveCurrency({
       }
     } else {
       // For EVM chains, return wrapped native token
-      const nativeCurrency = NativeCurrency.onChain(chainId)
+      // CRITICAL: Use nativeOnChain helper instead of NativeCurrency.onChain static method
+      // NativeCurrency.onChain may not be available in all SDK versions
+      let nativeCurrency
+      try {
+        // Try nativeOnChain first (preferred)
+        const { nativeOnChain } = require('uniswap/src/constants/tokens')
+        nativeCurrency = nativeOnChain(chainId)
+      } catch {
+        // Fallback: try NativeCurrency.onChain if available
+        if (typeof NativeCurrency?.onChain === 'function') {
+          nativeCurrency = NativeCurrency.onChain(chainId)
+        } else {
+          // Last resort: construct from chain metadata
+          log.warn('NativeCurrency.onChain not available, using fallback', { chainId })
+          // Return a minimal wrapped token representation
+          const wrappedAddress = getNativeAddress(chainId)
+          return {
+            currency: new Token(chainId, wrappedAddress, 18, 'ETH', 'Ether'),
+            tokenInfo: null,
+          }
+        }
+      }
+      
       return {
         currency: nativeCurrency.wrapped,
         tokenInfo: null,

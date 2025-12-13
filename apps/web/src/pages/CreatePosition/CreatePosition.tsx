@@ -240,13 +240,53 @@ function CreatePositionContent({
     tokenB: initialInputs.tokenB,
   })
 
+  // Log currencyInputs changes
+  useEffect(() => {
+    console.log('[CreatePosition] currencyInputs state changed', {
+      tokenA: currencyInputs.tokenA ? {
+        address: currencyInputs.tokenA.isToken ? currencyInputs.tokenA.address : 'native',
+        symbol: currencyInputs.tokenA.symbol,
+        chainId: currencyInputs.tokenA.chainId,
+      } : undefined,
+      tokenB: currencyInputs.tokenB ? {
+        address: currencyInputs.tokenB.isToken ? currencyInputs.tokenB.address : 'native',
+        symbol: currencyInputs.tokenB.symbol,
+        chainId: currencyInputs.tokenB.chainId,
+      } : undefined,
+    })
+  }, [currencyInputs])
+
+  // Wrap setCurrencyInputs to add logging
+  const setCurrencyInputsWithLogging = useCallback(
+    (updater: React.SetStateAction<{ tokenA: Maybe<Currency>; tokenB: Maybe<Currency> }>) => {
+      console.log('[CreatePosition] setCurrencyInputs called', {
+        updaterType: typeof updater === 'function' ? 'function' : 'value',
+      })
+      setCurrencyInputs((prevState) => {
+        const newState = typeof updater === 'function' ? updater(prevState) : updater
+        console.log('[CreatePosition] setCurrencyInputs result', {
+          prevState: {
+            tokenA: prevState.tokenA?.symbol,
+            tokenB: prevState.tokenB?.symbol,
+          },
+          newState: {
+            tokenA: newState.tokenA?.symbol,
+            tokenB: newState.tokenB?.symbol,
+          },
+        })
+        return newState
+      })
+    },
+    [],
+  )
+
   return (
     <Trace logImpression page={InterfacePageName.CreatePosition}>
       <MultichainContextProvider initialChainId={initialInputs.chainId}>
         <LPTransactionSettingsStoreContextProvider autoSlippageTolerance={autoSlippageTolerance}>
           <CreateLiquidityContextProvider
             currencyInputs={currencyInputs}
-            setCurrencyInputs={setCurrencyInputs}
+            setCurrencyInputs={setCurrencyInputsWithLogging}
             initialPositionState={{
               fee: initialInputs.fee ?? undefined,
               hook: initialInputs.hook ?? undefined,

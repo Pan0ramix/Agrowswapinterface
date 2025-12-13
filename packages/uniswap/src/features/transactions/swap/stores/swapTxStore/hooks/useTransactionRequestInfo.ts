@@ -10,6 +10,7 @@ import { useUniswapContextSelector } from 'uniswap/src/contexts/UniswapContext'
 import { useTradingApiSwapQuery } from 'uniswap/src/data/apiClients/tradingApi/useTradingApiSwapQuery'
 import { useActiveGasStrategy } from 'uniswap/src/features/gas/hooks'
 import { isOnChainOnlyChain, isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { isTradingApiEnabled } from 'uniswap/src/features/transactions/swap/utils/isTradingApiEnabled'
 import { useAllTransactionSettings } from 'uniswap/src/features/transactions/components/settings/stores/transactionSettingsStore/useTransactionSettingsStore'
 import { FALLBACK_SWAP_REQUEST_POLL_INTERVAL_MS } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/constants'
 import { processUniswapXResponse } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/uniswapx/utils'
@@ -148,14 +149,18 @@ function useSwapTransactionRequestInfo({
     }
   }
 
+  // Gate Trading API swap query for on-chain-only chains
+  const isTradingApiEnabledForChain = isTradingApiEnabled(derivedSwapInfo.chainId)
+  
   const {
     data,
     error,
     isLoading: isSwapLoading,
   } = useTradingApiSwapQuery(
     {
-      // Skip Trading API swap request if on-chain router is enabled
-      params: isOnChainEnabled || shouldSkipSwapRequest ? undefined : swapRequestParams,
+      // Skip Trading API swap request if on-chain router is enabled OR Trading API is disabled for this chain
+      params: (isOnChainEnabled || !isTradingApiEnabledForChain || shouldSkipSwapRequest) ? undefined : swapRequestParams,
+      enabled: isTradingApiEnabledForChain && !isOnChainEnabled && !shouldSkipSwapRequest,
       refetchInterval: tradingApiSwapRequestMs,
       staleTime: tradingApiSwapRequestMs,
       // We add a small buffer in case connection is too slow
@@ -380,8 +385,8 @@ function useSwapTransactionRequestInfo({
               dataLen: (txRequestToEstimate.data as string)?.length ?? 0,
             },
             {
-              ttlMs: 10000,
-              minIntervalMs: 10000,
+              ttlMs: 5000,
+              minIntervalMs: 5000,
               keyParts: ['ESTIMATE-GAS-params', derivedSwapInfo.chainId, txRequestToEstimate.to],
             }
           )
@@ -472,7 +477,31 @@ function useSwapTransactionRequestInfo({
       }
     },
     // CRITICAL: enabled flag gates execution but hook is always called
-    enabled: Boolean(publicClient && onChainTxRequestData?.to && onChainTxRequestData?.data && derivedSwapInfo.chainId),
+    // GATE: Only estimate swap gas if approval is not needed AND balance is sufficient
+    // This prevents STF spam when allowance is insufficient
+    enabled: (() => {
+      if (!publicClient || !onChainTxRequestData?.to || !onChainTxRequestData?.data || !derivedSwapInfo.chainId) {
+        return false
+      }
+
+      // For on-chain-only chains, check if we should estimate swap or approval
+      const isOnChainOnly = isOnChainOnlyChain(derivedSwapInfo.chainId)
+      if (isOnChainOnly && tokenApprovalInfo) {
+        // If approval is needed, don't estimate swap gas (will fail with STF)
+        // Approval gas estimation happens separately
+        if (tokenApprovalInfo.action !== ApprovalAction.None) {
+          if (process.env.NODE_ENV !== 'production' && derivedSwapInfo.chainId === 84532) {
+            logger.debug('useTransactionRequestInfo', 'gas-estimate-gated', '[ESTIMATE-GAS] Gated: approval required, skipping swap estimate', {
+              chainId: derivedSwapInfo.chainId,
+              approvalAction: tokenApprovalInfo.action,
+            })
+          }
+          return false
+        }
+      }
+
+      return true
+    })(),
     staleTime: 10_000, // 10 seconds
     gcTime: 30_000, // 30 seconds
   })

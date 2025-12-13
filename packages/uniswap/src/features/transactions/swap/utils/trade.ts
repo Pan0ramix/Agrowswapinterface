@@ -174,7 +174,35 @@ export function getRateToDisplay({
   formatter: LocalizationContextState
   trade: Trade | IndicativeTrade
   showInverseRate: boolean
-}): string {
+}): string | null {
+  // Defensive checks: ensure all required data exists before accessing properties
+  if (!trade) {
+    return null
+  }
+
+  if (!trade.executionPrice) {
+    return null
+  }
+
+  const quoteCurrency = trade.executionPrice.quoteCurrency
+  const baseCurrency = trade.executionPrice.baseCurrency
+
+  // Check if currencies exist
+  if (!quoteCurrency || !baseCurrency) {
+    return null
+  }
+
+  // Check if symbols exist (currency metadata may not be loaded yet)
+  // For native currencies, symbol should exist, but we check defensively
+  // Use optional chaining to safely access symbol property
+  const quoteCurrencySymbol = getSymbolDisplayText(quoteCurrency?.symbol)
+  const baseCurrencySymbol = getSymbolDisplayText(baseCurrency?.symbol)
+
+  // If either symbol is missing, return null (rate will be hidden until metadata loads)
+  if (!quoteCurrencySymbol || !baseCurrencySymbol) {
+    return null
+  }
+
   const price = showInverseRate ? trade.executionPrice.invert() : trade.executionPrice
 
   let formattedPrice: string
@@ -188,8 +216,6 @@ export function getRateToDisplay({
     formattedPrice = '0'
   }
 
-  const quoteCurrencySymbol = getSymbolDisplayText(trade.executionPrice.quoteCurrency.symbol)
-  const baseCurrencySymbol = getSymbolDisplayText(trade.executionPrice.baseCurrency.symbol)
   const rate = `1 ${quoteCurrencySymbol} = ${formattedPrice} ${baseCurrencySymbol}`
   const inverseRate = `1 ${baseCurrencySymbol} = ${formattedPrice} ${quoteCurrencySymbol}`
   return showInverseRate ? rate : inverseRate
@@ -219,8 +245,8 @@ export function getProtocolVersionFromTrade(trade: Trade): Protocol | undefined 
           routesLength: routes?.length,
         },
         {
-          ttlMs: 10000,
-          minIntervalMs: 10000,
+          ttlMs: 5000,
+          minIntervalMs: 5000,
           keyParts: ['ANALYTICS-protocolVersion-fallback', chainId],
         }
       )

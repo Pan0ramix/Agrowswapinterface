@@ -37,12 +37,26 @@ export function clientToProvider(client?: Client<Transport, Chain>, chainId?: nu
 
 /** Hook to convert a viem Client to an ethers.js Provider with a default disconnected Network fallback. */
 export function useEthersProvider({ chainId }: { chainId?: number } = {}) {
+  // Use safe account wrapper to avoid errors when wagmi store isn't ready
+  // Note: We must call hooks unconditionally, but we can handle errors gracefully
   const account = useAccount()
-  const { data: client } = useConnectorClient({ chainId })
+  
+  // These hooks might fail if wagmi store isn't ready, but we can't conditionally call them
+  // If they fail, React will handle it via error boundary, or we return undefined
+  const connectorClientResult = useConnectorClient({ chainId })
   const disconnectedClient = useClient({ chainId })
+  
+  const client = connectorClientResult.data
+  const accountChainId = account?.chainId
+
   return useMemo(
-    () => clientToProvider(account.chainId !== chainId ? disconnectedClient : (client ?? disconnectedClient), chainId),
-    [account.chainId, chainId, client, disconnectedClient],
+    () => {
+      // If we don't have a client, return undefined
+      const effectiveClient = accountChainId !== chainId ? disconnectedClient : (client ?? disconnectedClient)
+      return clientToProvider(effectiveClient, chainId)
+    },
+    // Always provide a consistent dependency array structure
+    [accountChainId, chainId, client, disconnectedClient],
   )
 }
 

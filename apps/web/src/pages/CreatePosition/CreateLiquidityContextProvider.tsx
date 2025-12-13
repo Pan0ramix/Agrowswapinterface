@@ -181,6 +181,24 @@ export function CreateLiquidityContextProvider({
     ...initialDepositState,
   })
 
+  // Log currencyInputs changes
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[CreateLiquidityContextProvider] currencyInputs changed', {
+        tokenA: currencyInputs.tokenA ? {
+          address: currencyInputs.tokenA.isToken ? currencyInputs.tokenA.address : 'native',
+          symbol: currencyInputs.tokenA.symbol,
+          chainId: currencyInputs.tokenA.chainId,
+        } : undefined,
+        tokenB: currencyInputs.tokenB ? {
+          address: currencyInputs.tokenB.isToken ? currencyInputs.tokenB.address : 'native',
+          symbol: currencyInputs.tokenB.symbol,
+          chainId: currencyInputs.tokenB.chainId,
+        } : undefined,
+      })
+    }
+  }, [currencyInputs])
+
   // Derived info
   const derivedPositionInfo = useDerivedPositionInfo(currencyInputs, positionState)
 

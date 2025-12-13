@@ -4,7 +4,10 @@ import type { TextInputProps } from 'react-native'
 import type { CurrencyInputPanelRef } from 'uniswap/src/components/CurrencyInputPanel/types'
 import { WarningSeverity } from 'uniswap/src/components/modals/WarningModal/types'
 import { usePrefetchSwappableTokens } from 'uniswap/src/data/apiClients/tradingApi/useTradingApiSwappableTokensQuery'
-import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { isOnChainDebug } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
+import { isTradingApiEnabled } from 'uniswap/src/features/transactions/swap/utils/isTradingApiEnabled'
+import { logger } from 'utilities/src/logger/logger'
 import { getTokenWarningSeverity } from 'uniswap/src/features/tokens/safetyUtils'
 import type { DecimalPadInputRef } from 'uniswap/src/features/transactions/components/DecimalPadInput/DecimalPadInput'
 import {
@@ -84,10 +87,25 @@ export const SwapFormScreenStoreContextProvider = ({
   // React to network changes
   useSwapNetworkChangeEffect({ inputChainId: input?.chainId, outputChainId: output?.chainId })
 
-  // Prefetch swappable tokens only when Trading API is relevant (non on-chain chains)
-  const onChainEnabled = isOnChainRouterEnabled(input?.chainId ?? output?.chainId)
-  usePrefetchSwappableTokens(input, onChainEnabled)
-  usePrefetchSwappableTokens(output, onChainEnabled)
+  // Prefetch swappable tokens only when Trading API is enabled (not on-chain-only chains)
+  const inputChainId = input?.chainId ?? output?.chainId
+  const outputChainId = output?.chainId ?? input?.chainId
+  const disableTradingApiInput = inputChainId ? (isOnChainOnlyChain(inputChainId) || !isTradingApiEnabled(inputChainId)) : false
+  const disableTradingApiOutput = outputChainId ? (isOnChainOnlyChain(outputChainId) || !isTradingApiEnabled(outputChainId)) : false
+  
+  // Log when Trading API is prevented (debug only)
+  if (isOnChainDebug(inputChainId) && (disableTradingApiInput || disableTradingApiOutput)) {
+    logger.debug('SwapFormScreenStoreContextProvider', 'usePrefetchSwappableTokens', '[TRADING-API] Prevented swappable_tokens prefetch', {
+      inputChainId,
+      outputChainId,
+      disableTradingApiInput,
+      disableTradingApiOutput,
+      reason: 'on-chain-only chain or Trading API disabled',
+    })
+  }
+  
+  usePrefetchSwappableTokens(input, disableTradingApiInput)
+  usePrefetchSwappableTokens(output, disableTradingApiOutput)
 
   const { outputTokenHasBuyTax, exactOutputWillFail, exactOutputWouldFailIfCurrenciesSwitched } = useMemo(
     () => getExactOutputWillFail({ currencies }),

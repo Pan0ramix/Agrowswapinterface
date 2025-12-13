@@ -46,6 +46,12 @@ export function SwapRateRatio({
     return null
   }
 
+  // If rate is not available (metadata still loading), don't render the component
+  // This prevents crashes during intermediate states
+  if (!latestRate) {
+    return null
+  }
+
   return (
     <TouchableArea
       group

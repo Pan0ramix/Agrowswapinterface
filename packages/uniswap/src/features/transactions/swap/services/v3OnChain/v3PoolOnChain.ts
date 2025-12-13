@@ -25,6 +25,9 @@ export interface V3PoolOnChainState {
   token0: Token
   token1: Token
   fee: FeeAmount
+  observationCardinality?: number
+  observationCardinalityNext?: number
+  tickSpacing?: number
 }
 
 /**
@@ -141,8 +144,8 @@ export async function fetchV3PoolState(
   const poolInterface = new Interface(V3_POOL_ABI)
 
   try {
-    // Fetch pool state in parallel
-    const [slot0Data, liquidityData] = await Promise.all([
+    // Fetch pool state in parallel (including tickSpacing for audit)
+    const [slot0Data, liquidityData, tickSpacingData] = await Promise.all([
       publicClient.call({
         to: poolAddress,
         data: poolInterface.encodeFunctionData('slot0') as `0x${string}`,
@@ -151,6 +154,10 @@ export async function fetchV3PoolState(
         to: poolAddress,
         data: poolInterface.encodeFunctionData('liquidity') as `0x${string}`,
       }),
+      publicClient.call({
+        to: poolAddress,
+        data: poolInterface.encodeFunctionData('tickSpacing') as `0x${string}`,
+      }).catch(() => ({ data: null })), // tickSpacing is optional for audit
     ])
 
     // Decode results
@@ -160,6 +167,9 @@ export async function fetchV3PoolState(
 
     const slot0 = poolInterface.decodeFunctionResult('slot0', slot0Data.data)
     const liquidity = poolInterface.decodeFunctionResult('liquidity', liquidityData.data)[0]
+    const tickSpacing = tickSpacingData.data 
+      ? Number(poolInterface.decodeFunctionResult('tickSpacing', tickSpacingData.data)[0])
+      : undefined
 
     const sqrtPriceX96 = slot0.sqrtPriceX96.toString()
     const tick = Number(slot0.tick)
@@ -181,6 +191,10 @@ export async function fetchV3PoolState(
       token0,
       token1,
       fee,
+      // Additional fields for audit
+      observationCardinality: slot0.observationCardinality ? Number(slot0.observationCardinality) : undefined,
+      observationCardinalityNext: slot0.observationCardinalityNext ? Number(slot0.observationCardinalityNext) : undefined,
+      tickSpacing,
     }
   } catch (error) {
     // Pool doesn't exist or call failed

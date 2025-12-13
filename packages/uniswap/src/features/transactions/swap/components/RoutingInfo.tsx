@@ -27,6 +27,7 @@ import { openUri } from 'uniswap/src/utils/linking'
 import { useRoutingEntries } from 'uniswap/src/utils/routingDiagram/routingRegistry'
 import { NumberType } from 'utilities/src/format/types'
 import { isWebPlatform } from 'utilities/src/platform'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 
 export function RoutingInfo({
   trade,
@@ -86,7 +87,8 @@ function RoutingInfoInternal({
       )
     }
 
-    if (routes) {
+    // Handle empty routes (on-chain-only swaps may not have routing diagram data)
+    if (routes && routes.length > 0) {
       return (
         <Flex gap="$spacing12">
           {isWebPlatform && (
@@ -103,6 +105,18 @@ function RoutingInfoInternal({
         </Flex>
       )
     }
+
+    // Fallback for on-chain-only swaps without routing diagram
+    const chainId = trade.inputAmount?.currency?.chainId
+    const isOnChainOnly = chainId ? isOnChainOnlyChain(chainId) : false
+    if (isOnChainOnly) {
+      return (
+        <Text variant={textVariant} textAlign={textAlign} color="$neutral2">
+          {t('swap.routing.onChain.description') || 'On-chain routing'}
+        </Text>
+      )
+    }
+
     return null
   }, [t, trade, routes, gasFeeFormatted])
 

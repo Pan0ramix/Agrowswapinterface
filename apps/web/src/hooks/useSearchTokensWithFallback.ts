@@ -3,8 +3,29 @@ import { Token } from '@uniswap/sdk-core'
 import { GqlResult } from '@universe/api'
 import { PublicClient, erc20Abi } from 'viem'
 import { useChainId } from 'wagmi'
+
+/**
+ * Safe wrapper for useChainId that handles cases where wagmi store isn't ready
+ * Returns undefined if wagmi store isn't initialized
+ */
+function useSafeChainId(): number | undefined {
+  try {
+    return useChainId()
+  } catch (error) {
+    // If wagmi store isn't ready, return undefined
+    // This can happen during SSR or when wagmi provider isn't set up yet
+    if (error instanceof Error && (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[useSafeChainId] Wagmi store not ready, returning undefined', error)
+      }
+      return undefined
+    }
+    // Re-throw if it's a different error
+    throw error
+  }
+}
 import { getTokensAsync } from 'components/AccountDrawer/MiniPortfolio/Pools/getTokensAsync'
-import { useAccount } from 'hooks/useAccount'
+// Removed useAccount import - using useChainId directly to avoid getSnapshot errors when wagmi store isn't ready
 import { useInterfaceMulticall } from 'hooks/useContract'
 import { useMemo } from 'react'
 import { RPCType, UniverseChainId } from 'uniswap/src/features/chains/types'
@@ -87,13 +108,11 @@ export function useSearchTokensWithFallback({
   hideWSOL?: boolean
 }): GqlResult<CurrencyInfo[]> {
   // Get active chain ID from wallet connection
-  // Use wagmi's useChainId directly as fallback since useAccount might filter unsupported chains
-  const account = useAccount()
-  const wagmiChainId = useChainId()
+  // Use safe chainId wrapper to avoid errors when wagmi store isn't ready
+  const wagmiChainId = useSafeChainId()
   
-  // Prefer account.chainId (supports chain filtering), but fall back to raw wagmi chainId
-  // This ensures we get the actual connected chain even if it's not in the "supported" list
-  const activeChainId = account.chainId ?? (wagmiChainId ? (wagmiChainId as UniverseChainId) : null)
+  // Use chainId directly - this is more reliable than useAccount which can fail if store isn't ready
+  const activeChainId = wagmiChainId ? (wagmiChainId as UniverseChainId) : null
 
   // Use chainFilter if provided, otherwise fall back to active chain from wallet
   // Only use on-chain fallback when we have a specific chain (either from filter or wallet)
@@ -101,7 +120,6 @@ export function useSearchTokensWithFallback({
   
   console.log('[useSearchTokensWithFallback] Chain detection', {
     chainFilter,
-    accountChainId: account.chainId,
     wagmiChainId,
     activeChainId,
     effectiveChainFilter,
@@ -116,6 +134,7 @@ export function useSearchTokensWithFallback({
     hideWSOL,
   })
 
+  // Must call hooks unconditionally - useInterfaceMulticall will handle undefined chainId gracefully
   const multicall = useInterfaceMulticall(effectiveChainFilter ?? undefined)
   
   // Use viem PublicClient - prefer wallet-connected client, fallback to public RPC

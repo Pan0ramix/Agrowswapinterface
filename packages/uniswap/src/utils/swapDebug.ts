@@ -4,11 +4,50 @@
 
 import { logger } from 'utilities/src/logger/logger'
 
+/**
+ * Check if swap debug logging is enabled via:
+ * 1. localStorage.setItem('debug:swap', '1')
+ * 2. URL param ?debugSwap=1
+ * 3. env var NEXT_PUBLIC_SWAP_DEBUG=1
+ * 4. Base Sepolia (chainId === 84532) in dev mode
+ */
+function isSwapDebugEnabled(): boolean {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) {
+    return false
+  }
+
+  // Check localStorage
+  if (typeof window !== 'undefined' && typeof Storage !== 'undefined') {
+    try {
+      if (localStorage.getItem('debug:swap') === '1') {
+        return true
+      }
+    } catch {
+      // localStorage may be disabled
+    }
+  }
+
+  // Check URL param
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('debugSwap') === '1') {
+      return true
+    }
+  }
+
+  // Check env var
+  if (process.env.NEXT_PUBLIC_SWAP_DEBUG === '1') {
+    return true
+  }
+
+  return false
+}
+
 export function isSwapDebug(chainId?: number): boolean {
   return (
     typeof __DEV__ !== 'undefined' &&
     __DEV__ &&
-    (chainId === 84532 || process.env.NEXT_PUBLIC_SWAP_DEBUG === '1')
+    (isSwapDebugEnabled() || chainId === 84532)
   )
 }
 
@@ -16,7 +55,7 @@ export function shouldLog(chainId?: number): boolean {
   return (
     typeof __DEV__ !== 'undefined' &&
     __DEV__ &&
-    (process.env.NEXT_PUBLIC_SWAP_DEBUG === '1' || chainId === 84532 || chainId === undefined)
+    (isSwapDebugEnabled() || chainId === 84532 || chainId === undefined)
   )
 }
 
@@ -310,3 +349,4 @@ export function summarizeTrade(trade: any): {
 
   return result
 }
+

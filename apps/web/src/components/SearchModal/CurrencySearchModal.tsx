@@ -36,8 +36,14 @@ export default memo(function CurrencySearchModal({
   otherSelectedCurrency,
 }: CurrencySearchModalProps) {
   useEffect(() => {
+    window.console.error('[CurrencySearchModal] isOpen changed', { isOpen })
+    console.error('[CurrencySearchModal] isOpen changed', { isOpen })
     if (isOpen) {
+      window.console.error('[CurrencySearchModal] Modal opened')
+      console.error('[CurrencySearchModal] Modal opened')
     } else {
+      window.console.error('[CurrencySearchModal] Modal closed')
+      console.error('[CurrencySearchModal] Modal closed')
     }
   }, [isOpen])
 

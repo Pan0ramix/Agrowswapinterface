@@ -53,6 +53,8 @@ export function getPriceImpact(derivedSwapInfo: DerivedSwapInfo): Percent | unde
   if (isUniswapX(trade)) {
     return getUniswapXPriceImpact({ derivedSwapInfo })
   } else if (isClassic(trade) || isJupiter(trade)) {
+    // For on-chain-only swaps, priceImpact might be undefined initially
+    // It will be computed and enriched by useOnChainSwapDetails hook
     return trade.priceImpact
   } else {
     return undefined

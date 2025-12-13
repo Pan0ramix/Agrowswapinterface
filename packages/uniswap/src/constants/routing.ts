@@ -14,6 +14,8 @@ import {
   DAI_POLYGON,
   ETH_BSC,
   EURC_BASE_SEPOLIA,
+  FEUR_BASE_SEPOLIA,
+  FUSDT_BASE_SEPOLIA,
   nativeOnChain,
   OP,
   PORTAL_ETH_CELO,
@@ -158,6 +160,8 @@ export const COMMON_BASES: ChainCurrencyList = {
     USDC_BASE_SEPOLIA,
     USDT_BASE_SEPOLIA,
     EURC_BASE_SEPOLIA,
+    FEUR_BASE_SEPOLIA,
+    FUSDT_BASE_SEPOLIA,
   ].map(buildPartialCurrencyInfo),
 
   [UniverseChainId.Soneium]: [

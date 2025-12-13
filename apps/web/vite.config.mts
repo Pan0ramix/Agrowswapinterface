@@ -28,6 +28,11 @@ const DEPLOY_TARGET = process.env.DEPLOY_TARGET || 'cloudflare'
 const VITE_DISABLE_SOURCEMAP = process.env.VITE_DISABLE_SOURCEMAP === 'true'
 const DEBUG_PROXY = process.env.VITE_DEBUG_PROXY === 'true'
 const ENABLE_PROXY = process.env.VITE_ENABLE_ENTRY_GATEWAY_PROXY === 'true'
+// Allow disabling Cloudflare plugin for local development to avoid miniflare fetch errors
+// Defaults to false in development mode to avoid miniflare errors
+// Set VITE_ENABLE_CLOUDFLARE_PLUGIN=true to explicitly enable
+// Note: This will be overridden in defineConfig based on mode
+let ENABLE_CLOUDFLARE_PLUGIN = process.env.VITE_ENABLE_CLOUDFLARE_PLUGIN === 'true'
 
 const DEFAULT_PORT = 3000
 
@@ -78,6 +83,17 @@ const portWarningPlugin = (isProduction: boolean) =>
 const commitHash = execSync('git rev-parse HEAD').toString().trim()
 
 export default defineConfig(({ mode }) => {
+  // Override Cloudflare plugin setting based on mode and env var
+  // Default: disabled in development, enabled in production (unless explicitly disabled)
+  if (process.env.VITE_ENABLE_CLOUDFLARE_PLUGIN === 'false') {
+    ENABLE_CLOUDFLARE_PLUGIN = false
+  } else if (process.env.VITE_ENABLE_CLOUDFLARE_PLUGIN === 'true') {
+    ENABLE_CLOUDFLARE_PLUGIN = true
+  } else {
+    // Default: disabled in dev, enabled in production
+    ENABLE_CLOUDFLARE_PLUGIN = mode !== 'development'
+  }
+
   let env = loadEnv(mode, __dirname, '')
 
   // Force load .env.[mode] files since NX ignores them
@@ -284,7 +300,7 @@ export default defineConfig(({ mode }) => {
           }
         },
       },
-      DEPLOY_TARGET === 'cloudflare' || mode === 'development'
+      (DEPLOY_TARGET === 'cloudflare' || mode === 'development') && ENABLE_CLOUDFLARE_PLUGIN && cloudflare
         ? cloudflare({
             configPath: './wrangler-vite-worker.jsonc',
             // Workaround for cloudflare plugin bug: explicitly set environment name based on CLOUDFLARE_ENV

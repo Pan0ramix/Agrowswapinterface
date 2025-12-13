@@ -264,6 +264,9 @@ export function validateSwapTxContextWithReasons(swapTxContext: SwapTxAndGasInfo
   const firstTxRequest = txRequests?.[0]
   const quote = (trade as any)?.quote
   const swapQuoteResponse = (swapTxContext as any)?.swapQuoteResponse
+  
+  // Extract chainId early for use throughout validation
+  const chainId = trade?.inputAmount?.currency?.chainId
 
   // Build snapshot (safe, shallow fields only)
   const requestIdRaw =
@@ -318,7 +321,6 @@ export function validateSwapTxContextWithReasons(swapTxContext: SwapTxAndGasInfo
     // RELAXATION: Allow step generation with partial gasFee if approval tx exists (Base Sepolia only)
     // This breaks the deadlock: approval can be executed even if swap gas is unknown pre-approval.
     // After approval completes, swap gas can be recomputed.
-    const chainId = trade?.inputAmount?.currency?.chainId
     const hasApprovalTx = !!approveTxRequest
     const isOnChainOnly = chainId === 84532
 
@@ -354,6 +356,9 @@ export function validateSwapTxContextWithReasons(swapTxContext: SwapTxAndGasInfo
     return { ok: false, reasons, snapshot }
   }
 
+  // For on-chain-only chains, relax validation requirements
+  const isOnChainOnly = chainId === 84532
+  
   // Route-specific validation
   if (isClassic(swapTxContext)) {
     const { unsigned, permit, txRequests } = swapTxContext
@@ -377,6 +382,25 @@ export function validateSwapTxContextWithReasons(swapTxContext: SwapTxAndGasInfo
       // Signed classic swap requires txRequests
       if (!txRequests || txRequests.length === 0) {
         reasons.push('CLASSIC_MISSING_TX_REQUESTS')
+        // For on-chain-only chains, log which fields are missing for debugging
+        if (isOnChainOnly) {
+          const missingFields: string[] = []
+          if (!txRequests) missingFields.push('txRequests')
+          if (!swapTxContext.trade) missingFields.push('trade')
+          if (!gasFee) missingFields.push('gasFee')
+          snapshot.missingFields = missingFields
+          snapshot.isOnChainOnly = true
+          if (process.env.NODE_ENV !== 'production') {
+            logger.debug('validateSwapTxContextWithReasons', 'validateSwapTxContextWithReasons', '[VALIDATION] Missing fields for on-chain swap', {
+              chainId,
+              missingFields,
+              hasTrade: !!swapTxContext.trade,
+              hasTxRequests: !!txRequests,
+              hasGasFee: !!gasFee,
+              hasApproveTxRequest: !!approveTxRequest,
+            })
+          }
+        }
         return { ok: false, reasons, snapshot }
       }
       // Valid signed classic swap

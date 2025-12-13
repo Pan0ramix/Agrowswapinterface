@@ -226,8 +226,8 @@ export async function estimateGasFee({
       },
       chainId,
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['ESTIMATE-GAS-failed', chainId, txTo],
       }
     )

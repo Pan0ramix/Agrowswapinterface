@@ -3,9 +3,10 @@
  * Implements TTL-based deduplication with repeat aggregation, minInterval guards, and token bucket rate limiting.
  *
  * Recommended TTLs:
- * - HookProbe: ttlMs: 10000-15000, minIntervalMs: 2000-3000
+ * - HookProbe: ttlMs: 5000-15000, minIntervalMs: 2000-3000
  * - Trade structure: ttlMs: 4000, minIntervalMs: 2000
  * - On-chain quote logs: ttlMs: 3000, minIntervalMs: 1500
+ * - Swap button/UI state: ttlMs: 5000, minIntervalMs: 5000
  */
 
 // Gate dedupe maps behind __DEV__ to avoid overhead in production

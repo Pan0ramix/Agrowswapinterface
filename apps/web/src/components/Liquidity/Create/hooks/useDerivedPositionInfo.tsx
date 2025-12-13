@@ -256,7 +256,40 @@ export function useDerivedPositionInfo(
   const { protocolVersion } = state
   const { tokenA, tokenB } = currencyInputs
 
+  // Log input currencies
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[useDerivedPositionInfo] Input currencies', {
+      tokenA: tokenA ? {
+        address: tokenA.isToken ? tokenA.address : 'native',
+        symbol: tokenA.symbol,
+        chainId: tokenA.chainId,
+      } : undefined,
+      tokenB: tokenB ? {
+        address: tokenB.isToken ? tokenB.address : 'native',
+        symbol: tokenB.symbol,
+        chainId: tokenB.chainId,
+      } : undefined,
+      protocolVersion,
+    })
+  }
+
   const sortedCurrencies = getSortedCurrenciesForProtocol({ a: tokenA, b: tokenB, protocolVersion })
+  
+  // Log sorted currencies
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[useDerivedPositionInfo] Sorted currencies', {
+      TOKEN0: sortedCurrencies.TOKEN0 ? {
+        address: sortedCurrencies.TOKEN0.isToken ? sortedCurrencies.TOKEN0.address : 'native',
+        symbol: sortedCurrencies.TOKEN0.symbol,
+        chainId: sortedCurrencies.TOKEN0.chainId,
+      } : undefined,
+      TOKEN1: sortedCurrencies.TOKEN1 ? {
+        address: sortedCurrencies.TOKEN1.isToken ? sortedCurrencies.TOKEN1.address : 'native',
+        symbol: sortedCurrencies.TOKEN1.symbol,
+        chainId: sortedCurrencies.TOKEN1.chainId,
+      } : undefined,
+    })
+  }
   const validCurrencyInput = validateCurrencyInput(sortedCurrencies)
 
   const legacyPoolOrPair = useGetLegacyPoolOrPair({

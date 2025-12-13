@@ -37,7 +37,7 @@ export function PriceImpactRow({
       </MarketPriceImpactWarningModal>
       <Flex row shrink justifyContent="flex-end">
         <Text adjustsFontSizeToFit color={priceImpactWarningColor} variant="body3">
-          {formattedPriceImpact ?? 'N/A'}
+          {formattedPriceImpact ?? '—'}
         </Text>
       </Flex>
     </Flex>

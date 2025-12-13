@@ -111,7 +111,10 @@ function useTokenSectionsForSwap({
 
   // we draw the Suggested pills as a single item of a section list, so `data` is TokenOption[][]
 
-  const suggestedSectionOptions = useMemo(() => [commonTokenOptions ?? []], [commonTokenOptions])
+  const suggestedSectionOptions = useMemo(() => {
+    return [commonTokenOptions ?? []]
+  }, [commonTokenOptions])
+  
   const suggestedSection = useOnchainItemListSection({
     sectionKey: OnchainItemSectionName.SuggestedTokens,
     options: suggestedSectionOptions,

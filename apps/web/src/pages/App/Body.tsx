@@ -1,11 +1,12 @@
 import Loader from 'components/Icons/LoadingSpinner'
 import { RouteDefinition, routes, useRouterConfig } from 'pages/RouteDefinitions'
-import { lazy, memo, Suspense } from 'react'
+import { memo, Suspense } from 'react'
 import { Route, Routes } from 'react-router'
+import { createLazy } from 'utils/lazyWithRetry'
 
 // The Chrome is always loaded, but is lazy-loaded because it is not needed without user interaction.
-// Annotating it with webpackPreload allows it to be ready when requested.
-const AppChrome = lazy(() => import(/* webpackPreload: true */ './Chrome'))
+// Using createLazy with retry to handle dynamic import failures (e.g., HMR issues, deployment changes)
+const AppChrome = createLazy(() => import(/* webpackPreload: true */ './Chrome'))
 
 export const Body = memo(function Body({ shouldRenderAppChrome = true }: { shouldRenderAppChrome?: boolean }) {
   const routerConfig = useRouterConfig()

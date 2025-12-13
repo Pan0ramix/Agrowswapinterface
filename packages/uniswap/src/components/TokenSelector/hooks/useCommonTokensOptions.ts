@@ -68,17 +68,21 @@ export function useCommonTokensOptions({
     (!portfolioBalancesById && portfolioBalancesByIdError) || (!commonBaseCurrencies && commonBaseCurrenciesError)
 
   const filteredCommonBaseTokenOptions = useMemo(
-    () => commonBaseTokenOptions && filter({ tokenOptions: commonBaseTokenOptions, chainFilter }),
+    () => {
+      return commonBaseTokenOptions && filter({ tokenOptions: commonBaseTokenOptions, chainFilter })
+    },
     [chainFilter, commonBaseTokenOptions],
   )
 
   return useMemo(
-    () => ({
-      data: filteredCommonBaseTokenOptions,
-      refetch,
-      error: error || undefined,
-      loading: loadingPorfolioBalancesById || loadingCommonBaseCurrencies,
-    }),
+    () => {
+      return {
+        data: filteredCommonBaseTokenOptions,
+        refetch,
+        error: error || undefined,
+        loading: loadingPorfolioBalancesById || loadingCommonBaseCurrencies,
+      }
+    },
     [error, loadingCommonBaseCurrencies, loadingPorfolioBalancesById, filteredCommonBaseTokenOptions, refetch],
   )
 }

@@ -78,6 +78,22 @@ export const CurrencySelector = ({
   const { t } = useTranslation()
   const currency = currencyInfo?.currency
 
+  const handlePress = useCallback(() => {
+    onPress()
+  }, [onPress, currency])
+
+  // Add direct onClick handler as fallback
+  const handleClick = useCallback(
+    (e: any) => {
+      if (e) {
+        e.preventDefault?.()
+        e.stopPropagation?.()
+      }
+      handlePress()
+    },
+    [handlePress, currency],
+  )
+
   return loading ? (
     <Shine width="100%">
       <Flex backgroundColor="$surface3" borderRadius="$rounded16" height={50} />
@@ -85,7 +101,8 @@ export const CurrencySelector = ({
   ) : (
     <DropdownButton
       emphasis={currencyInfo ? undefined : 'primary'}
-      onPress={onPress}
+      onPress={handlePress}
+      onClick={handleClick}
       elementPositioning="grouped"
       isExpanded={false}
       icon={
@@ -241,7 +258,11 @@ export function SelectTokensStep({
   const [currencySearchInputState, setCurrencySearchInputState] = useState<'tokenA' | 'tokenB' | undefined>(undefined)
 
   // Log when currencySearchInputState changes
-  useEffect(() => {}, [])
+  useEffect(() => {
+    window.console.error('[SelectTokenStep] currencySearchInputState changed', { currencySearchInputState })
+    console.error('[SelectTokenStep] currencySearchInputState changed', { currencySearchInputState })
+    console.log('[SelectTokenStep] currencySearchInputState changed (console.log)', { currencySearchInputState })
+  }, [currencySearchInputState])
   const [isShowMoreFeeTiersEnabled, toggleShowMoreFeeTiersEnabled] = useReducer((state) => !state, false)
 
   const isToken0Unsupported = isUnsupportedLPChain(token0?.chainId, protocolVersion)
@@ -253,48 +274,177 @@ export function SelectTokensStep({
 
   const handleCurrencySelect = useCallback(
     (currency: Currency) => {
-      if (currencySearchInputState === undefined) {
+      window.console.error('[SelectTokenStep] handleCurrencySelect CALLED', {
+        currency: currency ? {
+          address: currency.isToken ? currency.address : 'native',
+          symbol: currency.symbol,
+          chainId: currency.chainId,
+          isNative: currency.isNative,
+        } : 'UNDEFINED',
+        currencySearchInputState,
+        currentCurrencyInputs: {
+          tokenA: currencyInputs.tokenA ? {
+            address: currencyInputs.tokenA.isToken ? currencyInputs.tokenA.address : 'native',
+            symbol: currencyInputs.tokenA.symbol,
+            chainId: currencyInputs.tokenA.chainId,
+          } : undefined,
+          tokenB: currencyInputs.tokenB ? {
+            address: currencyInputs.tokenB.isToken ? currencyInputs.tokenB.address : 'native',
+            symbol: currencyInputs.tokenB.symbol,
+            chainId: currencyInputs.tokenB.chainId,
+          } : undefined,
+        },
+      })
+
+      // Store the current search input state to avoid race conditions with modal dismissal
+      const currentSearchState = currencySearchInputState
+      
+      if (currentSearchState === undefined) {
+        console.warn('[SelectTokenStep] handleCurrencySelect called but currencySearchInputState is undefined', {
+          currency: currency ? {
+            address: currency.isToken ? currency.address : 'native',
+            symbol: currency.symbol,
+            chainId: currency.chainId,
+          } : undefined,
+        })
+        // Still close the modal even if state is undefined
+        setCurrencySearchInputState(undefined)
         return
       }
 
-      const otherInputState = currencySearchInputState === 'tokenA' ? 'tokenB' : 'tokenA'
+      if (!currency) {
+        console.warn('[SelectTokenStep] handleCurrencySelect called with undefined currency')
+        // Still close the modal even if currency is undefined
+        setCurrencySearchInputState(undefined)
+        return
+      }
+
+      const otherInputState = currentSearchState === 'tokenA' ? 'tokenB' : 'tokenA'
       const otherCurrency = currencyInputs[otherInputState]
       const wrappedCurrencyNew = currency.isNative ? currency.wrapped : currency
       const wrappedCurrencyOther = otherCurrency?.isNative ? otherCurrency.wrapped : otherCurrency
+      
+      console.log('[SelectTokenStep] Processing currency selection', {
+        currentSearchState,
+        otherInputState,
+        otherCurrency: otherCurrency ? {
+          address: otherCurrency.isToken ? otherCurrency.address : 'native',
+          symbol: otherCurrency.symbol,
+          chainId: otherCurrency.chainId,
+        } : undefined,
+        areCurrenciesEqual: areCurrenciesEqual(currency, otherCurrency),
+        areWrappedCurrenciesEqual: areCurrenciesEqual(wrappedCurrencyNew, wrappedCurrencyOther),
+        chainIdsMatch: otherCurrency?.chainId === currency.chainId,
+      })
+
       setSelectedChainId(currency.chainId)
 
       // If the tokens change, we want to reset the default fee tier (mostUsedFeeTier) in the useEffect below.
       setPositionState((prevState) => ({ ...prevState, fee: undefined }))
 
       if (areCurrenciesEqual(currency, otherCurrency) || areCurrenciesEqual(wrappedCurrencyNew, wrappedCurrencyOther)) {
-        setCurrencyInputs((prevState) => ({
-          ...prevState,
-          [otherInputState]: undefined,
-          [currencySearchInputState]: currency,
-        }))
+        console.log('[SelectTokenStep] Currencies are equal, clearing other and setting new', {
+          currentSearchState,
+          otherInputState,
+        })
+        setCurrencyInputs((prevState) => {
+          const newState = {
+            ...prevState,
+            [otherInputState]: undefined,
+            [currentSearchState]: currency,
+          }
+          console.log('[SelectTokenStep] setCurrencyInputs (equal currencies)', {
+            prevState: {
+              tokenA: prevState.tokenA?.symbol,
+              tokenB: prevState.tokenB?.symbol,
+            },
+            newState: {
+              tokenA: newState.tokenA?.symbol,
+              tokenB: newState.tokenB?.symbol,
+            },
+          })
+          return newState
+        })
+        // Reset search state after selection
+        setCurrencySearchInputState(undefined)
         return
       }
 
       if (otherCurrency && otherCurrency.chainId !== currency.chainId) {
-        setCurrencyInputs((prevState) => ({
-          ...prevState,
-          [otherInputState]: undefined,
-          [currencySearchInputState]: currency,
-        }))
+        console.log('[SelectTokenStep] Chain IDs do not match, clearing other and setting new', {
+          otherChainId: otherCurrency.chainId,
+          newChainId: currency.chainId,
+        })
+        setCurrencyInputs((prevState) => {
+          const newState = {
+            ...prevState,
+            [otherInputState]: undefined,
+            [currentSearchState]: currency,
+          }
+          console.log('[SelectTokenStep] setCurrencyInputs (chain mismatch)', {
+            prevState: {
+              tokenA: prevState.tokenA?.symbol,
+              tokenB: prevState.tokenB?.symbol,
+            },
+            newState: {
+              tokenA: newState.tokenA?.symbol,
+              tokenB: newState.tokenB?.symbol,
+            },
+          })
+          return newState
+        })
+        // Reset search state after selection
+        setCurrencySearchInputState(undefined)
         return
       }
 
-      switch (currencySearchInputState) {
+      switch (currentSearchState) {
         case 'tokenA':
         case 'tokenB':
-          setCurrencyInputs((prevState) => ({
-            ...prevState,
-            [currencySearchInputState]: currency,
-          }))
+          console.log('[SelectTokenStep] Setting currency in normal flow', {
+            currentSearchState,
+            currency: {
+              address: currency.isToken ? currency.address : 'native',
+              symbol: currency.symbol,
+              chainId: currency.chainId,
+            },
+          })
+          setCurrencyInputs((prevState) => {
+            const newState = {
+              ...prevState,
+              [currentSearchState]: currency,
+            }
+            console.log('[SelectTokenStep] setCurrencyInputs (normal flow)', {
+              prevState: {
+                tokenA: prevState.tokenA?.symbol,
+                tokenB: prevState.tokenB?.symbol,
+              },
+              newState: {
+                tokenA: newState.tokenA?.symbol,
+                tokenB: newState.tokenB?.symbol,
+              },
+              settingField: currentSearchState,
+            })
+            return newState
+          })
+          // Reset search state after selection
+          setCurrencySearchInputState(undefined)
           break
         default:
+          console.warn('[SelectTokenStep] Unexpected search state', { currentSearchState })
+          // Reset state even for unexpected cases
+          setCurrencySearchInputState(undefined)
           break
       }
+
+      console.log('[SelectTokenStep] Currency selection completed', {
+        searchState: currentSearchState,
+        currency: {
+          address: currency.isToken ? currency.address : 'native',
+          symbol: currency.symbol,
+          chainId: currency.chainId,
+        },
+      })
     },
     [currencySearchInputState, setCurrencyInputs, currencyInputs, setSelectedChainId, setPositionState],
   )
@@ -742,7 +892,14 @@ export function SelectTokensStep({
         <CurrencySearchModal
           isOpen={currencySearchInputState !== undefined}
           onDismiss={() => {
-            setCurrencySearchInputState(undefined)
+            window.console.error('[SelectTokenStep] CurrencySearchModal onDismiss called', { currencySearchInputState })
+            console.error('[SelectTokenStep] CurrencySearchModal onDismiss called', { currencySearchInputState })
+            // Reset the state - this should only happen when user manually dismisses (not after selection)
+            // handleCurrencySelect will reset it after processing, so this is just a safety net
+            setCurrencySearchInputState((prev) => {
+              window.console.error('[SelectTokenStep] Resetting currencySearchInputState in onDismiss', { prev })
+              return prev !== undefined ? undefined : prev
+            })
           }}
           switchNetworkAction={SwitchNetworkAction.LP}
           onCurrencySelect={handleCurrencySelect}

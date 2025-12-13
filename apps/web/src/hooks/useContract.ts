@@ -11,6 +11,7 @@ import NonfungiblePositionManagerJson from '@uniswap/v3-periphery/artifacts/cont
 import V3MigratorJson from '@uniswap/v3-periphery/artifacts/contracts/V3Migrator.sol/V3Migrator.json'
 import { useAccount } from 'hooks/useAccount'
 import { useEthersProvider } from 'hooks/useEthersProvider'
+import { useChainId } from 'wagmi'
 import { useEffect, useMemo } from 'react'
 import ERC20_ABI from 'uniswap/src/abis/erc20.json'
 import { Erc20, Erc721, Weth } from 'uniswap/src/abis/types'
@@ -45,7 +46,8 @@ export function useContract<T extends Contract = Contract>({
   withSignerIfPossible?: boolean
   chainId?: UniverseChainId
 }): T | null {
-  const account = useAccount()
+  // Use safe account wrapper to avoid errors when wagmi store isn't ready
+  const account = useSafeAccount()
   const provider = useEthersProvider({ chainId: chainId ?? account.chainId })
 
   return useMemo(() => {
@@ -72,7 +74,7 @@ export function useContract<T extends Contract = Contract>({
 }
 
 export function useV2MigratorContract() {
-  const account = useAccount()
+  const account = useSafeAccount()
   return useContract<V3Migrator>({
     address: account.chainId ? V3_MIGRATOR_ADDRESSES[account.chainId] : undefined,
     ABI: V2MigratorABI,
@@ -109,9 +111,61 @@ export function usePairContract(pairAddress?: string, withSignerIfPossible?: boo
   return useContract({ address: pairAddress, ABI: IUniswapV2PairABI, withSignerIfPossible })
 }
 
+/**
+ * Safe wrapper for useChainId that handles cases where wagmi store isn't ready
+ * Returns undefined if wagmi store isn't initialized
+ */
+function useSafeChainId(): number | undefined {
+  try {
+    return useChainId()
+  } catch (error) {
+    // If wagmi store isn't ready, return undefined
+    // This can happen during SSR or when wagmi provider isn't set up yet
+    if (error instanceof Error && (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[useSafeChainId] Wagmi store not ready, returning undefined', error)
+      }
+      return undefined
+    }
+    // Re-throw if it's a different error
+    throw error
+  }
+}
+
+/**
+ * Safe wrapper for useAccount that handles cases where wagmi store isn't ready
+ * Returns a safe fallback structure if wagmi store isn't initialized
+ */
+function useSafeAccount(): ReturnType<typeof useAccount> {
+  try {
+    return useAccount()
+  } catch (error) {
+    // If wagmi store isn't ready, return a safe fallback
+    // This can happen during SSR or when wagmi provider isn't set up yet
+    if (error instanceof Error && (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[useSafeAccount] Wagmi store not ready, using fallback', error)
+      }
+      return {
+        address: undefined,
+        chainId: undefined,
+        connector: undefined,
+        isConnected: false,
+        isConnecting: false,
+        isDisconnected: true,
+        isReconnecting: false,
+        status: 'disconnected' as const,
+      } as ReturnType<typeof useAccount>
+    }
+    // Re-throw if it's a different error
+    throw error
+  }
+}
+
 export function useInterfaceMulticall(chainId?: UniverseChainId) {
-  const account = useAccount()
-  const chain = chainId ?? account.chainId
+  // Use safe chainId wrapper to avoid errors when wagmi store isn't ready
+  const wagmiChainId = useSafeChainId()
+  const chain = chainId ?? (wagmiChainId ? (wagmiChainId as UniverseChainId) : undefined)
   // Use Agroswap addresses for Base Sepolia, otherwise use SDK addresses
   // Note: Base Sepolia uses Multicall3 (0xcA11bde05977b3631167028862bE2a173976CA11)
   // which is backward compatible with Multicall2 and supports the multicall() method
@@ -129,7 +183,7 @@ export function useV3NFTPositionManagerContract(
   withSignerIfPossible?: boolean,
   chainId?: UniverseChainId,
 ): NonfungiblePositionManager | null {
-  const account = useAccount()
+  const account = useSafeAccount()
   const chainIdToUse = chainId ?? account.chainId
   // Use Agroswap addresses for Base Sepolia, otherwise use SDK addresses
   const positionManagerAddresses =
@@ -168,7 +222,7 @@ export function useV4NFTPositionManagerContract(
   withSignerIfPossible?: boolean,
   chainId?: EVMUniverseChainId,
 ): Erc721 | null {
-  const account = useAccount()
+  const account = useSafeAccount()
   const chainIdToUse = chainId ?? account.chainId
 
   const contract = useContract<Erc721>({

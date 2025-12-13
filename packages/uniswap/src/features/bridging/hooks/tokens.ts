@@ -14,6 +14,7 @@ import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { toSupportedChainId } from 'uniswap/src/features/chains/utils'
 import { CurrencyInfo, PortfolioBalance } from 'uniswap/src/features/dataApi/types'
 import { currencyIdToContractInput } from 'uniswap/src/features/dataApi/utils/currencyIdToContractInput'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import {
   getTokenAddressFromChainForTradingApi,
   NATIVE_ADDRESS_FOR_TRADING_API,
@@ -60,14 +61,17 @@ export function useBridgingTokenWithHighestBalance({
     fetchPolicy: 'cache-first',
   })
 
+  // Gate Trading API for on-chain-only chains
+  const isOnChainOnly = currencyChainId ? isOnChainOnlyChain(currencyChainId) : false
   const { data: bridgingTokens, isLoading: bridgingTokensLoading } = useTradingApiSwappableTokensQuery({
     params:
-      otherChainBalances && otherChainBalances.length > 0 && tokenIn && tokenInChainId
+      !isOnChainOnly && otherChainBalances && otherChainBalances.length > 0 && tokenIn && tokenInChainId
         ? {
             tokenIn,
             tokenInChainId,
           }
         : undefined,
+    disableTradingApi: isOnChainOnly,
   })
 
   const isLoading = tokenProjectsLoading || bridgingTokensLoading
@@ -141,6 +145,8 @@ export function useBridgingTokensOptions({
     ? getTokenAddressFromChainForTradingApi(oppositeSelectedToken.address, oppositeSelectedToken.chainId)
     : undefined
   const tokenInChainId = toTradingApiSupportedChainId(oppositeSelectedToken?.chainId)
+  // Gate Trading API for on-chain-only chains
+  const isOnChainOnly = oppositeSelectedToken?.chainId ? isOnChainOnlyChain(oppositeSelectedToken.chainId) : false
   const {
     data: bridgingTokens,
     isLoading: loadingBridgingTokens,
@@ -148,12 +154,13 @@ export function useBridgingTokensOptions({
     refetch: refetchBridgingTokens,
   } = useTradingApiSwappableTokensQuery({
     params:
-      tokenIn && tokenInChainId
+      !isOnChainOnly && tokenIn && tokenInChainId
         ? {
             tokenIn,
             tokenInChainId,
           }
         : undefined,
+    disableTradingApi: isOnChainOnly,
     disableTradingApi: disablePortfolio,
   })
 

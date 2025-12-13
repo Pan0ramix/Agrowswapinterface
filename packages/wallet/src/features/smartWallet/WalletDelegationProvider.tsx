@@ -118,9 +118,21 @@ export function WalletDelegationProvider({
   )
 
   // UniverseChainId is an enum where each value is a number
-  const chainIds = useMemo(() => chains.map((chain) => chain.valueOf()), [chains])
+  // Filter out on-chain-only chains (Trading API disabled for these)
+  const chainIds = useMemo(() => {
+    const allChainIds = chains.map((chain) => chain.valueOf())
+    // Filter out on-chain-only chains to prevent Trading API calls
+    // Use dynamic import to avoid circular dependencies
+    try {
+      const { isOnChainOnlyChain } = require('uniswap/src/features/transactions/swap/services/onchainRouter/config')
+      return allChainIds.filter((chainId) => !isOnChainOnlyChain(chainId))
+    } catch {
+      // If import fails, return all chainIds (fallback for non-swap contexts)
+      return allChainIds
+    }
+  }, [chains])
 
-  // Set up the React Query for delegation data
+  // Set up the React Query for delegation data (only for Trading API-enabled chains)
   const delegationQueryOptions = createDelegationQueryOptions({ accountAddresses, chainIds })
   const delegationQuery = useQuery({
     ...delegationQueryOptions,

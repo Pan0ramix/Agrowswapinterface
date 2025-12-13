@@ -2083,6 +2083,8 @@
   "swap.route.optimizedGasCost": "This route considers split routes, multiple hops, and network costs of each step.",
   "swap.routing.jupiter.description": "Jupiter aggregates liquidity from multiple sources to provide you with the best prices.",
   "swap.routing.uniswapAutoRouter.description": "The Uniswap Auto Router considers optimal routes and network costs to provide you with the best prices.",
+  "swap.routing.onChain": "On-chain",
+  "swap.routing.onChain.description": "On-chain routing",
   "swap.settings.deadline.tooltip": "Your transaction will revert if it is pending for more than this period of time. (Maximum: 3 days).",
   "swap.settings.deadline.warning": "High deadline",
   "swap.settings.oneClickSwap.title": "1-click swaps",

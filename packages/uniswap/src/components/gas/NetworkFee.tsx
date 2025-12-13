@@ -39,7 +39,7 @@ export function NetworkFee({
   const { gasFeeFormatted, gasFeeUSD } = useGasFeeFormattedDisplayAmounts({
     gasFee,
     chainId,
-    placeholder: '-',
+    placeholder: '—',
     includesDelegation,
   })
 
@@ -68,7 +68,7 @@ export function NetworkFee({
             )}
             {gasFee.error ? (
               <Text color="$neutral2" variant="body3">
-                {t('common.text.notAvailable')}
+                {'—'}
               </Text>
             ) : uniswapXGasBreakdown ? (
               <UniswapXFee gasFee={gasFeeFormatted} preSavingsGasFee={uniswapXGasFeeInfo?.preSavingsGasFeeFormatted} />

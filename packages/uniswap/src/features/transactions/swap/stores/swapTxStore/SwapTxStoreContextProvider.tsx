@@ -84,8 +84,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         reactVersion: React.version,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['SwapTxStore-React-instance'],
       }
     )
@@ -101,8 +101,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         version: '2025-12-12T-onchain-only-v2',
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['SwapTxStore-provider-version'],
       }
     )
@@ -138,8 +138,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         renderCount: hookProbeCounter.current,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['TX-H01', chainId],
       }
     )
@@ -162,8 +162,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
       },
       chainIdForProbe,
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['TX-H02', chainIdForProbe],
       }
     )
@@ -189,8 +189,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         txRequestsLength: (txState as any).txRequests?.length ?? 0,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['TX-H03', chainId, routing],
       }
     )
@@ -255,8 +255,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
       },
       chainId,
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['TX-CONTEXT-pre-validate', chainId],
       }
     )
@@ -338,8 +338,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
             },
             chainId,
             {
-              ttlMs: 10000,
-              minIntervalMs: 10000,
+              ttlMs: 5000,
+              minIntervalMs: 5000,
               keyParts: ['TX-CONTEXT-repair-attempt', chainId],
             }
           )
@@ -357,8 +357,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
             },
             chainId,
             {
-              ttlMs: 10000,
-              minIntervalMs: 10000,
+              ttlMs: 5000,
+              minIntervalMs: 5000,
               keyParts: ['TX-CONTEXT-post-validate', chainId],
             }
           )
@@ -378,8 +378,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
             },
             chainId,
             {
-              ttlMs: 10000,
-              minIntervalMs: 10000,
+              ttlMs: 5000,
+              minIntervalMs: 5000,
               keyParts: ['TX-CONTEXT-repair-failed', chainId],
             }
           )
@@ -443,8 +443,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
       },
       chainIdForProbe6,
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['TX-H06', chainIdForProbe6],
       }
     )
@@ -484,8 +484,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
           hasRepairError: !!repairError,
         },
         {
-          ttlMs: 10000,
-          minIntervalMs: 10000,
+          ttlMs: 5000,
+          minIntervalMs: 5000,
           keyParts: ['SwapTxStore-setState', chainId, routing],
         }
       )
@@ -506,8 +506,8 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         chainId,
       },
       {
-        ttlMs: 10000,
-        minIntervalMs: 10000,
+        ttlMs: 5000,
+        minIntervalMs: 5000,
         keyParts: ['TX-H07', chainId],
       }
     )

@@ -100,16 +100,40 @@ export function CurrencySearch({
 
   const handleCurrencySelectTokenSelectorCallback = useCallback(
     async ({ currency }: { currency: Currency }) => {
+      console.error('[CurrencySearch] handleCurrencySelectTokenSelectorCallback CALLED', {
+        currency: currency ? {
+          address: currency.isToken ? currency.address : 'native',
+          symbol: currency.symbol,
+          chainId: currency.chainId,
+        } : 'UNDEFINED',
+        isMultichainContext,
+      })
+      
       if (!isMultichainContext) {
+        console.error('[CurrencySearch] Not multichain context, selecting chain', { chainId: currency.chainId })
         const correctChain = await selectChain(currency.chainId)
+        console.error('[CurrencySearch] Chain selection result', { correctChain, chainId: currency.chainId })
         if (!correctChain) {
+          console.error('[CurrencySearch] Chain selection failed, aborting currency select')
           return
         }
       }
+      
+      console.error('[CurrencySearch] Calling onCurrencySelect', {
+        currency: currency ? {
+          address: currency.isToken ? currency.address : 'native',
+          symbol: currency.symbol,
+          chainId: currency.chainId,
+        } : 'UNDEFINED',
+      })
+      // Call onCurrencySelect - it will handle resetting the modal state by setting currencySearchInputState to undefined
+      // Don't call onDismiss here to avoid race condition - let handleCurrencySelect reset the state first
       onCurrencySelect(currency)
       setSelectedChainId(currency.chainId)
       setIsUserSelectedToken(true)
-      onDismiss()
+      // Note: We don't call onDismiss() here because handleCurrencySelect will reset currencySearchInputState,
+      // which will automatically close the modal (since isOpen={currencySearchInputState !== undefined})
+      // Only call onDismiss if onCurrencySelect doesn't handle it (for error cases)
     },
     [onCurrencySelect, onDismiss, setSelectedChainId, setIsUserSelectedToken, selectChain, isMultichainContext],
   )

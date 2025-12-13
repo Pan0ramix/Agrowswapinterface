@@ -1,4 +1,4 @@
-import { Currency, CurrencyAmount, Percent, TradeType } from '@uniswap/sdk-core'
+import { Currency, CurrencyAmount, Percent, Price, TradeType } from '@uniswap/sdk-core'
 import { ClassicQuoteResponse, TradingApi } from '@universe/api'
 import { FeeAmount, Route } from '@uniswap/v3-sdk'
 import { FeatureFlags } from '@universe/gating'
@@ -268,26 +268,59 @@ export function useDerivedSwapInfo({
             outputAmountShape: shape(quoteAmountOut),
           },
           {
-            ttlMs: 10000,
-            minIntervalMs: 10000,
+            ttlMs: 5000,
+            minIntervalMs: 5000,
             includeKeys: ['chainId', 'txTo', 'txDataLen'],
           }
         )
       }
 
-      // Create execution price (guard non-token objects)
-      const executionPrice =
-        typeof quoteAmountOut?.divide === 'function' && amountSpecified
-          ? quoteAmountOut.divide(amountSpecified)
-          : undefined
+      // Create execution price (always create a valid Price object for on-chain trades)
+      let executionPrice: Price<Currency, Currency> | undefined
+      if (amountSpecified && quoteAmountOut && amountSpecified.currency && quoteAmountOut.currency) {
+        try {
+          // Try using divide method first (preferred as it handles decimals correctly)
+          if (typeof quoteAmountOut.divide === 'function') {
+            executionPrice = quoteAmountOut.divide(amountSpecified)
+          } else {
+            // Fallback: construct Price directly from amounts
+            executionPrice = new Price(
+              amountSpecified.currency,
+              quoteAmountOut.currency,
+              amountSpecified.quotient,
+              quoteAmountOut.quotient,
+            )
+          }
+        } catch (error) {
+          // If divide fails, construct Price directly
+          try {
+            executionPrice = new Price(
+              amountSpecified.currency,
+              quoteAmountOut.currency,
+              amountSpecified.quotient,
+              quoteAmountOut.quotient,
+            )
+          } catch (fallbackError) {
+            // Last resort: log and leave undefined (UI will handle gracefully)
+            if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
+              logger.debug('useDerivedSwapInfo', 'useDerivedSwapInfo', 'Failed to create executionPrice', {
+                chainId,
+                error: error instanceof Error ? error.message : String(error),
+                fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+              })
+            }
+          }
+        }
+      }
 
       // Build Route object from ValidatedRoute
       // Note: ValidatedRoute contains route.hops which we'd need to convert to pools
       // For now, we'll create a minimal trade object without the Route
       // The UI should work with just inputAmount, outputAmount, and executionPrice
-      const priceImpactPercent = priceImpact !== undefined 
+      // Only set priceImpact if we have a valid value; leave undefined so UI shows "—"
+      const priceImpactPercent: Percent | undefined = priceImpact !== undefined 
         ? new Percent(Math.round(priceImpact * 10000), 10000) 
-        : new Percent(0, 100)
+        : undefined
 
       // Build quote adapter to satisfy upstream invariants (requestId, quote.quoteId)
       const quoteAdapter = buildOnChainQuoteAdapter(
@@ -329,8 +362,8 @@ export function useDerivedSwapInfo({
                   quoteAmountOutShape: shape(quoteAmountOut),
                 },
                 {
-                  ttlMs: 10000,
-                  minIntervalMs: 10000,
+                  ttlMs: 5000,
+                  minIntervalMs: 5000,
                   keyParts: ['quoteAmountOut-missing-multiply', chainId],
                 }
               )

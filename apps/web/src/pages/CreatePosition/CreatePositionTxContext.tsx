@@ -1169,6 +1169,16 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   }, [gasFeeToken0USD, gasFeeToken1USD, increaseGasFeeUsd, gasFeeToken0PermitUSD, gasFeeToken1PermitUSD])
 
   const txInfo = useMemo(() => {
+    // Early return if tokens are not properly set - this is expected when user hasn't selected both tokens yet
+    const hasBothTokens = !!TOKEN0 && !!TOKEN1
+    const hasBothCurrencyAmounts = !!currencyAmounts?.TOKEN0 && !!currencyAmounts?.TOKEN1
+    
+    // Only try to generate txInfo if we have both tokens and currency amounts
+    // This prevents errors when user is still selecting tokens
+    if (!hasBothTokens || !hasBothCurrencyAmounts) {
+      return undefined
+    }
+
     const result = generateCreatePositionTxRequest({
       protocolVersion,
       approvalCalldata,
@@ -1180,7 +1190,8 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     })
 
     // Debug logging for on-chain path when txInfo is missing
-    if (useOnChainV3 && !result) {
+    // Only warn if we have all prerequisites but still failed (actual error condition)
+    if (useOnChainV3 && !result && hasBothTokens && hasBothCurrencyAmounts) {
       console.warn('[CreatePositionTxContext] Failed to generate txInfo for on-chain path', {
         hasFinalCreateCalldata: !!finalCreateCalldata,
         hasCreateCalldataCreate: !!finalCreateCalldata?.create,
@@ -1190,7 +1201,17 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
           isError: onChainMintPosition.isError,
           error: onChainMintPosition.error,
         },
-        hasCurrencyAmounts: !!currencyAmounts?.TOKEN0 && !!currencyAmounts?.TOKEN1,
+        hasCurrencyAmounts: hasBothCurrencyAmounts,
+        TOKEN0: TOKEN0 ? {
+          address: TOKEN0.isToken ? TOKEN0.address : 'native',
+          symbol: TOKEN0.symbol,
+          chainId: TOKEN0.chainId,
+        } : undefined,
+        TOKEN1: TOKEN1 ? {
+          address: TOKEN1.isToken ? TOKEN1.address : 'native',
+          symbol: TOKEN1.symbol,
+          chainId: TOKEN1.chainId,
+        } : undefined,
         approvalState: {
           needsApproval0: onChainApproval.needsApproval0,
           needsApproval1: onChainApproval.needsApproval1,
@@ -1222,6 +1243,12 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     isQueryEnabled,
     feeAmount,
     ticks,
+    TOKEN0,
+    TOKEN1,
+    onChainApproval.needsApproval0,
+    onChainApproval.needsApproval1,
+    onChainApproval.approvalState0,
+    onChainApproval.approvalState1,
   ])
 
   const value = useMemo(

@@ -245,7 +245,7 @@ export function useSwapFormScreenCallbacks({
         newExactAmountToken = formattedDerivedValueRef.current
       }
       // If switching from INPUT to INPUT (cross-chain case) or OUTPUT to OUTPUT, don't preserve (let it recalculate)
-    }
+        }
 
     updateSwapForm({
       exactCurrencyField: newExactCurrencyField,

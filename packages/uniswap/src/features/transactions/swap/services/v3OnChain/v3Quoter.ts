@@ -13,6 +13,11 @@ import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains
 import { getQuoterV2Address } from 'uniswap/src/constants/v3Addresses'
 import { AGROSWAP_QUOTER_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 import { QUOTER_ADDRESSES } from '@uniswap/sdk-core'
+import { decodeQuoterRevert } from 'uniswap/src/features/transactions/swap/utils/decodeQuoterRevert'
+import { fetchV3PoolState } from './v3PoolOnChain'
+import { logger } from 'utilities/src/logger/logger'
+import { computePoolAddress } from '@uniswap/v3-sdk'
+import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 
 /**
  * Quote result from Quoter contract
@@ -114,6 +119,59 @@ const QUOTER_ABI = [
 ]
 
 /**
+ * Validate pool state before quoting
+ * Returns pool address and state, or throws if pool is invalid
+ */
+async function validatePoolBeforeQuote(
+  tokenIn: Currency,
+  tokenOut: Currency,
+  fee: FeeAmount,
+  chainId: EVMUniverseChainId,
+  publicClient: PublicClient,
+): Promise<{
+  poolAddress: string
+  sqrtPriceX96: string
+  liquidity: string
+  tick: number
+  token0: Token
+  token1: Token
+  tickSpacing?: number
+}> {
+  // Use fetchV3PoolState which handles factory address selection correctly
+  // This also validates the pool exists and has liquidity
+  const poolState = await fetchV3PoolState({
+    tokenIn,
+    tokenOut,
+    fee,
+    chainId,
+    publicClient,
+  })
+
+  if (!poolState) {
+    throw new Error(`Pool does not exist for ${tokenIn.symbol}/${tokenOut.symbol} with fee ${fee}`)
+  }
+
+  // Validate pool state
+  if (poolState.sqrtPriceX96 === '0') {
+    throw new Error(`Pool at ${poolState.poolAddress} has uninitialized price (sqrtPriceX96 = 0)`)
+  }
+
+  if (poolState.liquidity === '0') {
+    throw new Error(`Pool at ${poolState.poolAddress} has no liquidity`)
+  }
+
+  return {
+    poolAddress: poolState.poolAddress,
+    sqrtPriceX96: poolState.sqrtPriceX96,
+    liquidity: poolState.liquidity,
+    tick: poolState.tick,
+    token0: poolState.token0,
+    token1: poolState.token1,
+    tickSpacing: poolState.tickSpacing,
+  }
+}
+
+/**
  * Quotes exact input single swap using QuoterV2 contract
  * 
  * @param params - Quote parameters
@@ -130,20 +188,205 @@ export async function quoteExactInputSingle(
   const amountInRaw = amountIn.quotient.toString()
   const priceLimit = sqrtPriceLimitX96 || '0'
 
-  // Try QuoterV2 first (has gas estimate)
-  const quoterV2Interface = new Interface(QUOTER_V2_ABI)
-
+  // Step C: Verify pool is actually quoteable (on-chain reads)
+  let poolState: Awaited<ReturnType<typeof validatePoolBeforeQuote>> | undefined
+  let poolCodeLength: number | undefined
+  let computedPoolAddress: string | undefined
+  
   try {
-    const callData = quoterV2Interface.encodeFunctionData('quoteExactInputSingle', [
-      {
+    poolState = await validatePoolBeforeQuote(tokenIn, tokenOut, fee, chainId, publicClient)
+    computedPoolAddress = poolState.poolAddress
+    
+    // Get pool code length to verify pool exists
+    try {
+      const poolCode = await publicClient.getBytecode({ address: poolState.poolAddress as `0x${string}` })
+      poolCodeLength = poolCode ? poolCode.length : 0
+    } catch {
+      poolCodeLength = 0
+    }
+    
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      // Step C: Log all pool state values
+      console.log('[QUOTER-DIAG] Step C: Pool state verified (on-chain reads)', {
+        chainId,
+        poolAddress: poolState.poolAddress,
+        computedPoolAddress: poolState.poolAddress,
+        poolCodeLength,
+        token0: poolState.token0.address,
+        token1: poolState.token1.address,
+        token0Symbol: poolState.token0.symbol,
+        token1Symbol: poolState.token1.symbol,
+        fee,
+        tickSpacing: poolState.tickSpacing,
+        sqrtPriceX96: poolState.sqrtPriceX96,
+        liquidity: poolState.liquidity,
+        tick: poolState.tick,
+        tokenOrdering: {
+          tokenInIsToken0: tokenInAddress.toLowerCase() === poolState.token0.address.toLowerCase(),
+          tokenOutIsToken1: tokenOutAddress.toLowerCase() === poolState.token1.address.toLowerCase(),
+          expectedOrder: `${poolState.token0.symbol} < ${poolState.token1.symbol}`,
+        },
+      })
+      
+      logger.debug('v3Quoter', 'quoteExactInputSingle', '[QUOTER-DIAG] Pool state validated', {
+        chainId,
+        quoterAddress,
+        poolAddress: poolState.poolAddress,
+        tokenIn: tokenIn.symbol,
+        tokenOut: tokenOut.symbol,
+        tokenInAddress,
+        tokenOutAddress,
+        fee,
+        sqrtPriceX96: poolState.sqrtPriceX96,
+        liquidity: poolState.liquidity,
+        tick: poolState.tick,
+        token0: poolState.token0.address,
+        token1: poolState.token1.address,
+        poolCodeLength,
+      })
+    }
+  } catch (poolError) {
+    const poolErrorMessage = poolError instanceof Error ? poolError.message : String(poolError)
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      console.error('[QUOTER-DIAG] Step C: Pool validation failed', {
+        chainId,
+        quoterAddress,
+        tokenIn: tokenIn.symbol,
+        tokenOut: tokenOut.symbol,
+        tokenInAddress,
+        tokenOutAddress,
+        fee,
+        error: poolErrorMessage,
+        fullError: poolError,
+      })
+      
+      logger.error(poolError, {
+        tags: { file: 'v3Quoter', function: 'quoteExactInputSingle' },
+        extra: {
+          message: '[QUOTER-DIAG] Pool validation failed',
+          chainId,
+          quoterAddress,
+          tokenIn: tokenIn.symbol,
+          tokenOut: tokenOut.symbol,
+          tokenInAddress,
+          tokenOutAddress,
+          fee,
+          error: poolErrorMessage,
+        },
+      })
+    }
+    throw poolError
+  }
+
+  // Step 2: Prepare quote call parameters
+  const quoterV2Interface = new Interface(QUOTER_V2_ABI)
+  const quoteParams = {
+    tokenIn: tokenInAddress,
+    tokenOut: tokenOutAddress,
+    amountIn: amountInRaw,
+    fee: fee,
+    sqrtPriceLimitX96: priceLimit,
+  }
+
+  const callData = quoterV2Interface.encodeFunctionData('quoteExactInputSingle', [quoteParams]) as `0x${string}`
+  const callDataSelector = callData.slice(0, 10) as `0x${string}`
+
+  // Step A: Log the exact quote call (before call) - comprehensive logging
+  if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+    console.log('[QUOTER-DIAG] Step A: Exact quote call (before call)', {
+      chainId,
+      quoterAddress,
+      methodName: 'quoteExactInputSingle',
+      tokenIn: {
+        address: tokenInAddress,
+        symbol: tokenIn.symbol,
+        decimals: tokenIn.decimals,
+      },
+      tokenOut: {
+        address: tokenOutAddress,
+        symbol: tokenOut.symbol,
+        decimals: tokenOut.decimals,
+      },
+      fee,
+      amountIn: {
+        raw: amountInRaw,
+        exact: amountIn.toExact(),
+        decimals: amountIn.currency.decimals,
+      },
+      sqrtPriceLimitX96: priceLimit,
+      computedPoolAddress: poolState?.poolAddress,
+      poolCodeLength: poolState ? poolCodeLength : undefined,
+      encodedCalldata: {
+        selector: callDataSelector,
+        fullData: callData,
+        dataLength: callData.length - 2, // Subtract '0x'
+      },
+      quoterABI: 'QuoterV2',
+      quoterFunction: 'quoteExactInputSingle',
+      quoterFunctionSignature: 'quoteExactInputSingle((address,address,uint256,uint24,uint160))',
+      poolState: poolState ? {
+        token0: poolState.token0.address,
+        token1: poolState.token1.address,
+        sqrtPriceX96: poolState.sqrtPriceX96,
+        liquidity: poolState.liquidity,
+        tick: poolState.tick,
+        tickSpacing: poolState.tickSpacing,
+      } : undefined,
+    })
+    
+    // Step D: Confirm correct quoter + ABI + function usage
+    const expectedQuoterAddress = '0x9B988c0B5720c3ab8a60a04e7C17126519AF64e4' // Base Sepolia QuoterV2
+    const expectedFunctionSignature = 'quoteExactInputSingle((address,address,uint256,uint24,uint160))'
+    const expectedSelector = quoterV2Interface.getSighash('quoteExactInputSingle') as `0x${string}`
+    
+    console.log('[QUOTER-DIAG] Step D: Quoter configuration verification', {
+      chainId,
+      quoterAddress,
+      quoterVersion: 'V2',
+      quoterABI: 'QuoterV2',
+      quoterFunction: 'quoteExactInputSingle',
+      quoterFunctionSignature: expectedFunctionSignature,
+      expectedQuoterAddress,
+      quoterAddressMatch: quoterAddress.toLowerCase() === expectedQuoterAddress.toLowerCase(),
+      callDataSelector,
+      expectedSelector,
+      selectorMatch: callDataSelector.toLowerCase() === expectedSelector.toLowerCase(),
+      pathEncoding: 'single-hop (quoteExactInputSingle)',
+      paramsStructure: 'tuple (QuoteExactInputSingleParams)',
+      params: {
         tokenIn: tokenInAddress,
         tokenOut: tokenOutAddress,
         amountIn: amountInRaw,
-        fee: fee,
+        fee,
         sqrtPriceLimitX96: priceLimit,
       },
-    ]) as `0x${string}`
+    })
+    
+    logger.debug('v3Quoter', 'quoteExactInputSingle', '[QUOTER-DIAG] Calling QuoterV2', {
+      chainId,
+      quoterAddress,
+      poolAddress: poolState?.poolAddress,
+      functionName: 'quoteExactInputSingle',
+      callParams: {
+        tokenIn: tokenInAddress,
+        tokenOut: tokenOutAddress,
+        amountIn: amountInRaw,
+        amountInExact: amountIn.toExact(),
+        fee,
+        sqrtPriceLimitX96: priceLimit,
+      },
+      callData,
+      callDataSelector,
+      rpcMethod: 'eth_call',
+      quoterFunctionSignature: 'quoteExactInputSingle((address,address,uint256,uint24,uint160))',
+      quoterABI: 'QuoterV2',
+      quoterVersion: 'V2',
+      blockTag: 'latest',
+    })
+  }
 
+  // Step 3: Try QuoterV2 first (has gas estimate)
+  try {
     const result = await publicClient.call({
       to: quoterAddress,
       data: callData,
@@ -155,6 +398,18 @@ export async function quoteExactInputSingle(
 
     const decoded = quoterV2Interface.decodeFunctionResult('quoteExactInputSingle', result.data)
 
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('v3Quoter', 'quoteExactInputSingle', '[QUOTER-DIAG] QuoterV2 succeeded', {
+        chainId,
+        quoterAddress,
+        poolAddress: poolState.poolAddress,
+        amountOut: decoded.amountOut.toString(),
+        sqrtPriceX96After: decoded.sqrtPriceX96After.toString(),
+        initializedTicksCrossed: Number(decoded.initializedTicksCrossed),
+        gasEstimate: decoded.gasEstimate.toString(),
+      })
+    }
+
     return {
       amountOut: decoded.amountOut.toString(),
       sqrtPriceX96After: decoded.sqrtPriceX96After.toString(),
@@ -162,41 +417,200 @@ export async function quoteExactInputSingle(
       gasEstimate: decoded.gasEstimate.toString(),
     }
   } catch (error) {
-    // If QuoterV2 fails, try legacy Quoter
-    const quoterInterface = new Interface(QUOTER_ABI)
+    // Step 4: Decode revert reason with comprehensive diagnostics
+    // Step B: Decode revert data properly (after revert)
+    const revertInfo = decodeQuoterRevert(error, {
+      chainId,
+      quoterAddress,
+      poolAddress: poolState?.poolAddress,
+      tokenIn: tokenInAddress,
+      tokenOut: tokenOutAddress,
+    })
 
-    try {
-      const callData = quoterInterface.encodeFunctionData('quoteExactInputSingle', [
-        tokenInAddress,
-        tokenOutAddress,
-        fee,
-        amountInRaw,
-        priceLimit,
-      ]) as `0x${string}`
-
-      const result = await publicClient.call({
-        to: quoterAddress,
-        data: callData,
-      })
-
-      if (!result.data) {
-        throw new Error('Quoter call returned no data')
-      }
-
-      const decoded = quoterInterface.decodeFunctionResult('quoteExactInputSingle', result.data)
-
-      return {
-        amountOut: decoded.amountOut.toString(),
-      }
-    } catch (legacyError) {
-      // Re-throw with more context
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      const legacyErrorMessage = legacyError instanceof Error ? legacyError.message : String(legacyError)
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      // Step B: Log decoded revert info
+      const rawDataLength = revertInfo.rawData ? revertInfo.rawData.length - 2 : 0 // Subtract '0x'
+      const rawDataPreview = revertInfo.rawData 
+        ? `${revertInfo.rawData.slice(0, 66)}${revertInfo.rawData.length > 66 ? '...' : ''}` 
+        : 'null'
       
-      throw new Error(
-        `Quoter call failed (V2: ${errorMessage}, Legacy: ${legacyErrorMessage}). Pool may not exist or have insufficient liquidity.`,
-      )
+      const isSTF = revertInfo.decoded.includes('STF') || revertInfo.decoded.includes('Safe transfer from failed')
+      const isTransferError = isSTF || revertInfo.decoded.includes('TF') || revertInfo.decoded.includes('Transfer')
+      
+      console.error('[QUOTER-DIAG] Step B: Decoded revert data', {
+        chainId,
+        quoterAddress,
+        poolAddress: poolState?.poolAddress,
+        functionName: 'quoteExactInputSingle',
+        callParams: quoteParams,
+        callData,
+        callDataSelector,
+        revertDecoded: revertInfo.decoded,
+        revertSelector: revertInfo.selector,
+        isPanic: revertInfo.isPanic,
+        isErrorString: revertInfo.isErrorString,
+        rawRevertData: {
+          preview: rawDataPreview,
+          length: rawDataLength,
+          full: revertInfo.rawData,
+        },
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        fullError: error,
+        // Extract revert data from various error formats
+        errorData: (error as any)?.data,
+        errorCauseData: (error as any)?.cause?.data,
+        errorInfoData: (error as any)?.info?.error?.data,
+        errorShortMessage: (error as any)?.shortMessage,
+        // STF/Transfer error diagnostics
+        isTransferError,
+        transferErrorDiagnosis: isTransferError ? {
+          warning: '⚠️ Transfer error detected in Quoter call - this is abnormal',
+          explanation: 'Quoter should NOT perform token transfers. This suggests:',
+          possibleCauses: [
+            'Wrong Quoter contract (using SwapRouter instead of Quoter?)',
+            'Wrong ABI/function signature (calling swap function instead of quote?)',
+            'Token restriction hook blocking even view calls',
+            'Pool contract has non-standard behavior',
+          ],
+          quoterAddress,
+          expectedQuoterAddress: '0x9B988c0B5720c3ab8a60a04e7C17126519AF64e4',
+          quoterAddressMatch: quoterAddress.toLowerCase() === '0x9B988c0B5720c3ab8a60a04e7C17126519AF64e4'.toLowerCase(),
+          functionName: 'quoteExactInputSingle',
+          expectedFunctionSignature: 'quoteExactInputSingle((address,address,uint256,uint24,uint160))',
+          callDataSelector,
+        } : undefined,
+      })
+      
+      // Also log to logger for persistence
+      console.error('[QUOTER-DIAG] QuoterV2 reverted', {
+        chainId,
+        quoterAddress,
+        poolAddress: poolState?.poolAddress,
+        functionName: 'quoteExactInputSingle',
+        callParams: quoteParams,
+        callData,
+        revertDecoded: revertInfo.decoded,
+        revertSelector: revertInfo.selector,
+        isPanic: revertInfo.isPanic,
+        isErrorString: revertInfo.isErrorString,
+        rawRevertData: revertInfo.rawData,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        fullError: error,
+      })
+      
+      logger.error('v3Quoter', 'quoteExactInputSingle', '[QUOTER-DIAG] QuoterV2 reverted', {
+        chainId,
+        quoterAddress,
+        poolAddress: poolState?.poolAddress,
+        functionName: 'quoteExactInputSingle',
+        callParams: quoteParams,
+        callData,
+        revertDecoded: revertInfo.decoded,
+        revertSelector: revertInfo.selector,
+        isPanic: revertInfo.isPanic,
+        isErrorString: revertInfo.isErrorString,
+        rawRevertData: revertInfo.rawData,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      })
     }
+
+    // Step 5: Try legacy Quoter as fallback (only if revert is not a pool/token issue)
+    // Don't fallback if it's a real execution failure (STF, TF, etc.)
+    const shouldTryLegacy = !revertInfo.decoded.includes('STF') && 
+                           !revertInfo.decoded.includes('TF') &&
+                           !revertInfo.decoded.includes('Transfer') &&
+                           !revertInfo.isPanic
+
+    if (shouldTryLegacy) {
+      const quoterInterface = new Interface(QUOTER_ABI)
+
+      try {
+        const legacyCallData = quoterInterface.encodeFunctionData('quoteExactInputSingle', [
+          tokenInAddress,
+          tokenOutAddress,
+          fee,
+          amountInRaw,
+          priceLimit,
+        ]) as `0x${string}`
+
+        if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+          logger.debug('v3Quoter', 'quoteExactInputSingle', '[QUOTER-DIAG] Trying legacy Quoter', {
+            chainId,
+            quoterAddress,
+            callData: legacyCallData,
+          })
+        }
+
+        const result = await publicClient.call({
+          to: quoterAddress,
+          data: legacyCallData,
+        })
+
+        if (!result.data) {
+          throw new Error('Legacy Quoter call returned no data')
+        }
+
+        const decoded = quoterInterface.decodeFunctionResult('quoteExactInputSingle', result.data)
+
+        if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+          logger.debug('v3Quoter', 'quoteExactInputSingle', '[QUOTER-DIAG] Legacy Quoter succeeded', {
+            chainId,
+            quoterAddress,
+            amountOut: decoded.amountOut.toString(),
+          })
+        }
+
+        return {
+          amountOut: decoded.amountOut.toString(),
+        }
+      } catch (legacyError) {
+        const legacyRevertInfo = decodeQuoterRevert(legacyError, {
+          chainId,
+          quoterAddress,
+          poolAddress: poolState?.poolAddress,
+          tokenIn: tokenInAddress,
+          tokenOut: tokenOutAddress,
+        })
+
+        if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+          console.error('[QUOTER-DIAG] Legacy Quoter also reverted', {
+            chainId,
+            quoterAddress,
+            poolAddress: poolState?.poolAddress,
+            revertDecoded: legacyRevertInfo.decoded,
+            revertSelector: legacyRevertInfo.selector,
+            rawRevertData: legacyRevertInfo.rawData,
+            fullError: legacyError,
+          })
+          
+          logger.error(legacyError, {
+            tags: { file: 'v3Quoter', function: 'quoteExactInputSingle' },
+            extra: {
+              message: '[QUOTER-DIAG] Legacy Quoter also reverted',
+              chainId,
+              quoterAddress,
+              poolAddress: poolState?.poolAddress,
+              revertDecoded: legacyRevertInfo.decoded,
+              revertSelector: legacyRevertInfo.selector,
+              rawRevertData: legacyRevertInfo.rawData,
+            },
+          })
+        }
+
+        // Re-throw with decoded revert reason
+        throw new Error(
+          `Quoter call failed: ${revertInfo.decoded} (V2) / ${legacyRevertInfo.decoded} (Legacy). Pool: ${poolState?.poolAddress || 'unknown'}`,
+        )
+      }
+    }
+
+    // Re-throw with decoded revert reason
+    throw new Error(
+      `Quoter call failed: ${revertInfo.decoded}. Pool: ${poolState?.poolAddress || 'unknown'}, Quoter: ${quoterAddress}`,
+    )
   }
 }
 

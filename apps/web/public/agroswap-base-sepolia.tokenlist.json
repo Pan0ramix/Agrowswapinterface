@@ -35,12 +35,20 @@
       "symbol": "EURC",
       "decimals": 6,
       "logoURI": ""
+    },
+    {
+      "chainId": 84532,
+      "address": "0x2eEc2317C9aFA98Aa8e8b20291a541Bce57e4906",
+      "name": "CPRVerde01",
+      "symbol": "CPRV1",
+      "decimals": 18,
+      "logoURI": ""
     }
   ],
   "version": {
     "major": 0,
     "minor": 0,
-    "patch": 3
+    "patch": 4
   }
 }
 

@@ -302,19 +302,19 @@ export function SwapDetails({
                   </Text>
                 </Flex>
               )}
-              <Flex row alignItems="center" justifyContent="space-between">
-                <Text color="$neutral2" variant="body3">
-                  {t('swap.priceImpact')}
-                </Text>
-                <Text color="$neutral1" variant="body3">
-                  {onChainDetails.priceImpactBps !== null 
-                    ? (() => {
-                        const priceImpact = new Percent(onChainDetails.priceImpactBps, 10000)
-                        return formatPriceImpact(priceImpact, formatPercent) || '—'
-                      })()
-                    : '—'}
-                </Text>
-              </Flex>
+            <Flex row alignItems="center" justifyContent="space-between">
+              <Text color="$neutral2" variant="body3">
+                {t('swap.priceImpact')}
+              </Text>
+              <Text color="$neutral1" variant="body3">
+                {onChainDetails.priceImpactBps !== null 
+                  ? (() => {
+                      const priceImpact = new Percent(onChainDetails.priceImpactBps, 10000)
+                      return formatPriceImpact(priceImpact, formatPercent) || '—'
+                    })()
+                  : '—'}
+              </Text>
+            </Flex>
             </>
           ) : (
             <PriceImpactRow derivedSwapInfo={acceptedDerivedSwapInfo} />

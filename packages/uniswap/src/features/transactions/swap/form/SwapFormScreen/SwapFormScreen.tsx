@@ -27,6 +27,15 @@ import {
 } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import { BridgeTrade } from 'uniswap/src/features/transactions/swap/types/trade'
 import { isExtensionApp, isWebApp } from 'utilities/src/platform'
+import { useRestrictedTokenWarnings } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenWarnings'
+import { getPoolAddressesFromTrade } from 'uniswap/src/features/transactions/hooks/getPoolAddressesFromTrade'
+import { useActiveAddress } from 'uniswap/src/features/accounts/store/hooks'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { CurrencyField } from 'uniswap/src/types/currency'
+import { Address } from 'viem'
+import { useMemo } from 'react'
+import { ClassicTrade } from 'uniswap/src/features/transactions/swap/types/trade'
+import { RestrictedTokenWarnings } from 'uniswap/src/features/transactions/components/RestrictedTokenWarnings/RestrictedTokenWarnings'
 
 interface SwapFormScreenProps {
   hideContent: boolean
@@ -84,6 +93,35 @@ function SwapFormContent(): JSX.Element {
   }))
 
   const priceUXEnabled = usePriceUXEnabled()
+  
+  // Get tokens and chain info for allowlist checks
+  const derivedSwapInfo = useSwapFormStoreDerivedSwapInfo((s) => s)
+  const accountAddress = useActiveAddress(derivedSwapInfo.chainId)
+  const inputToken = derivedSwapInfo.currencies[CurrencyField.INPUT]?.currency
+  const outputToken = derivedSwapInfo.currencies[CurrencyField.OUTPUT]?.currency
+  const chainId = derivedSwapInfo.chainId as EVMUniverseChainId | undefined
+
+  // Extract pool addresses from trade route (for multi-hop swaps)
+  const poolAddresses = useMemo(() => {
+    const tradeInstance = derivedSwapInfo.trade.trade
+    if (tradeInstance && 'routing' in tradeInstance && tradeInstance.routing === 'CLASSIC') {
+      return getPoolAddressesFromTrade(tradeInstance as ClassicTrade, chainId)
+    }
+    return []
+  }, [derivedSwapInfo.trade.trade, chainId])
+
+  // Use the shared warning hook (cross-platform)
+  const warnings = useRestrictedTokenWarnings({
+    account: accountAddress as Address | undefined,
+    chainId,
+    tokens: {
+      tokenA: inputToken,
+      tokenB: outputToken,
+    },
+    flow: 'swap',
+    poolAddresses: poolAddresses.length > 0 ? poolAddresses : undefined,
+    enabled: !!accountAddress && !!chainId && (!!inputToken || !!outputToken),
+  })
 
   return (
     <Flex grow gap="$spacing8" justifyContent="space-between">
@@ -105,6 +143,9 @@ function SwapFormContent(): JSX.Element {
           )}
           <SwapFormScreenDetails />
         </Flex>
+
+        {/* Persistent warning section underneath swap widget - cross-platform */}
+        <RestrictedTokenWarnings warnings={warnings} />
       </Flex>
       <SwapFormDecimalPad />
     </Flex>

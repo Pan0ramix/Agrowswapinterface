@@ -21,6 +21,8 @@ export function useTrade(params: UseTradeArgs): TradeWithStatus {
     (params.account as any)?.chainId
 
   const onChainOnly = isOnChainOnlyChain(chainIdFromParams as number | undefined)
+  // For on-chain-only chains, always skip Trading API (never enable it)
+  // But allow the hook to run for exact output so it can be calculated elsewhere
   const paramsWithSkip: UseTradeArgs = onChainOnly ? { ...params, skip: true } : params
 
   const { error, data, isLoading: queryIsLoading, isFetching } = useTradeQuery(paramsWithSkip)
@@ -29,6 +31,8 @@ export function useTrade(params: UseTradeArgs): TradeWithStatus {
   const { currencyIn, currencyOut } = parseQuoteCurrencies(paramsWithSkip)
 
   return useMemo(() => {
+    // For on-chain-only chains, Trading API is disabled - return empty trade
+    // Exact output will be handled by on-chain routing or SDK fallback in useDerivedSwapInfo
     if (onChainOnly) {
       return {
         isLoading: false,

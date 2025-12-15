@@ -8,6 +8,7 @@ import { useRecentlySearchedTokens } from 'uniswap/src/components/TokenSelector/
 import { useTrendingTokensOptions } from 'uniswap/src/components/TokenSelector/hooks/useTrendingTokensOptions'
 import { TokenSectionsHookProps } from 'uniswap/src/components/TokenSelector/types'
 import { ClearRecentSearchesButton } from 'uniswap/src/features/search/ClearRecentSearchesButton'
+import { UniverseChainId } from 'uniswap/src/features/chains/types'
 
 export function useTokenSectionsForEmptySearch({
   evmAddress,
@@ -24,9 +25,19 @@ export function useTokenSectionsForEmptySearch({
     endElement: <ClearRecentSearchesButton />,
   })
 
+  // For Base Sepolia, show all tokens from the token list (no limit)
+  // For other chains, limit to MAX_DEFAULT_TRENDING_TOKEN_RESULTS_AMOUNT
+  const trendingTokensToShow = useMemo(() => {
+    if (chainFilter === UniverseChainId.BaseSepolia) {
+      // Show all tokens for Base Sepolia since it's a testnet with a small curated list
+      return trendingTokenOptions
+    }
+    return trendingTokenOptions?.slice(0, MAX_DEFAULT_TRENDING_TOKEN_RESULTS_AMOUNT)
+  }, [trendingTokenOptions, chainFilter])
+
   const trendingSection = useOnchainItemListSection({
     sectionKey: OnchainItemSectionName.TrendingTokens,
-    options: trendingTokenOptions?.slice(0, MAX_DEFAULT_TRENDING_TOKEN_RESULTS_AMOUNT),
+    options: trendingTokensToShow,
   })
   const sections = useMemo(
     () => [...(recentSection ?? []), ...(trendingSection ?? [])],

@@ -23,6 +23,7 @@ import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/s
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { simulateTransaction } from '../utils/decodeRevertReason'
 import { logger } from 'utilities/src/logger/logger'
+import { validateDecimalsSafetyMultiple } from '../../utils/validateDecimalsSafety'
 
 /**
  * Hook parameters
@@ -737,6 +738,18 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
             tickUpper: alignedTickUpper,
             fee,
           })
+        }
+
+        // Validate decimals safety (on-chain-only chains) before building transaction
+        // This prevents unsafe transactions with incorrect token decimals
+        if (publicClient && amount0Desired && amount1Desired) {
+          const decimalsError = await validateDecimalsSafetyMultiple(
+            [amount0Desired, amount1Desired],
+            publicClient,
+          )
+          if (decimalsError) {
+            throw new Error(decimalsError)
+          }
         }
 
         // For new pools, pass undefined for pool so buildMintPositionTx knows to skip pool validation

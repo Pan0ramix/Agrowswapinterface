@@ -11,6 +11,8 @@ import type { SwapDelegationInfo } from 'uniswap/src/features/smartWallet/delega
 import { useAllTransactionSettings } from 'uniswap/src/features/transactions/components/settings/stores/transactionSettingsStore/useTransactionSettingsStore'
 import { useV4SwapEnabled } from 'uniswap/src/features/transactions/swap/hooks/useV4SwapEnabled'
 import type { ApprovalTxInfo } from 'uniswap/src/features/transactions/swap/review/hooks/useTokenApprovalInfo'
+import { logger } from 'utilities/src/logger/logger'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { useTokenApprovalInfo } from 'uniswap/src/features/transactions/swap/review/hooks/useTokenApprovalInfo'
 import { createBridgeSwapTxAndGasInfoService } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/bridge/bridgeSwapTxAndGasInfoService'
 import { createChainedActionSwapTxAndGasInfoService } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/chained/chainedActionTxSwapAndGasInfoService'
@@ -28,7 +30,6 @@ import type {
 import { createSwapTxAndGasInfoService } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/swapTxAndGasInfoService'
 import { createUniswapXSwapTxAndGasInfoService } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/uniswapx/uniswapXSwapTxAndGasInfoService'
 import { createWrapTxAndGasInfoService } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/wrap/wrapTxAndGasInfoService'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import {
   useSwapFormStore,
   useSwapFormStoreDerivedSwapInfo,
@@ -178,15 +179,18 @@ type SwapQueryKeyParams =
       outputCurrencyId?: string
       inputAmount?: string
       outputAmount?: string
+      hasOnChainQuote?: boolean
     }
 
 // TODO(WEB-7243): Simplify query key logic once all routing types have a corresponding trade this query can be decoupled from derivedSwapInfo
 function parseQueryKeyParams(params: SwapQueryParams): SwapQueryKeyParams {
   const { trade, derivedSwapInfo } = params
   const requestId = trade?.quote?.requestId
+  const hasOnChainQuote = !!derivedSwapInfo.onChainQuote
 
   // If a trade is not defined or does not have a requestId, supply information about the currencies and amounts
   // to use as a placeholder key params. This keeps the query key stable even for local/on-chain routes.
+  // For on-chain quotes, include onChainQuote in the key to ensure the query runs when it's available
   if (!trade || !requestId) {
     const { input, output } = derivedSwapInfo.currencies
     const amounts = derivedSwapInfo.currencyAmounts
@@ -198,6 +202,7 @@ function parseQueryKeyParams(params: SwapQueryParams): SwapQueryKeyParams {
       outputCurrencyId: output?.currencyId,
       inputAmount,
       outputAmount,
+      hasOnChainQuote, // Include in key to trigger query when onChainQuote becomes available
     }
   }
 
@@ -241,17 +246,114 @@ function createGetQueryOptions(ctx: {
     const { trade, derivedSwapInfo } = params
     const chainId = derivedSwapInfo.chainId
     const isOnChainOnly = chainId ? isOnChainOnlyChain(chainId) : false
+    const hasOnChainQuote = !!derivedSwapInfo.onChainQuote
 
-    // Disable query for on-chain-only chains when trade.quote is undefined (on-chain-only trade)
-    // This prevents the classic service from trying to access trade.quote.quote which doesn't exist
+    // For on-chain-only chains, allow query if either:
+    // 1. trade.quote exists (Trading API quote), OR
+    // 2. onChainQuote exists (on-chain quote)
+    // This allows the service to build transaction requests from on-chain quotes
+    // IMPORTANT: For on-chain-only chains, we need to allow the query to run even if trade is missing
+    // as long as onChainQuote exists, because the trade is built from onChainQuote
     const shouldDisableOnChainOnly =
-      isOnChainOnly && trade && !trade.quote
+      isOnChainOnly && trade && !trade.quote && !hasOnChainQuote
 
-    const enabled = !!trade && !shouldDisableOnChainOnly
+    // For on-chain-only chains, enable query if we have onChainQuote OR trade
+    // This ensures the query runs when onChainQuote is available, even if trade hasn't been built yet
+    const enabled = isOnChainOnly
+      ? (!!trade || hasOnChainQuote) && !shouldDisableOnChainOnly
+      : !!trade && !shouldDisableOnChainOnly
+
+    // Always log for Base Sepolia to debug the issue
+    if (chainId === 84532) {
+      // Use console.log as a fallback to ensure we see this
+      console.log('[QUERY-OPTIONS] Base Sepolia query options', {
+        chainId,
+        isOnChainOnly,
+        hasTrade: !!trade,
+        hasTradeQuote: !!trade?.quote,
+        hasOnChainQuote,
+        shouldDisableOnChainOnly,
+        enabled,
+        onChainQuoteKeys: derivedSwapInfo.onChainQuote ? Object.keys(derivedSwapInfo.onChainQuote) : [],
+        onChainQuoteHasTxPayload: !!derivedSwapInfo.onChainQuote?.txPayload,
+        onChainQuoteTxPayloadTo: derivedSwapInfo.onChainQuote?.txPayload?.to,
+      })
+      logger.debug('createGetQueryOptions', 'createGetQueryOptions', '[QUERY-OPTIONS] Query options for swapTxAndGasInfo', {
+        chainId,
+        isOnChainOnly,
+        hasTrade: !!trade,
+        hasTradeQuote: !!trade?.quote,
+        hasOnChainQuote,
+        shouldDisableOnChainOnly,
+        enabled,
+        onChainQuoteKeys: derivedSwapInfo.onChainQuote ? Object.keys(derivedSwapInfo.onChainQuote) : [],
+        onChainQuoteHasTxPayload: !!derivedSwapInfo.onChainQuote?.txPayload,
+      })
+    }
 
     return queryOptions({
-      queryKey: [ReactQueryCacheKey.SwapTxAndGasInfo, parseQueryKeyParams(params)],
-      queryFn: async () => (trade ? ctx.swapTxAndGasInfoService.getSwapTxAndGasInfo({ ...params, trade }) : null),
+      queryKey: [ReactQueryCacheKey.SwapTxAndGasInfo, parseQueryKeyParams(params), hasOnChainQuote ? 'onchain' : 'api'],
+      queryFn: async () => {
+        // For on-chain-only chains, allow query to run if onChainQuote exists, even if trade is missing
+        // The trade will be built from onChainQuote in the service
+        if (!trade && !hasOnChainQuote) {
+          if (chainId === 84532) {
+            console.log('[QUERY-FN] Skipping query - no trade and no onChainQuote', {
+              chainId,
+              hasTrade: !!trade,
+              hasOnChainQuote,
+            })
+            logger.debug('swapTxAndGasInfoQuery', 'queryFn', '[QUERY-FN] Skipping query - no trade and no onChainQuote', {
+              chainId,
+              hasTrade: !!trade,
+              hasOnChainQuote,
+            })
+          }
+          return null
+        }
+        
+        // Always log entry to queryFn for Base Sepolia
+        if (chainId === 84532) {
+          console.log('[QUERY-FN] Query function called', {
+            chainId,
+            hasTrade: !!trade,
+            hasOnChainQuote,
+            onChainQuoteHasTxPayload: !!params.derivedSwapInfo.onChainQuote?.txPayload,
+          })
+        }
+        try {
+          if (chainId === 84532) {
+            console.log('[QUERY-FN] Executing getSwapTxAndGasInfo', {
+              chainId,
+              hasOnChainQuote,
+              hasTrade: !!trade,
+              hasTradeQuote: !!trade?.quote,
+              onChainQuoteHasTxPayload: !!params.derivedSwapInfo.onChainQuote?.txPayload,
+            })
+            logger.debug('swapTxAndGasInfoQuery', 'queryFn', '[QUERY-FN] Executing getSwapTxAndGasInfo', {
+              chainId,
+              hasOnChainQuote,
+              hasTrade: !!trade,
+              hasTradeQuote: !!trade?.quote,
+              onChainQuoteHasTxPayload: !!params.derivedSwapInfo.onChainQuote?.txPayload,
+            })
+          }
+          return await ctx.swapTxAndGasInfoService.getSwapTxAndGasInfo({ ...params, trade })
+        } catch (error) {
+          if (chainId === 84532) {
+            logger.error(error, {
+              tags: { file: 'swapTxAndGasInfoService', function: 'getSwapTxAndGasInfo' },
+              extra: {
+                chainId,
+                hasOnChainQuote,
+                hasTradeQuote: !!trade?.quote,
+                error: error instanceof Error ? error.message : String(error),
+              },
+            })
+          }
+          throw error
+        }
+      },
       refetchInterval: ctx.refetchInterval,
       enabled,
     })
@@ -317,8 +419,30 @@ function useSwapTxAndGasInfoQuery(input: {
   })
 
   const getQueryOptions = useEvent(createGetQueryOptions({ swapTxAndGasInfoService, refetchInterval }))
+  
+  const queryOptions = getQueryOptions(input)
+  
+  // Debug logging for Base Sepolia - use console.log to ensure visibility
+  if (input.derivedSwapInfo.chainId === 84532) {
+    console.log('[HOOK] useSwapTxAndGasInfoQuery called', {
+      chainId: input.derivedSwapInfo.chainId,
+      hasTrade: !!input.trade,
+      hasOnChainQuote: !!input.derivedSwapInfo.onChainQuote,
+      queryEnabled: queryOptions.enabled,
+      queryKey: queryOptions.queryKey?.[0],
+      onChainQuoteHasTxPayload: !!input.derivedSwapInfo.onChainQuote?.txPayload,
+    })
+    logger.debug('useSwapTxAndGasInfoQuery', 'useSwapTxAndGasInfoQuery', '[HOOK] useSwapTxAndGasInfoQuery called', {
+      chainId: input.derivedSwapInfo.chainId,
+      hasTrade: !!input.trade,
+      hasOnChainQuote: !!input.derivedSwapInfo.onChainQuote,
+      queryEnabled: queryOptions.enabled,
+      queryKey: queryOptions.queryKey?.[0],
+      onChainQuoteHasTxPayload: !!input.derivedSwapInfo.onChainQuote?.txPayload,
+    })
+  }
 
-  return useQuery(getQueryOptions(input))
+  return useQuery(queryOptions)
 }
 
 /**
@@ -327,6 +451,17 @@ function useSwapTxAndGasInfoQuery(input: {
  */
 export function useSwapTxAndGasInfo(): SwapTxAndGasInfo {
   const params = useSwapParams()
+  
+  // Debug logging for Base Sepolia
+  if (params.derivedSwapInfo.chainId === 84532) {
+    console.log('[HOOK-ENTRY] useSwapTxAndGasInfo called', {
+      chainId: params.derivedSwapInfo.chainId,
+      hasTrade: !!params.trade,
+      hasOnChainQuote: !!params.derivedSwapInfo.onChainQuote,
+      onChainQuoteHasTxPayload: !!params.derivedSwapInfo.onChainQuote?.txPayload,
+    })
+  }
+  
   const { data } = useSwapTxAndGasInfoQuery(params)
 
   const prevData = usePrevious(data)

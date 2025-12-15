@@ -34,15 +34,16 @@ export function useSearchTokens({
 
   // Base Sepolia local token list (from public file) to avoid CORS/REST failures
   const baseSepoliaListQuery = useQuery({
-    queryKey: ['tokenlist-base-sepolia'],
+    // Include version in query key to invalidate cache when token list is updated
+    queryKey: ['tokenlist-base-sepolia', 'v0.0.4'],
     enabled: chainFilter === UniverseChainId.BaseSepolia && !skip,
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<CurrencyInfo[]> => {
       const url =
         typeof window !== 'undefined'
-          ? `${window.location.origin}/agroswap-base-sepolia.tokenlist.json`
-          : '/agroswap-base-sepolia.tokenlist.json'
-      const res = await fetch(url, { credentials: 'omit' })
+          ? `${window.location.origin}/agroswap-base-sepolia.tokenlist.json?t=${Date.now()}`
+          : `/agroswap-base-sepolia.tokenlist.json?t=${Date.now()}`
+      const res = await fetch(url, { credentials: 'omit', cache: 'no-cache' })
       if (!res.ok) {
         throw new Error(`Failed to fetch Base Sepolia token list (${res.status})`)
       }

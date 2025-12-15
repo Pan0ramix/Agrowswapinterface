@@ -11,8 +11,10 @@ import NonfungiblePositionManagerJson from '@uniswap/v3-periphery/artifacts/cont
 import V3MigratorJson from '@uniswap/v3-periphery/artifacts/contracts/V3Migrator.sol/V3Migrator.json'
 import { useAccount } from 'hooks/useAccount'
 import { useEthersProvider } from 'hooks/useEthersProvider'
+import { useEffect, useMemo, useRef } from 'react'
+import { useWagmiStoreReady } from './useWagmiStoreReady'
+// biome-ignore lint/style/noRestrictedImports: wagmi chain hook needed for chain management
 import { useChainId } from 'wagmi'
-import { useEffect, useMemo } from 'react'
 import ERC20_ABI from 'uniswap/src/abis/erc20.json'
 import { Erc20, Erc721, Weth } from 'uniswap/src/abis/types'
 import { NonfungiblePositionManager, UniswapInterfaceMulticall } from 'uniswap/src/abis/types/v3'
@@ -114,18 +116,30 @@ export function usePairContract(pairAddress?: string, withSignerIfPossible?: boo
 /**
  * Safe wrapper for useChainId that handles cases where wagmi store isn't ready
  * Returns undefined if wagmi store isn't initialized
+ * Checks store readiness before calling hook to prevent React dependency comparison errors
  */
 function useSafeChainId(): number | undefined {
+  const fallbackRef = useRef<number | undefined>(undefined)
+  const isStoreReady = useWagmiStoreReady()
+  
+  // Hook must be called unconditionally (React rules)
+  // But we check store readiness to handle errors gracefully
   try {
-    return useChainId()
+    const chainId = useChainId()
+    // Only update ref if store is ready (prevents stale values)
+    if (isStoreReady) {
+      fallbackRef.current = chainId
+    }
+    // If store isn't ready, return fallback to ensure stable return
+    return isStoreReady ? chainId : fallbackRef.current
   } catch (error) {
-    // If wagmi store isn't ready, return undefined
+    // If wagmi store isn't ready, return last known value or undefined
     // This can happen during SSR or when wagmi provider isn't set up yet
     if (error instanceof Error && (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[useSafeChainId] Wagmi store not ready, returning undefined', error)
       }
-      return undefined
+      return fallbackRef.current
     }
     // Re-throw if it's a different error
     throw error

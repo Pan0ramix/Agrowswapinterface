@@ -22,6 +22,7 @@ import { NonfungiblePositionManager, UniswapInterfaceMulticall } from 'uniswap/s
 import { UniswapV3PoolInterface } from 'uniswap/src/abis/types/v3/UniswapV3Pool'
 import ERC20_ABI from 'uniswap/src/abis/erc20.json'
 import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
+import { RPC_PROVIDERS } from 'constants/providers'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { logger } from 'utilities/src/logger/logger'
@@ -227,33 +228,62 @@ export default function useMultiChainPositions(
     async (positionDetails: PositionDetails[], chainId: UniverseChainId, multicall: UniswapInterfaceMulticall) => {
       const poolInterface = new Interface(IUniswapV3PoolStateJSON.abi) as UniswapV3PoolInterface
 
-      // Fallback token fetching when multicall fails (e.g., Base Sepolia)
-      const tokens =
-        chainId === UniverseChainId.BaseSepolia && !multicall
-          ? (
-              await Promise.all(
-                positionDetails
-                  .flatMap((details) => [details.token0, details.token1])
-                  .map((address) => fetchErc20Token({ address, chainId, provider: multicall?.provider })),
-              )
-            ).reduce<{ [key: string]: Token | undefined }>((acc, token, idx, arr) => {
-              const address = positionDetails.flatMap((d) => [d.token0, d.token1])[idx]
-              if (token) {
-                acc[address] = token
-              }
-              return acc
-            }, {})
-          : await getTokens(
-              positionDetails.flatMap((details) => [details.token0, details.token1]),
-              chainId,
-            )
+      // Fetch tokens - use standard multicall-based token fetching first
+      let tokens: { [key: string]: Token | undefined } = await getTokens(
+        positionDetails.flatMap((details) => [details.token0, details.token1]),
+        chainId,
+      )
+
+      // Fetch missing tokens before creating positions (fallback for when multicall fails or returns incomplete data)
+      const uniqueTokenAddresses = Array.from(
+        new Set(positionDetails.flatMap((details) => [details.token0, details.token1])),
+      )
+      const missingTokenAddresses = uniqueTokenAddresses.filter((addr) => !tokens[addr])
+      
+      // Fetch missing tokens if any - try multicall provider first, then RPC provider
+      if (missingTokenAddresses.length > 0) {
+        const provider = multicall?.provider ?? RPC_PROVIDERS[chainId]
+        if (provider) {
+          logger.debug('useMultiChainPositions', 'fetchPositionInfo', 'Fetching missing tokens', {
+            missingCount: missingTokenAddresses.length,
+            chainId,
+            addresses: missingTokenAddresses,
+          })
+          const fetchedTokens = await Promise.all(
+            missingTokenAddresses.map((address) => fetchErc20Token({ address, chainId, provider })),
+          )
+          fetchedTokens.forEach((token, idx) => {
+            if (token) {
+              tokens[missingTokenAddresses[idx]] = token
+            }
+          })
+        } else {
+          logger.debug('useMultiChainPositions', 'fetchPositionInfo', 'No provider available for missing token fetch', {
+            chainId,
+            missingCount: missingTokenAddresses.length,
+          })
+        }
+      }
 
       const calls: Call[] = []
       const poolPairs: [Token, Token][] = []
       const poolAddresses: string[] = []
       positionDetails.forEach((details) => {
-        const tokenA = tokens[details.token0] ?? new Token(chainId, details.token0, DEFAULT_ERC20_DECIMALS)
-        const tokenB = tokens[details.token1] ?? new Token(chainId, details.token1, DEFAULT_ERC20_DECIMALS)
+        // Ensure we have complete token data before creating positions
+        const tokenA = tokens[details.token0]
+        const tokenB = tokens[details.token1]
+        
+        // Skip positions with missing token data
+        if (!tokenA || !tokenB) {
+          logger.debug('useMultiChainPositions', 'fetchPositionInfo', 'Skipping position with missing token data', {
+            token0: details.token0,
+            token1: details.token1,
+            hasTokenA: !!tokenA,
+            hasTokenB: !!tokenB,
+            chainId,
+          })
+          return
+        }
 
         let poolAddress = poolAddressCache.get(details, chainId)
         if (!poolAddress) {

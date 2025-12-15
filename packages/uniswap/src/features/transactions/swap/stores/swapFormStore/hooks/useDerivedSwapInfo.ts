@@ -10,7 +10,8 @@ import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledCh
 import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { useOnChainCurrencyBalance } from 'uniswap/src/features/portfolio/api'
 import { getCurrencyAmount, ValueType } from 'uniswap/src/features/tokens/getCurrencyAmount'
-import { useCurrencyInfo } from 'uniswap/src/features/tokens/useCurrencyInfo'
+import { useCurrencyInfo, useCurrencyInfoWithLoading } from 'uniswap/src/features/tokens/useCurrencyInfo'
+import { getCachedCurrencyInfo } from 'uniswap/src/features/transactions/swap/form/hooks/useOnSelectCurrency'
 import { useTransactionSettingsStore } from 'uniswap/src/features/transactions/components/settings/stores/transactionSettingsStore/useTransactionSettingsStore'
 import { useUSDCValue } from 'uniswap/src/features/transactions/hooks/useUSDCPrice'
 import { usePriceUXEnabled } from 'uniswap/src/features/transactions/swap/hooks/usePriceUXEnabled'
@@ -32,15 +33,18 @@ import { buildCurrencyId } from 'uniswap/src/utils/currencyId'
  */
 function buildOnChainQuoteAdapter(
   onChainQuote: {
-    quoteAmountOut: CurrencyAmount<Currency>
+    quoteAmountIn?: CurrencyAmount<Currency>
+    quoteAmountOut?: CurrencyAmount<Currency>
     txPayload?: { to?: string; data?: string; value?: string | bigint; gasLimit?: string | bigint } | null
     route?: any | null
   },
   chainId: number | undefined,
-  amountInRaw: string | undefined,
+  amountRaw: string | undefined,
+  isExactIn: boolean,
 ): ClassicQuoteResponse {
   // Generate deterministic requestId from on-chain quote data
-  const requestId = `onchain:${chainId ?? 'unknown'}:${Date.now()}:${amountInRaw ?? '0'}:${onChainQuote.quoteAmountOut?.quotient?.toString() ?? '0'}`
+  const quoteAmount = isExactIn ? onChainQuote.quoteAmountOut : onChainQuote.quoteAmountIn
+  const requestId = `onchain:${chainId ?? 'unknown'}:${Date.now()}:${amountRaw ?? '0'}:${quoteAmount?.quotient?.toString() ?? '0'}`
 
   // Create minimal quote adapter that satisfies upstream expectations
   return {
@@ -53,8 +57,8 @@ function buildOnChainQuoteAdapter(
       gasFeeUSD: undefined,
       txFailureReasons: undefined,
       // Include minimal fields that might be accessed
-      expectedAmountIn: amountInRaw,
-      expectedAmountOut: onChainQuote.quoteAmountOut?.quotient?.toString(),
+      expectedAmountIn: isExactIn ? amountRaw : (quoteAmount?.quotient?.toString() ?? amountRaw),
+      expectedAmountOut: isExactIn ? (quoteAmount?.quotient?.toString() ?? amountRaw) : amountRaw,
     },
   } as ClassicQuoteResponse
 }
@@ -81,15 +85,28 @@ export function useDerivedSwapInfo({
     isV4HookPoolsEnabled: s.isV4HookPoolsEnabled,
   }))
 
-  const currencyInInfo = useCurrencyInfo(
+  // Use useCurrencyInfoWithLoading to check loading state and errors for fallback
+  const currencyInInfoQuery = useCurrencyInfoWithLoading(
     currencyAssetIn ? buildCurrencyId(currencyAssetIn.chainId, currencyAssetIn.address) : undefined,
     { refetch: true },
   )
 
-  const currencyOutInfo = useCurrencyInfo(
+  const currencyOutInfoQuery = useCurrencyInfoWithLoading(
     currencyAssetOut ? buildCurrencyId(currencyAssetOut.chainId, currencyAssetOut.address) : undefined,
     { refetch: true },
   )
+
+  // Fallback: If GraphQL doesn't have the token, use cached CurrencyInfo from token selection
+  // This ensures tokens appear immediately even if they're not in GraphQL database
+  const currencyInId = currencyAssetIn ? buildCurrencyId(currencyAssetIn.chainId, currencyAssetIn.address) : undefined
+  const currencyOutId = currencyAssetOut ? buildCurrencyId(currencyAssetOut.chainId, currencyAssetOut.address) : undefined
+  
+  const cachedCurrencyInInfo = currencyInId ? getCachedCurrencyInfo(currencyInId) : undefined
+  const cachedCurrencyOutInfo = currencyOutId ? getCachedCurrencyInfo(currencyOutId) : undefined
+
+  // Use GraphQL result if available, otherwise fall back to cached CurrencyInfo from selection
+  const currencyInInfo = currencyInInfoQuery.currencyInfo ?? cachedCurrencyInInfo
+  const currencyOutInfo = currencyOutInfoQuery.currencyInfo ?? cachedCurrencyOutInfo
 
   const currencyIn = currencyInInfo?.currency
   const currencyOut = currencyOutInfo?.currency
@@ -137,13 +154,14 @@ export function useDerivedSwapInfo({
 
   // Determine if we should use on-chain quotes (for Base Sepolia, Base, Polygon)
   // Use isOnChainRouterEnabled to check if the chain supports on-chain routing
+  // Supports both exact input and exact output
   const useOnChainQuote = useMemo(() => {
-    if (!chainId || !isExactIn || !currencyIn || !currencyOut || !amountSpecified) {
+    if (!chainId || !currencyIn || !currencyOut || !amountSpecified) {
       return false
     }
     // Check if on-chain router is enabled for this chain
     return isOnChainRouterEnabled(chainId as number)
-  }, [isExactIn, chainId, currencyIn, currencyOut, amountSpecified])
+  }, [chainId, currencyIn, currencyOut, amountSpecified])
 
   // Debug: track the parsed amount we will pass to the on-chain router (Base Sepolia only, non-prod)
   useEffect(() => {
@@ -175,20 +193,59 @@ export function useDerivedSwapInfo({
 
   // Use on-chain quote for eligible swaps
   // This hook uses the full on-chain router (findRoute, QuoterV2, etc.)
-  const onChainQuote = useOnChainSwapQuote({
-    tokenIn: currencyIn,
-    tokenOut: currencyOut,
-    amountIn: amountSpecified ?? undefined,
-    slippageTolerance,
-    chainId: chainId as EVMUniverseChainId | undefined,
-    recipient: account?.address,
-    enabled:
-      useOnChainQuote &&
+  // Supports both exact input and exact output
+  const onChainQuoteEnabled = useMemo(() => {
+    const enabled = useOnChainQuote &&
       !!amountSpecified &&
       JSBI.greaterThan(amountSpecified.quotient, JSBI.BigInt(0)) &&
       !!currencyIn &&
-      !!currencyOut,
+      !!currencyOut
+    
+    if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+      logger.debug('useDerivedSwapInfo', 'useDerivedSwapInfo', 'On-chain quote enabled check', {
+        chainId,
+        enabled,
+        useOnChainQuote,
+        hasAmountSpecified: !!amountSpecified,
+        amountSpecifiedRaw: amountSpecified?.quotient?.toString(),
+        hasCurrencyIn: !!currencyIn,
+        hasCurrencyOut: !!currencyOut,
+        isExactIn,
+        tokenIn: currencyIn?.symbol,
+        tokenOut: currencyOut?.symbol,
+        hasRecipient: !!account?.address,
+      })
+    }
+    
+    return enabled
+  }, [useOnChainQuote, amountSpecified, currencyIn, currencyOut, isExactIn, account?.address, chainId])
+  
+  const onChainQuote = useOnChainSwapQuote({
+    tokenIn: currencyIn,
+    tokenOut: currencyOut,
+    amountIn: isExactIn ? amountSpecified ?? undefined : undefined,
+    amountOut: !isExactIn ? amountSpecified ?? undefined : undefined,
+    slippageTolerance,
+    chainId: chainId as EVMUniverseChainId | undefined,
+    recipient: account?.address,
+    enabled: onChainQuoteEnabled,
   })
+  
+  // Debug logging for Base Sepolia
+  if (chainId === 84532) {
+    console.log('[ONCHAIN-QUOTE-HOOK] useOnChainSwapQuote result', {
+      chainId,
+      isExactIn,
+      enabled: onChainQuoteEnabled,
+      isLoading: onChainQuote.isLoading,
+      isError: onChainQuote.isError,
+      hasData: !!onChainQuote.data,
+      hasTxPayload: !!onChainQuote.data?.txPayload,
+      error: onChainQuote.error?.message,
+      amountIn: isExactIn ? amountSpecified?.toExact() : undefined,
+      amountOut: !isExactIn ? amountSpecified?.toExact() : undefined,
+    })
+  }
 
   // Use existing Trading API trade hook (disabled when using on-chain)
   // When on-chain is enabled, we skip the Trading API entirely
@@ -211,6 +268,10 @@ export function useDerivedSwapInfo({
     }
   }, [useOnChainQuote, account, amountSpecified, otherCurrency, chainId])
 
+  // For on-chain-only chains (Base Sepolia), always skip Trading API (never enable it)
+  // On-chain routing now supports both exact input and exact output
+  const shouldSkipTrade = useOnChainQuote || isOnChainOnlyChain(chainId as number | undefined)
+  
   const trade = useTrade({
     account: useOnChainQuote ? undefined : account, // Disable by passing undefined account
     amountSpecified: useOnChainQuote ? undefined : amountSpecified, // Disable by passing undefined amount
@@ -222,14 +283,20 @@ export function useDerivedSwapInfo({
     isDebouncing,
     generatePermitAsTransaction,
     isV4HookPoolsEnabled,
-    skip: useOnChainQuote || isOnChainOnlyChain(chainId as number | undefined),
+    skip: shouldSkipTrade,
   })
 
   // Merge on-chain quote with trade results
   const mergedTrade = useMemo(() => {
     // If we have a successful on-chain quote, use it instead of Trading API trade
     if (useOnChainQuote && onChainQuote.data) {
-      const { quoteAmountOut, txPayload, route: routeResult, priceImpact } = onChainQuote.data
+      const { quoteAmountIn, quoteAmountOut, txPayload, route: routeResult, priceImpact } = onChainQuote.data
+      
+      // For exact output, quoteAmountIn is the calculated input; for exact input, quoteAmountOut is the calculated output
+      const calculatedAmount = isExactIn ? quoteAmountOut : quoteAmountIn
+      const specifiedAmount = amountSpecified
+      const actualInputAmount = isExactIn ? specifiedAmount : calculatedAmount
+      const actualOutputAmount = isExactIn ? calculatedAmount : specifiedAmount
 
       // Shape helper for debugging (local)
       const shape = (x: any) => ({
@@ -250,13 +317,11 @@ export function useDerivedSwapInfo({
           'Using on-chain quote',
           {
             chainId,
-            amountInRaw: amountSpecified?.quotient?.toString(),
-            amountInExact: amountSpecified?.toExact(),
-            amountOutRaw: quoteAmountOut?.quotient?.toString?.() ?? String(quoteAmountOut?.quotient ?? quoteAmountOut),
-            amountOutExact:
-              typeof quoteAmountOut?.toExact === 'function'
-                ? quoteAmountOut?.toExact()
-                : String(quoteAmountOut ?? ''),
+            isExactIn,
+            amountInRaw: actualInputAmount?.quotient?.toString(),
+            amountInExact: actualInputAmount?.toExact(),
+            amountOutRaw: actualOutputAmount?.quotient?.toString(),
+            amountOutExact: actualOutputAmount?.toExact(),
             routeDescription: routeResult?.route ? String(routeResult.route) : undefined,
             hasRoute: !!routeResult?.route,
             txTo,
@@ -276,35 +341,41 @@ export function useDerivedSwapInfo({
       }
 
       // Create execution price (always create a valid Price object for on-chain trades)
+      // For exact input: price = output / input
+      // For exact output: price = output / input (same formula, but amounts are reversed)
       let executionPrice: Price<Currency, Currency> | undefined
-      if (amountSpecified && quoteAmountOut && amountSpecified.currency && quoteAmountOut.currency) {
+      const inputAmount = actualInputAmount
+      const outputAmount = actualOutputAmount
+      
+      if (inputAmount && outputAmount && inputAmount.currency && outputAmount.currency) {
         try {
           // Try using divide method first (preferred as it handles decimals correctly)
-          if (typeof quoteAmountOut.divide === 'function') {
-            executionPrice = quoteAmountOut.divide(amountSpecified)
+          if (typeof outputAmount.divide === 'function') {
+            executionPrice = outputAmount.divide(inputAmount)
           } else {
             // Fallback: construct Price directly from amounts
             executionPrice = new Price(
-              amountSpecified.currency,
-              quoteAmountOut.currency,
-              amountSpecified.quotient,
-              quoteAmountOut.quotient,
+              inputAmount.currency,
+              outputAmount.currency,
+              inputAmount.quotient,
+              outputAmount.quotient,
             )
           }
         } catch (error) {
           // If divide fails, construct Price directly
           try {
             executionPrice = new Price(
-              amountSpecified.currency,
-              quoteAmountOut.currency,
-              amountSpecified.quotient,
-              quoteAmountOut.quotient,
+              inputAmount.currency,
+              outputAmount.currency,
+              inputAmount.quotient,
+              outputAmount.quotient,
             )
           } catch (fallbackError) {
             // Last resort: log and leave undefined (UI will handle gracefully)
             if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
               logger.debug('useDerivedSwapInfo', 'useDerivedSwapInfo', 'Failed to create executionPrice', {
                 chainId,
+                isExactIn,
                 error: error instanceof Error ? error.message : String(error),
                 fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
               })
@@ -327,6 +398,7 @@ export function useDerivedSwapInfo({
         onChainQuote.data,
         chainId,
         amountSpecified?.quotient?.toString(),
+        isExactIn,
       )
 
       // Calculate min/max amounts with slippage tolerance
@@ -413,8 +485,8 @@ export function useDerivedSwapInfo({
       }
 
       const onChainTrade = {
-        inputAmount: amountSpecified!,
-        outputAmount: quoteAmountOut,
+        inputAmount: actualInputAmount!,
+        outputAmount: actualOutputAmount!,
         executionPrice,
         priceImpact: priceImpactPercent,
         routing: TradingApi.Routing.CLASSIC,
@@ -431,8 +503,8 @@ export function useDerivedSwapInfo({
               Number(slippagePercent.asFraction.denominator.toString())
             : 0,
         // Min/max amounts (required for analytics)
-        minAmountOut: minAmountOut ?? quoteAmountOut,
-        maxAmountIn: maxAmountIn ?? amountSpecified,
+        minAmountOut: minAmountOut ?? actualOutputAmount,
+        maxAmountIn: maxAmountIn ?? actualInputAmount,
         // Tax fields (default to 0 for on-chain trades)
         inputTax: new Percent(0, 100),
         outputTax: new Percent(0, 100),
@@ -548,6 +620,22 @@ export function useDerivedSwapInfo({
     }
   }, [tokenInBalance, tokenOutBalance])
 
+  const finalOnChainQuote = useOnChainQuote && onChainQuote.data ? onChainQuote.data : undefined
+  
+  // Debug logging for Base Sepolia
+  if (chainId === 84532) {
+    console.log('[DERIVED-SWAP-INFO] Final derivedSwapInfo', {
+      chainId,
+      hasTrade: !!mergedTrade,
+      useOnChainQuote,
+      hasOnChainQuoteData: !!onChainQuote.data,
+      hasFinalOnChainQuote: !!finalOnChainQuote,
+      onChainQuoteHasTxPayload: !!finalOnChainQuote?.txPayload,
+      onChainQuoteKeys: finalOnChainQuote ? Object.keys(finalOnChainQuote) : [],
+      isExactIn,
+    })
+  }
+  
   return useMemo(() => {
     return {
       chainId,
@@ -565,7 +653,7 @@ export function useDerivedSwapInfo({
       txId,
       outputAmountUserWillReceive: displayableTrade?.quoteOutputAmountUserWillReceive,
       // Store on-chain quote data for transaction building
-      onChainQuote: useOnChainQuote && onChainQuote.data ? onChainQuote.data : undefined,
+      onChainQuote: finalOnChainQuote,
     }
   }, [
     chainId ?? null,

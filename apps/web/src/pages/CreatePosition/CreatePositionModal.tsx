@@ -44,6 +44,10 @@ import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 import { isSignerMnemonicAccountDetails } from 'uniswap/src/features/wallet/types/AccountDetails'
 import { NumberType } from 'utilities/src/format/types'
 import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
+import { useRestrictedTokenAllowlistChecks } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenAllowlistChecks'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { Address } from 'viem'
+import { FeeAmount } from '@uniswap/v3-sdk'
 
 export function CreatePositionModal({
   formattedAmounts,
@@ -122,6 +126,40 @@ export function CreatePositionModal({
   const { isSignedInWithPasskey, isSessionAuthenticated, needsPasskeySignin } = useGetPasskeyAuthStatus(
     connectedAccount.connector?.id,
   )
+
+  // Use the new consolidated hook for allowlist checks
+  const evmChainId = chainId as EVMUniverseChainId | undefined
+  const walletAddress = account?.address as Address | undefined
+  const feeAmount = fee?.isDynamic ? undefined : (fee?.feeAmount as FeeAmount | undefined)
+
+  const allowlistChecks = useRestrictedTokenAllowlistChecks({
+    account: walletAddress,
+    chainId: evmChainId,
+    tokens: {
+      tokenA: token0,
+      tokenB: token1,
+    },
+    feeAmount,
+    flow: 'liquidity',
+    enabled: !!token0 && !!token1 && !!feeAmount && !!evmChainId && !!walletAddress,
+  })
+
+  const hasWhitelistRestriction = allowlistChecks.isBlocked
+
+  // Build warning message from allowlist checks
+  const whitelistWarningMessage = useMemo(() => {
+    if (allowlistChecks.blockingWarnings.length === 0 && allowlistChecks.nonBlockingWarnings.length === 0) {
+      return undefined
+    }
+
+    // Group warnings by subject type for better messaging
+    const messages: string[] = []
+    for (const warning of [...allowlistChecks.blockingWarnings, ...allowlistChecks.nonBlockingWarnings]) {
+      messages.push(warning.message)
+    }
+
+    return messages.join(' ')
+  }, [allowlistChecks])
 
   const onSuccess = useCallback(() => {
     setSteps([])
@@ -371,6 +409,20 @@ export function CreatePositionModal({
           </Flex>
           <Flex gap="$spacing12">
             <ErrorCallout errorMessage={transactionError} onPress={refetch} />
+            {/* Whitelist restriction warning */}
+            {(hasWhitelistRestriction || allowlistChecks.nonBlockingWarnings.length > 0) && (
+              <ErrorCallout
+                errorMessage={true}
+                isWarning={!hasWhitelistRestriction}
+                title={t('position.whitelistRestriction.title')}
+                description={
+                  whitelistWarningMessage ||
+                  (allowlistChecks.debug.restrictedTokens.length > 0
+                    ? `Checking allowlist status for restricted token${allowlistChecks.debug.restrictedTokens.length > 1 ? 's' : ''}: ${allowlistChecks.debug.restrictedTokens.map((t) => t.symbol || t.address).join(', ')}`
+                    : t('position.whitelistRestriction.message', { tokenSymbol: '' }))
+                }
+              />
+            )}
             {/* Show pool-not-found message for on-chain V3 flows */}
             {typeof transactionError === 'string' && 
              transactionError.includes('pool') && 
@@ -432,13 +484,15 @@ export function CreatePositionModal({
                 size="large"
                 variant="branded"
                 onPress={handleCreate}
-                isDisabled={!txInfo?.action}
+                isDisabled={!txInfo?.action || hasWhitelistRestriction}
                 fill={false}
                 icon={needsPasskeySignin ? <Passkey size="$icon.24" /> : undefined}
               >
-                {isSignedInWithPasskey && isSessionAuthenticated
-                  ? t('position.create.confirm')
-                  : t('common.button.create')}
+                {hasWhitelistRestriction
+                  ? t('position.whitelistRestriction.button')
+                  : isSignedInWithPasskey && isSessionAuthenticated
+                    ? t('position.create.confirm')
+                    : t('common.button.create')}
               </Button>
             )}
           </>

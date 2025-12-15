@@ -6,6 +6,7 @@ import {
   ARB,
   AUSD_MONAD,
   BUSD_BSC,
+  CPRV1_BASE_SEPOLIA,
   DAI,
   DAI_ARBITRUM_ONE,
   DAI_AVALANCHE,
@@ -162,6 +163,7 @@ export const COMMON_BASES: ChainCurrencyList = {
     EURC_BASE_SEPOLIA,
     FEUR_BASE_SEPOLIA,
     FUSDT_BASE_SEPOLIA,
+    CPRV1_BASE_SEPOLIA,
   ].map(buildPartialCurrencyInfo),
 
   [UniverseChainId.Soneium]: [

@@ -44,7 +44,7 @@ export const useTabsContent = (): TabsSection[] => {
     {
       title: t('common.trade'),
       href: '/swap',
-      isActive: pathname.startsWith('/swap') || pathname.startsWith('/limit') || pathname.startsWith('/send'),
+      isActive: pathname.startsWith('/swap') || /* pathname.startsWith('/limit') || */ pathname.startsWith('/send'),
       icon: <CoinConvert color="$accent1" size="$icon.20" />,
       items: [
         {
@@ -53,28 +53,28 @@ export const useTabsContent = (): TabsSection[] => {
           href: '/swap',
           internal: true,
         },
-        {
-          label: t('swap.limit'),
-          icon: <Limit fill={colors.neutral2.val} />,
-          href: '/limit',
-          internal: true,
-        },
-        {
-          label: t('common.buy.label'),
-          icon: <CreditCard size="$icon.24" color="$neutral2" />,
-          href: '/buy',
-          internal: true,
-        },
-        ...(isFiatOffRampEnabled
-          ? [
-              {
-                label: t('common.sell.label'),
-                icon: <ReceiveAlt fill={colors.neutral2.val} size={24} transform="rotate(180deg)" />,
-                href: '/sell',
-                internal: true,
-              },
-            ]
-          : []),
+        // {
+        //   label: t('swap.limit'),
+        //   icon: <Limit fill={colors.neutral2.val} />,
+        //   href: '/limit',
+        //   internal: true,
+        // },
+        // {
+        //   label: t('common.buy.label'),
+        //   icon: <CreditCard size="$icon.24" color="$neutral2" />,
+        //   href: '/buy',
+        //   internal: true,
+        // },
+        // ...(isFiatOffRampEnabled
+        //   ? [
+        //       {
+        //         label: t('common.sell.label'),
+        //         icon: <ReceiveAlt fill={colors.neutral2.val} size={24} transform="rotate(180deg)" />,
+        //         href: '/sell',
+        //         internal: true,
+        //       },
+        //     ]
+        //   : []),
       ],
     },
     {

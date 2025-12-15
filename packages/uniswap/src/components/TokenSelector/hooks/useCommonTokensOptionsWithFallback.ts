@@ -62,9 +62,9 @@ export function useCommonTokensOptionsWithFallback({
       
       return {
         data: finalData,
-        error: shouldFallback ? undefined : error,
-        refetch,
-        loading,
+      error: shouldFallback ? undefined : error,
+      refetch,
+      loading,
       }
     },
     [commonBases, commonBasesTokenOptions, data, error, loading, refetch, shouldFallback],

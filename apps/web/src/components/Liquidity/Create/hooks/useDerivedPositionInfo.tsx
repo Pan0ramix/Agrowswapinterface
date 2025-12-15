@@ -12,6 +12,7 @@ import {
   PositionState,
 } from 'components/Liquidity/Create/types'
 import { getCurrencyWithWrap, getTokenOrZeroAddress, validateCurrencyInput } from 'components/Liquidity/utils/currency'
+import { areCurrenciesEqual } from 'uniswap/src/utils/currencyId'
 import { getFeeTierKey, isDynamicFeeTier } from 'components/Liquidity/utils/feeTiers'
 import { getSDKPoolFromPoolInformation, getV4SDKPoolFromRestPool } from 'components/Liquidity/utils/parseFromRest'
 import {
@@ -68,8 +69,9 @@ export function getSortedCurrenciesForProtocol({
   const wrappedB = getCurrencyWithWrap(b, protocolVersion)
   const sorted = getSortedCurrencies(wrappedA, wrappedB)
 
-  const currency0 = !sorted.TOKEN0 || wrappedA?.equals(sorted.TOKEN0) ? a : b
-  const currency1 = !sorted.TOKEN1 || wrappedB?.equals(sorted.TOKEN1) ? b : a
+  // Use areCurrenciesEqual for safer comparison that works even if Currency objects don't have equals method
+  const currency0 = !sorted.TOKEN0 || (wrappedA && sorted.TOKEN0 && areCurrenciesEqual(wrappedA, sorted.TOKEN0)) ? a : b
+  const currency1 = !sorted.TOKEN1 || (wrappedB && sorted.TOKEN1 && areCurrenciesEqual(wrappedB, sorted.TOKEN1)) ? b : a
 
   return { TOKEN0: currency0, TOKEN1: currency1 }
 }

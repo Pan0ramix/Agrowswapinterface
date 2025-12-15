@@ -24,6 +24,7 @@ import {
 } from 'uniswap/src/features/transactions/types/transactionRequests'
 import { isWebApp } from 'utilities/src/platform'
 import { Prettify } from 'viem'
+import { logger } from 'utilities/src/logger/logger'
 
 export type SwapTxAndGasInfo =
   | ClassicSwapTxAndGasInfo
@@ -396,8 +397,12 @@ export function validateSwapTxContextWithReasons(swapTxContext: SwapTxAndGasInfo
               missingFields,
               hasTrade: !!swapTxContext.trade,
               hasTxRequests: !!txRequests,
+              txRequestsLength: txRequests?.length ?? 0,
               hasGasFee: !!gasFee,
               hasApproveTxRequest: !!approveTxRequest,
+              // Add onChainQuote info if available in swapTxContext
+              hasOnChainQuote: !!(swapTxContext as any).onChainQuote,
+              onChainQuoteHasTxPayload: !!(swapTxContext as any).onChainQuote?.txPayload,
             })
           }
         }

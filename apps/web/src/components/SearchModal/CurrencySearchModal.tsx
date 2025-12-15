@@ -1,7 +1,7 @@
 import { Currency } from '@uniswap/sdk-core'
 import { SwitchNetworkAction } from 'components/Popups/types'
 import { CurrencySearch } from 'components/SearchModal/CurrencySearch'
-import { memo, useEffect } from 'react'
+import { memo } from 'react'
 import { Modal } from 'uniswap/src/components/modals/Modal'
 import {
   TOKEN_SELECTOR_WEB_MAX_WIDTH,
@@ -35,17 +35,6 @@ export default memo(function CurrencySearchModal({
   selectedCurrency,
   otherSelectedCurrency,
 }: CurrencySearchModalProps) {
-  useEffect(() => {
-    window.console.error('[CurrencySearchModal] isOpen changed', { isOpen })
-    console.error('[CurrencySearchModal] isOpen changed', { isOpen })
-    if (isOpen) {
-      window.console.error('[CurrencySearchModal] Modal opened')
-      console.error('[CurrencySearchModal] Modal opened')
-    } else {
-      window.console.error('[CurrencySearchModal] Modal closed')
-      console.error('[CurrencySearchModal] Modal closed')
-    }
-  }, [isOpen])
 
   return (
     <Modal

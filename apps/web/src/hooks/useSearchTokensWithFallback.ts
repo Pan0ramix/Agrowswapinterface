@@ -3,14 +3,22 @@ import { Token } from '@uniswap/sdk-core'
 import { GqlResult } from '@universe/api'
 import { PublicClient, erc20Abi } from 'viem'
 import { useChainId } from 'wagmi'
+import { useWagmiStoreReady } from './useWagmiStoreReady'
 
 /**
  * Safe wrapper for useChainId that handles cases where wagmi store isn't ready
  * Returns undefined if wagmi store isn't initialized
+ * Checks store readiness before calling hook to prevent React dependency comparison errors
  */
 function useSafeChainId(): number | undefined {
+  const isStoreReady = useWagmiStoreReady()
+  
+  // Hook must be called unconditionally (React rules)
+  // But we check store readiness to handle errors gracefully
   try {
-    return useChainId()
+    const chainId = useChainId()
+    // If store isn't ready, return undefined to ensure stable return
+    return isStoreReady ? chainId : undefined
   } catch (error) {
     // If wagmi store isn't ready, return undefined
     // This can happen during SSR or when wagmi provider isn't set up yet
@@ -117,13 +125,6 @@ export function useSearchTokensWithFallback({
   // Use chainFilter if provided, otherwise fall back to active chain from wallet
   // Only use on-chain fallback when we have a specific chain (either from filter or wallet)
   const effectiveChainFilter = chainFilter ?? activeChainId
-  
-  console.log('[useSearchTokensWithFallback] Chain detection', {
-    chainFilter,
-    wagmiChainId,
-    activeChainId,
-    effectiveChainFilter,
-  })
 
   // First, try the API search
   const apiSearchResult = useSearchTokens({

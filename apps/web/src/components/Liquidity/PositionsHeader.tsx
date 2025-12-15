@@ -36,7 +36,7 @@ type PositionsHeaderProps = {
   onStatusChange: (toggledStatus: PositionStatus) => void
 }
 
-const PROTOCOL_VERSIONS = [ProtocolVersion.V4, ProtocolVersion.V3, ProtocolVersion.V2]
+const PROTOCOL_VERSIONS = [ProtocolVersion.V3] // Agroswap only supports V3, hide V2 and V4
 
 export function PositionsHeader({
   showFilters = true,
@@ -143,7 +143,7 @@ export function PositionsHeader({
                 flexGrow={1}
                 {...ClickableTamaguiStyle}
                 onPress={() => {
-                  navigate('/positions/create/v4')
+                  navigate('/positions/create/v3')
                 }}
               >
                 <Plus size={20} color="$surface1" />

@@ -79,6 +79,9 @@ function useSwapTransactionRequestInfo({
   // Use typed access now that DerivedSwapInfo includes onChainQuote
   const onChainQuote = derivedSwapInfo.onChainQuote
   const onChainTxPayload = onChainQuote?.txPayload
+  // For exact input: quoteAmountOut is available
+  // For exact output: quoteAmountIn is available
+  const hasOnChainQuoteAmount = onChainQuote?.quoteAmountOut || onChainQuote?.quoteAmountIn
 
   // Comprehensive logging for on-chain quote data flow (Base Sepolia only, dev mode)
   if (process.env.NODE_ENV !== 'production' && derivedSwapInfo.chainId === 84532) {
@@ -186,8 +189,8 @@ function useSwapTransactionRequestInfo({
     isOnChainOnlyChain(derivedSwapInfo.chainId) &&
     !onChainTxPayload &&
     !swapQuoteResponse &&
-    // Only early return if we don't have onChainQuote at all, or if onChainQuote exists but is missing txPayload
-    (!onChainQuote || (onChainQuote && !onChainTxPayload))
+    // Only early return if we don't have onChainQuote at all, or if onChainQuote exists but is missing txPayload or quote amount
+    (!onChainQuote || (onChainQuote && (!onChainTxPayload || !hasOnChainQuoteAmount)))
 
   // Process response (always compute, even if we might return early)
   const result = processSwapResponse({
@@ -241,8 +244,21 @@ function useSwapTransactionRequestInfo({
 
   // CRITICAL: Prepare txRequest data - useMemo always called unconditionally
   // Normalize to null to ensure stable references
+  // For exact input: quoteAmountOut is available
+  // For exact output: quoteAmountIn is available
   const onChainTxRequestData = useMemo(() => {
-    if (!onChainTxPayload || !onChainQuote?.quoteAmountOut) {
+    if (!onChainTxPayload || !hasOnChainQuoteAmount) {
+      // Debug logging for Base Sepolia
+      if (derivedSwapInfo.chainId === 84532) {
+        console.log('[TX-REQUEST-DATA] onChainTxRequestData is null', {
+          chainId: derivedSwapInfo.chainId,
+          hasOnChainTxPayload: !!onChainTxPayload,
+          hasOnChainQuoteAmount,
+          hasQuoteAmountOut: !!onChainQuote?.quoteAmountOut,
+          hasQuoteAmountIn: !!onChainQuote?.quoteAmountIn,
+          onChainQuoteKeys: onChainQuote ? Object.keys(onChainQuote) : [],
+        })
+      }
       return null
     }
     // Normalize value to hex string - handle both bigint and string/undefined
@@ -254,13 +270,28 @@ function useSwapTransactionRequestInfo({
           ? valueRaw
           : '0x0'
 
-    return {
+    const txRequest = {
       to: onChainTxPayload.to,
       data: onChainTxPayload.data,
       value: normalizedValue,
       chainId: derivedSwapInfo.chainId,
     } as providers.TransactionRequest | null
-  }, [onChainTxPayload, onChainQuote?.quoteAmountOut, derivedSwapInfo.chainId])
+    
+    // Debug logging for Base Sepolia
+    if (derivedSwapInfo.chainId === 84532) {
+      console.log('[TX-REQUEST-DATA] onChainTxRequestData created', {
+        chainId: derivedSwapInfo.chainId,
+        hasTxRequest: !!txRequest,
+        txTo: txRequest?.to,
+        txDataLen: (txRequest?.data as string | undefined)?.length,
+        txValue: txRequest?.value,
+        hasQuoteAmountOut: !!onChainQuote?.quoteAmountOut,
+        hasQuoteAmountIn: !!onChainQuote?.quoteAmountIn,
+      })
+    }
+    
+    return txRequest
+  }, [onChainTxPayload, onChainQuote?.quoteAmountOut, onChainQuote?.quoteAmountIn, derivedSwapInfo.chainId])
 
   // CRITICAL: publicClient useMemo always called unconditionally
   const publicClient = useMemo(() => {
@@ -666,7 +697,17 @@ function useSwapTransactionRequestInfo({
 
   // CRITICAL: Conditional return happens AFTER all hooks are called
   // Use on-chain tx request if available, otherwise fall back to Trading API result
-  if (onChainTxRequestData && onChainQuote?.quoteAmountOut) {
+  if (onChainTxRequestData && hasOnChainQuoteAmount) {
+    // Always log for Base Sepolia to debug the issue
+    if (derivedSwapInfo.chainId === 84532) {
+      console.log('[TX-REQUEST-RETURN] Using on-chain tx request', {
+        chainId: derivedSwapInfo.chainId,
+        hasOnChainTxRequestData: !!onChainTxRequestData,
+        hasOnChainQuoteAmount,
+        txTo: onChainTxRequestData?.to,
+        txDataLen: (onChainTxRequestData?.data as string | undefined)?.length,
+      })
+    }
     if (process.env.NODE_ENV !== 'production' && derivedSwapInfo.chainId === 84532) {
       // Safe conversion for logging - guard against undefined quotient
       const quoteAmountOut = onChainQuote.quoteAmountOut

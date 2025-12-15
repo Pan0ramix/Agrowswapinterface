@@ -149,23 +149,6 @@ export function TokenSelectorContent({
   const onSelectCurrencyCallback = useCallback(
     // eslint-disable-next-line max-params
     (currencyInfo: CurrencyInfo, section: OnchainItemSection<TokenSelectorOption>, index: number): void => {
-      window.console.error('[TokenSelector] onSelectCurrencyCallback called', {
-        currency: {
-          address: currencyInfo.currency.isToken ? currencyInfo.currency.address : 'native',
-          symbol: currencyInfo.currency.symbol,
-          chainId: currencyInfo.currency.chainId,
-        },
-        section: section.sectionKey,
-        index,
-      })
-      console.error('[TokenSelector] onSelectCurrencyCallback called', {
-        currency: {
-          address: currencyInfo.currency.isToken ? currencyInfo.currency.address : 'native',
-          symbol: currencyInfo.currency.symbol,
-          chainId: currencyInfo.currency.chainId,
-        },
-      })
-      
       const searchContext: SearchContext = {
         category: section.sectionKey,
         query: debouncedSearchFilter ?? undefined,
@@ -195,22 +178,6 @@ export function TokenSelectorContent({
 
       const allowCrossChainPair =
         isChainedActionsEnabled || section.sectionKey === OnchainItemSectionName.BridgingTokens
-
-      window.console.error('[TokenSelector] Calling onSelectCurrency', {
-        currency: {
-          address: currencyInfo.currency.isToken ? currencyInfo.currency.address : 'native',
-          symbol: currencyInfo.currency.symbol,
-          chainId: currencyInfo.currency.chainId,
-        },
-        hasOnSelectCurrency: !!onSelectCurrency,
-      })
-      console.error('[TokenSelector] Calling onSelectCurrency', {
-        currency: {
-          address: currencyInfo.currency.isToken ? currencyInfo.currency.address : 'native',
-          symbol: currencyInfo.currency.symbol,
-          chainId: currencyInfo.currency.chainId,
-        },
-      })
       
       try {
         onSelectCurrency({
@@ -219,11 +186,11 @@ export function TokenSelectorContent({
           allowCrossChainPair,
           isPreselectedAsset: false,
         })
-        window.console.error('[TokenSelector] onSelectCurrency call completed')
-        console.error('[TokenSelector] onSelectCurrency call completed')
       } catch (error) {
-        window.console.error('[TokenSelector] Error calling onSelectCurrency', error)
-        console.error('[TokenSelector] Error calling onSelectCurrency', error)
+        // Only log actual errors, not successful completions
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('[TokenSelector] Error calling onSelectCurrency', error)
+        }
         throw error
       }
     },

@@ -32,10 +32,10 @@ export function useAllCommonBaseCurrencies(): GqlResult<CurrencyInfo[]> {
   return useMemo(
     () => {
       return {
-        data: result?.data ?? [],
-        error: result?.error,
-        refetch: result?.refetch,
-        loading: result?.loading ?? false,
+      data: result?.data ?? [],
+      error: result?.error,
+      refetch: result?.refetch,
+      loading: result?.loading ?? false,
       }
     },
     [result],

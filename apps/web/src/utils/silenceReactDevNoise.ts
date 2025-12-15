@@ -35,6 +35,19 @@ const CLOUDFLARE_DEV_NOISE_PATTERNS = [
   /Failed to fetch dynamically imported module.*Chrome/,
 ]
 
+const WAGMI_INIT_NOISE_PATTERNS = [
+  // Wagmi store initialization errors - these are harmless and resolve once store is ready
+  'areHookInputsEqual',
+  'Cannot read properties of undefined (reading \'length\')',
+  /areHookInputsEqual[\s\S]*length/,
+  /Wagmi store not ready/,
+  /useChainId failed/,
+  /useAccountWagmi failed/,
+  /useSafeChainId/,
+  /useSafeAccount/,
+  /useSafeWagmiHooks/,
+]
+
 export function silenceReactDevNoise() {
   if (process.env.NODE_ENV !== 'development') return
 
@@ -82,6 +95,18 @@ export function silenceReactDevNoise() {
         })) {
           return true
         }
+        // Check for Wagmi initialization noise
+        if (WAGMI_INIT_NOISE_PATTERNS.some(pattern => {
+          if (typeof pattern === 'string') {
+            return errorText.includes(pattern)
+          }
+          if (pattern instanceof RegExp) {
+            return pattern.test(errorText)
+          }
+          return false
+        })) {
+          return true
+        }
       }
 
       // Check objects with stack property
@@ -115,6 +140,18 @@ export function silenceReactDevNoise() {
             }
             // Check for Cloudflare/Miniflare dev noise
             if (CLOUDFLARE_DEV_NOISE_PATTERNS.some(pattern => {
+              if (typeof pattern === 'string') {
+                return jsonStr.includes(pattern)
+              }
+              if (pattern instanceof RegExp) {
+                return pattern.test(jsonStr)
+              }
+              return false
+            })) {
+              return true
+            }
+            // Check for Wagmi initialization noise
+            if (WAGMI_INIT_NOISE_PATTERNS.some(pattern => {
               if (typeof pattern === 'string') {
                 return jsonStr.includes(pattern)
               }

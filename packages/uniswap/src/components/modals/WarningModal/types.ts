@@ -50,6 +50,7 @@ export enum WarningLabel {
   ViewOnlyAccount = 'view_only_account',
   NetworkError = 'network_error',
   BlockedToken = 'blocked_token',
+  TokenWhitelistRestricted = 'token_whitelist_restricted',
   NoQuotesFound = 'no_quotes_found',
 }
 

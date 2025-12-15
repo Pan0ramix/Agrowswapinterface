@@ -44,7 +44,7 @@ const BASE_SEPOLIA_FEUR = new Token(
 const BASE_SEPOLIA_FUSDT = new Token(
   UniverseChainId.BaseSepolia,
   '0xf4094ba16Bc9Ee080a8bFb201bCCC3cc23892C7B',
-  6,
+  18, // Fixed: Contract has 18 decimals, not 6 (was causing 1e12x mismatch)
   'FUSDT',
   'FakeUSDT',
 )

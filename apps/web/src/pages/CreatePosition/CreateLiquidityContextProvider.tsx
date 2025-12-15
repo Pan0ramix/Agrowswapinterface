@@ -38,7 +38,7 @@ const DEFAULT_POSITION_STATE: PositionState = {
   fee: undefined,
   hook: undefined,
   userApprovedHook: undefined,
-  protocolVersion: ProtocolVersion.V4,
+  protocolVersion: ProtocolVersion.V3, // Agroswap only supports V3
 }
 
 // Combined state interface
@@ -150,7 +150,19 @@ export function CreateLiquidityContextProvider({
   const [positionState, setPositionState] = useState<PositionState>(() => ({
     ...DEFAULT_POSITION_STATE,
     ...initialPositionState,
+    // Agroswap only supports V3 - force protocol version to V3
+    protocolVersion: ProtocolVersion.V3,
   }))
+  
+  // Ensure protocol version is always V3 (Agroswap only supports V3)
+  useEffect(() => {
+    if (positionState.protocolVersion !== ProtocolVersion.V3) {
+      setPositionState((prev) => ({
+        ...prev,
+        protocolVersion: ProtocolVersion.V3,
+      }))
+    }
+  }, [positionState.protocolVersion])
   // Use URL step as source of truth (always defined now with default)
   const step = initialFlowStep
   const [currentTransactionStep, setCurrentTransactionStep] = useState<
@@ -253,7 +265,7 @@ export function CreateLiquidityContextProvider({
   const reset = useEvent(() => {
     setPositionState({
       ...DEFAULT_POSITION_STATE,
-      protocolVersion: positionState.protocolVersion,
+      protocolVersion: ProtocolVersion.V3, // Agroswap only supports V3
     })
     setCurrencyInputs({
       tokenA: defaultInitialToken,

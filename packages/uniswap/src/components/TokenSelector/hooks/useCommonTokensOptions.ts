@@ -77,10 +77,10 @@ export function useCommonTokensOptions({
   return useMemo(
     () => {
       return {
-        data: filteredCommonBaseTokenOptions,
-        refetch,
-        error: error || undefined,
-        loading: loadingPorfolioBalancesById || loadingCommonBaseCurrencies,
+      data: filteredCommonBaseTokenOptions,
+      refetch,
+      error: error || undefined,
+      loading: loadingPorfolioBalancesById || loadingCommonBaseCurrencies,
       }
     },
     [error, loadingCommonBaseCurrencies, loadingPorfolioBalancesById, filteredCommonBaseTokenOptions, refetch],

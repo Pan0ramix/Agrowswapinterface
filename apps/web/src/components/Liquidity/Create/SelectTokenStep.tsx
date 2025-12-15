@@ -56,6 +56,7 @@ import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
 import { FeePoolSelectAction } from 'uniswap/src/features/telemetry/types'
 import { useCurrencyInfo } from 'uniswap/src/features/tokens/useCurrencyInfo'
 import { areCurrenciesEqual, currencyId } from 'uniswap/src/utils/currencyId'
+import { buildCurrencyInfo } from 'uniswap/src/features/dataApi/utils/buildCurrency'
 import { NumberType } from 'utilities/src/format/types'
 import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
 import { isV4UnsupportedChain } from 'utils/networkSupportsV4'
@@ -257,12 +258,6 @@ export function SelectTokensStep({
   const token1 = currencyInputs.tokenB
   const [currencySearchInputState, setCurrencySearchInputState] = useState<'tokenA' | 'tokenB' | undefined>(undefined)
 
-  // Log when currencySearchInputState changes
-  useEffect(() => {
-    window.console.error('[SelectTokenStep] currencySearchInputState changed', { currencySearchInputState })
-    console.error('[SelectTokenStep] currencySearchInputState changed', { currencySearchInputState })
-    console.log('[SelectTokenStep] currencySearchInputState changed (console.log)', { currencySearchInputState })
-  }, [currencySearchInputState])
   const [isShowMoreFeeTiersEnabled, toggleShowMoreFeeTiersEnabled] = useReducer((state) => !state, false)
 
   const isToken0Unsupported = isUnsupportedLPChain(token0?.chainId, protocolVersion)
@@ -349,8 +344,8 @@ export function SelectTokensStep({
         })
         setCurrencyInputs((prevState) => {
           const newState = {
-            ...prevState,
-            [otherInputState]: undefined,
+          ...prevState,
+          [otherInputState]: undefined,
             [currentSearchState]: currency,
           }
           console.log('[SelectTokenStep] setCurrencyInputs (equal currencies)', {
@@ -377,8 +372,8 @@ export function SelectTokensStep({
         })
         setCurrencyInputs((prevState) => {
           const newState = {
-            ...prevState,
-            [otherInputState]: undefined,
+          ...prevState,
+          [otherInputState]: undefined,
             [currentSearchState]: currency,
           }
           console.log('[SelectTokenStep] setCurrencyInputs (chain mismatch)', {
@@ -411,7 +406,7 @@ export function SelectTokensStep({
           })
           setCurrencyInputs((prevState) => {
             const newState = {
-              ...prevState,
+            ...prevState,
               [currentSearchState]: currency,
             }
             console.log('[SelectTokenStep] setCurrencyInputs (normal flow)', {
@@ -637,7 +632,7 @@ export function SelectTokensStep({
                   <Flex row flex={1} flexBasis={0} $md={{ flexBasis: 'auto' }}>
                     <CurrencySelector
                       loading={loadingA}
-                      currencyInfo={token0CurrencyInfo}
+                      currencyInfo={token0CurrencyInfo || (token0 ? buildCurrencyInfo({ currency: token0, currencyId: currencyId(token0), logoUrl: undefined, safetyInfo: undefined }) : undefined)}
                       onPress={() => {
                         setCurrencySearchInputState('tokenA')
                       }}
@@ -646,7 +641,7 @@ export function SelectTokensStep({
                   <Flex row flex={1} flexBasis={0} $md={{ flexBasis: 'auto' }}>
                     <CurrencySelector
                       loading={loadingB}
-                      currencyInfo={token1CurrencyInfo}
+                      currencyInfo={token1CurrencyInfo || (token1 ? buildCurrencyInfo({ currency: token1, currencyId: currencyId(token1), logoUrl: undefined, safetyInfo: undefined }) : undefined)}
                       onPress={() => {
                         setCurrencySearchInputState('tokenB')
                       }}

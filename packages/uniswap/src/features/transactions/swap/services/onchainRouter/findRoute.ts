@@ -31,7 +31,8 @@ export interface RouteResult {
  * 
  * @param tokenIn - Input token
  * @param tokenOut - Output token
- * @param amountIn - Input amount
+ * @param amountIn - Input amount (for exact input)
+ * @param amountOut - Output amount (for exact output)
  * @param chainId - Chain ID
  * @param publicClient - Viem public client
  * @param fees - Fee tiers to try (default: [500, 3000, 10000])
@@ -40,11 +41,17 @@ export interface RouteResult {
 export async function findRoute(
   tokenIn: Currency,
   tokenOut: Currency,
-  amountIn: CurrencyAmount<Currency>,
+  amountIn: CurrencyAmount<Currency> | undefined,
+  amountOut: CurrencyAmount<Currency> | undefined,
   chainId: EVMUniverseChainId,
   publicClient: PublicClient,
   fees: FeeAmount[] = [FeeAmount.LOWEST, FeeAmount.LOW, FeeAmount.MEDIUM, FeeAmount.HIGH],
 ): Promise<RouteResult | null> {
+  const isExactOut = !!amountOut && !amountIn
+  const amount = amountIn || amountOut
+  if (!amount) {
+    return null
+  }
   try {
     const rpcUrl =
       (publicClient as any)?.__agroswapEffectiveRpcUrl ?? publicClient?.transport?.config?.url
@@ -100,6 +107,8 @@ export async function findRoute(
           const validated = await validateRouteWithQuoter(
             directRoute,
             amountIn,
+            amountOut,
+            tokenIn,
             tokenOut,
             chainId,
             publicClient,
@@ -112,13 +121,19 @@ export async function findRoute(
               tokenOut: tokenOut.symbol,
               chainId,
               fee,
-              amountIn: amountIn.toExact(),
-              amountOut: validated.amountOutCurrency.toExact(),
+              isExactOut,
+              amountIn: amountIn?.toExact() ?? validated.amountInCurrency?.toExact(),
+              amountOut: amountOut?.toExact() ?? validated.amountOutCurrency?.toExact(),
             })
+            const finalAmountIn = validated.amountInCurrency || amountIn
+            const finalAmountOut = validated.amountOutCurrency || amountOut
+            if (!finalAmountIn || !finalAmountOut) {
+              continue // Try next fee
+            }
             return {
               route: validated,
-              amountIn,
-              amountOut: validated.amountOutCurrency,
+              amountIn: finalAmountIn,
+              amountOut: finalAmountOut,
             }
           }
         }
@@ -129,7 +144,7 @@ export async function findRoute(
 
     // Step 2: Validate routes with QuoterV2 (in parallel for performance)
     const validationPromises = candidateRoutes.map((route) =>
-      validateRouteWithQuoter(route, amountIn, tokenOut, chainId, publicClient, rpcLabel, rpcOrigin),
+      validateRouteWithQuoter(route, amountIn, amountOut, tokenIn, tokenOut, chainId, publicClient, rpcLabel, rpcOrigin),
     )
 
     const validatedRoutes = (await Promise.all(validationPromises)).filter(
@@ -220,8 +235,9 @@ export async function findRoute(
           tokenOut: h.tokenOut.symbol,
           fee: h.fee,
         })),
-        amountIn: amountIn.toExact(),
-        amountOut: bestRoute.amountOutCurrency.toExact(),
+        isExactOut,
+        amountIn: amountIn?.toExact() ?? bestRoute.amountInCurrency?.toExact(),
+        amountOut: amountOut?.toExact() ?? bestRoute.amountOutCurrency?.toExact(),
         rpcLabel,
         rpcOrigin,
       })
@@ -231,10 +247,19 @@ export async function findRoute(
     // Price impact = (expected - actual) / expected * 100
     // For now, we'll skip this calculation as it requires additional data
 
+    // For exact output, bestRoute.amountInCurrency is calculated; for exact input, bestRoute.amountOutCurrency is calculated
+    // Ensure we always have both amounts from the validated route
+    const finalAmountIn = bestRoute.amountInCurrency || amountIn
+    const finalAmountOut = bestRoute.amountOutCurrency || amountOut
+    
+    if (!finalAmountIn || !finalAmountOut) {
+      throw new Error(`Route result missing required amounts: amountIn=${!!finalAmountIn}, amountOut=${!!finalAmountOut}`)
+    }
+    
     return {
       route: bestRoute,
-      amountIn,
-      amountOut: bestRoute.amountOutCurrency,
+      amountIn: finalAmountIn,
+      amountOut: finalAmountOut,
     }
   } catch (error) {
     logger.error(error, {

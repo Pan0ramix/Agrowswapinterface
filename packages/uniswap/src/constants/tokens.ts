@@ -69,6 +69,15 @@ export const {
   FUSDT: FUSDT_BASE_SEPOLIA,
 } = BASE_SEPOLIA_CHAIN_INFO.tokens
 
+// CPRVerde01 (CPRV1) - RWA Token for Base Sepolia
+export const CPRV1_BASE_SEPOLIA = new Token(
+  UniverseChainId.BaseSepolia,
+  '0x2eEc2317C9aFA98Aa8e8b20291a541Bce57e4906',
+  18,
+  'CPRV1',
+  'CPRVerde01',
+)
+
 export const BTC_BSC = new Token(UniverseChainId.Bnb, '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c', 18, 'BTCB', 'BTCB')
 
 export const { USDC: USDC_BNB } = BNB_CHAIN_INFO.tokens

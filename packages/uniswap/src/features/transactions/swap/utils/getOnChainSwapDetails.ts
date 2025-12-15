@@ -809,13 +809,13 @@ export async function getOnChainSwapDetails(
   let poolState: Awaited<ReturnType<typeof fetchV3PoolState>> | null = null
   try {
     const midPriceResult = await computeMidPrice(
-      tokenIn,
-      tokenOut,
-      chainId,
-      publicClient,
-      onChainRoute,
-      isDebug ? (log) => debugLog('midPrice', log) : undefined,
-    )
+    tokenIn,
+    tokenOut,
+    chainId,
+    publicClient,
+    onChainRoute,
+    isDebug ? (log) => debugLog('midPrice', log) : undefined,
+  )
     midPrice = midPriceResult.price
     poolState = midPriceResult.poolState
   } catch (error) {
@@ -879,24 +879,24 @@ export async function getOnChainSwapDetails(
     // Assertion: mid price direction must match execution price direction
     if (executionPrice && midPrice) {
       const directionMatches = executionPrice.baseCurrency.equals(midPrice.baseCurrency) && executionPrice.quoteCurrency.equals(midPrice.quoteCurrency)
-      
+    
       if (isDebug && !directionMatches) {
-        debugLog('price_direction_mismatch_warning', {
-          warning: 'Mid price and execution price directions do not match!',
-          executionPrice_direction: `${executionPrice.quoteCurrency.symbol} per ${executionPrice.baseCurrency.symbol}`,
-          midPrice_direction: `${midPrice.quoteCurrency.symbol} per ${midPrice.baseCurrency.symbol}`,
-          note: 'This will cause incorrect price impact calculation',
-        })
-      }
-      
+      debugLog('price_direction_mismatch_warning', {
+        warning: 'Mid price and execution price directions do not match!',
+        executionPrice_direction: `${executionPrice.quoteCurrency.symbol} per ${executionPrice.baseCurrency.symbol}`,
+        midPrice_direction: `${midPrice.quoteCurrency.symbol} per ${midPrice.baseCurrency.symbol}`,
+        note: 'This will cause incorrect price impact calculation',
+      })
+    }
+    
       if (isDebug) {
-        debugLog('midPrice_summary', {
+    debugLog('midPrice_summary', {
           midPrice: midPrice.toSignificant(6),
           midPrice_inverse: midPrice.invert().toSignificant(6),
           direction: `${tokenOut.symbol} per ${tokenIn.symbol}`,
-          matches_execution_direction: directionMatches,
-        })
-      }
+      matches_execution_direction: directionMatches,
+    })
+  }
     }
   }
 

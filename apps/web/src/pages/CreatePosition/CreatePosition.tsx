@@ -155,7 +155,7 @@ const Toolbar = () => {
 
   const versionOptions = useMemo(
     () =>
-      [ProtocolVersion.V4, ProtocolVersion.V3, ProtocolVersion.V2]
+      [ProtocolVersion.V3] // Agroswap only supports V3, hide V2 and V4
         .filter((version) => version !== protocolVersion)
         .map((version) => (
           <TouchableArea key={`version-${version}`} onPress={() => handleVersionChange(version)}>
@@ -233,7 +233,7 @@ function CreatePositionContent({
   paramsProtocolVersion: ProtocolVersion | undefined
   autoSlippageTolerance: number
 }) {
-  const initialProtocolVersion = paramsProtocolVersion ?? ProtocolVersion.V4
+  const initialProtocolVersion = paramsProtocolVersion ?? ProtocolVersion.V3 // Agroswap defaults to V3
 
   const [currencyInputs, setCurrencyInputs] = useState<{ tokenA: Maybe<Currency>; tokenB: Maybe<Currency> }>({
     tokenA: initialInputs.tokenA,
@@ -335,7 +335,24 @@ function CreatePositionMain() {
   const { protocolVersion } = useParams<{
     protocolVersion: string
   }>()
-  const paramsProtocolVersion = parseRestProtocolVersion(protocolVersion)
+  const navigate = useNavigate()
+  
+  // Agroswap only supports V3 - redirect v2/v4 to v3
+  const parsedVersion = parseRestProtocolVersion(protocolVersion)
+  const paramsProtocolVersion = parsedVersion === ProtocolVersion.V2 || parsedVersion === ProtocolVersion.V4 
+    ? ProtocolVersion.V3 
+    : (parsedVersion ?? ProtocolVersion.V3)
+  
+  // Redirect URL if v2 or v4 is in the path
+  useEffect(() => {
+    if (parsedVersion === ProtocolVersion.V2 || parsedVersion === ProtocolVersion.V4) {
+      const currentPath = window.location.pathname
+      const newPath = currentPath.replace(/\/v[24](\/|$)/, '/v3$1')
+      if (currentPath !== newPath) {
+        navigate(newPath, { replace: true })
+      }
+    }
+  }, [parsedVersion, navigate])
 
   const autoSlippageTolerance = useLPSlippageValue({
     version: paramsProtocolVersion,

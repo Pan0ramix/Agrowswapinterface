@@ -21,9 +21,18 @@ import {
 import { CurrencyField } from 'uniswap/src/types/currency'
 import { areAddressesEqual } from 'uniswap/src/utils/addresses'
 import { areCurrencyIdsEqual, currencyAddress, currencyId } from 'uniswap/src/utils/currencyId'
+import { buildCurrencyInfo } from 'uniswap/src/features/dataApi/utils/buildCurrency'
 import { useEvent } from 'utilities/src/react/hooks'
 import { useValueAsRef } from 'utilities/src/react/useValueAsRef'
 import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
+
+// Module-level cache for CurrencyInfo created during token selection
+// This allows useDerivedSwapInfo to use these as fallbacks when GraphQL doesn't have the token
+const currencyInfoCache = new Map<string, CurrencyInfo>()
+
+export function getCachedCurrencyInfo(currencyId: string): CurrencyInfo | undefined {
+  return currencyInfoCache.get(currencyId)
+}
 
 export function useOnSelectCurrency({
   onSelect,
@@ -151,6 +160,20 @@ export function useOnSelectCurrency({
       const currencyState: { inputCurrency?: Currency; outputCurrency?: Currency } = {
         inputCurrency: CurrencyField.INPUT === field ? currency : todoFixMeOtherCurrency?.currency,
         outputCurrency: CurrencyField.OUTPUT === field ? currency : todoFixMeOtherCurrency?.currency,
+      }
+
+      // Create CurrencyInfo from the Currency object and cache it for immediate UI display
+      // This ensures the token appears in the UI even if GraphQL doesn't have it yet
+      if (currency) {
+        const currencyIdKey = currencyId(currency)
+        const currencyInfo = buildCurrencyInfo({
+          currency,
+          currencyId: currencyIdKey,
+          logoUrl: undefined,
+          safetyInfo: undefined,
+        })
+        // Cache the CurrencyInfo so useDerivedSwapInfo can use it as a fallback
+        currencyInfoCache.set(currencyIdKey, currencyInfo)
       }
 
       onSelect?.()

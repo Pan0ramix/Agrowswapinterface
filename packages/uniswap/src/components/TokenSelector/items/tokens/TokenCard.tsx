@@ -40,7 +40,7 @@ function _TokenCard({
       },
     })
     try {
-      onSelectCurrency(token.currencyInfo, section, index)
+    onSelectCurrency(token.currencyInfo, section, index)
     } catch (error) {
       window.console.error('[TokenCard] Error calling onSelectCurrency', error)
       console.error('[TokenCard] Error calling onSelectCurrency', error)

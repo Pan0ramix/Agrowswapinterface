@@ -39,11 +39,20 @@ function useTokenSectionsForSwap({
   } = usePortfolioTokenOptions({ evmAddress, svmAddress, chainFilter, disablePortfolio })
 
   const {
-    data: trendingTokenOptions = [],
+    data: trendingTokenOptions,
     error: trendingTokenOptionsError,
     refetch: refetchTrendingTokenOptions,
     loading: trendingTokenOptionsLoading = false,
   } = useTrendingTokensOptions({ evmAddress, svmAddress, chainFilter, disablePortfolio })
+  
+  // Debug logging
+  console.log('[TokenSelector] Trending tokens:', {
+    optionsLength: trendingTokenOptions?.length,
+    options: trendingTokenOptions?.map(t => t.currencyInfo.currency.symbol),
+    loading: trendingTokenOptionsLoading,
+    error: trendingTokenOptionsError,
+    chainFilter,
+  })
 
   const {
     data: favoriteTokenOptions = [],
@@ -83,14 +92,14 @@ function useTokenSectionsForSwap({
 
   const error =
     (!portfolioTokenOptions && portfolioTokenOptionsError) ||
-    (!trendingTokenOptions && trendingTokenOptionsError) ||
+    (trendingTokenOptions === undefined && trendingTokenOptionsError) ||
     (!favoriteTokenOptions && favoriteTokenOptionsError) ||
     (!commonTokenOptions && commonTokenOptionsError) ||
     (!bridgingTokenOptions && bridgingTokenOptionsError)
 
   const loading =
     (!portfolioTokenOptions && portfolioTokenOptionsLoading) ||
-    (!trendingTokenOptions && trendingTokenOptionsLoading) ||
+    (trendingTokenOptions === undefined && trendingTokenOptionsLoading) ||
     (!favoriteTokenOptions && favoriteTokenOptionsLoading) ||
     (!commonTokenOptions && commonTokenOptionsLoading) ||
     (!bridgingTokenOptions && bridgingTokenOptionsLoading)
@@ -137,7 +146,14 @@ function useTokenSectionsForSwap({
   })
   const trendingSection = useOnchainItemListSection({
     sectionKey: OnchainItemSectionName.TrendingTokens,
-    options: trendingTokenOptions,
+    // Only pass options if we have actual data (not undefined, and not empty array from trading API)
+    options: trendingTokenOptions && trendingTokenOptions.length > 0 ? trendingTokenOptions : undefined,
+  })
+  
+  console.log('[TokenSelector] Trending section:', {
+    section: trendingSection,
+    sectionLength: trendingSection?.length,
+    hasData: trendingSection?.[0]?.data?.length,
   })
   const bridgingSectionTokenOptions: TokenSelectorOption[] = useMemo(
     () => (shouldNestBridgingTokens ? [bridgingTokenOptions ?? []] : (bridgingTokenOptions ?? [])),
@@ -150,12 +166,36 @@ function useTokenSectionsForSwap({
   })
 
   const sections = useMemo(() => {
-    if (isSwapListLoading({ loading, portfolioSection, trendingSection, isTestnetModeEnabled })) {
+    // Temporarily disable loading check for testnet to debug
+    const isLoading = isTestnetModeEnabled ? false : isSwapListLoading({ loading, portfolioSection, trendingSection, isTestnetModeEnabled })
+    console.log('[TokenSelector] Sections calculation:', {
+      isLoading,
+      loading,
+      hasPortfolioSection: !!portfolioSection,
+      hasTrendingSection: !!trendingSection,
+      isTestnetModeEnabled,
+      suggestedSectionLength: suggestedSection?.length,
+      portfolioSectionLength: portfolioSection?.length,
+      trendingSectionLength: trendingSection?.length,
+    })
+    
+    if (isLoading) {
+      console.log('[TokenSelector] Still loading, returning undefined')
       return undefined
     }
 
     if (isTestnetModeEnabled) {
-      return [...(suggestedSection ?? []), ...(portfolioSection ?? [])]
+      // In testnet mode, show suggested tokens, portfolio tokens, and trending tokens (which includes all tokens from the token list)
+      const result = [
+        ...(suggestedSection ?? []),
+        ...(portfolioSection ?? []),
+        ...(trendingSection ?? []),
+      ]
+      console.log('[TokenSelector] Testnet sections result:', {
+        totalSections: result.length,
+        sections: result.map(s => ({ key: s.sectionKey, dataLength: Array.isArray(s.data) ? s.data.length : 'N/A' })),
+      })
+      return result
     }
 
     return [

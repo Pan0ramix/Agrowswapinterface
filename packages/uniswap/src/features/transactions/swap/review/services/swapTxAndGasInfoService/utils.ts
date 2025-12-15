@@ -477,7 +477,7 @@ type PermitTxInfo = {
   gasEstimate?: GasEstimate
 }
 
-const EMPTY_PERMIT_TX_INFO: PermitTxInfo = {
+export const EMPTY_PERMIT_TX_INFO: PermitTxInfo = {
   permitTxRequest: undefined,
   gasFeeResult: {
     value: '0',

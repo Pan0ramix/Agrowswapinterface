@@ -131,8 +131,16 @@ export function isSwapListLoading({
   trendingSection: OnchainItemSection<TokenOption>[] | undefined
   isTestnetModeEnabled: boolean
 }): boolean {
-  // the trending section is not shown on testnet
-  return loading && (isTestnetModeEnabled ? !portfolioSection : !portfolioSection || !trendingSection)
+  // In testnet mode, we show trending tokens (from token list)
+  // Only return loading if we're still loading AND we have NO sections available at all
+  // This allows sections to render as soon as any data is available, even if other sections are still loading
+  if (isTestnetModeEnabled) {
+    // In testnet mode, allow rendering if we have at least one section (suggested, portfolio, or trending)
+    // Don't block on loading if we have any data to show
+    return false // Always allow rendering in testnet mode - sections will show as they load
+  }
+  // For non-testnet, use original logic
+  return loading && (!portfolioSection || !trendingSection)
 }
 
 export function flowToModalName(flow: TokenSelectorFlow): ModalNameType | undefined {

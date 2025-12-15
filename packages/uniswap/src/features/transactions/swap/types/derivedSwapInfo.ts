@@ -10,7 +10,8 @@ import { CurrencyField } from 'uniswap/src/types/currency'
  * On-chain quote data structure (matches useOnChainSwapQuote return type)
  */
 export type OnChainQuoteData = {
-  quoteAmountOut: CurrencyAmount<Currency>
+  quoteAmountIn?: CurrencyAmount<Currency> // For exact output
+  quoteAmountOut?: CurrencyAmount<Currency> // For exact input
   route: any // Route result from findRoute
   priceImpact?: number
   txPayload: {
@@ -19,7 +20,8 @@ export type OnChainQuoteData = {
     value: string
     gasLimit?: string
   }
-  amountOutMinimum: CurrencyAmount<Currency>
+  amountInMaximum?: CurrencyAmount<Currency> // For exact output
+  amountOutMinimum?: CurrencyAmount<Currency> // For exact input
 }
 
 export type DerivedSwapInfo<

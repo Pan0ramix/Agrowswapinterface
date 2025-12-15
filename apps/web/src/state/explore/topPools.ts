@@ -46,36 +46,54 @@ function useFilteredPools(pools?: PoolStat[]) {
 }
 
 function sortPools(sortState: PoolTableSortState, pools?: PoolStat[]) {
-  return pools?.sort((a, b) => {
-    switch (sortState.sortBy) {
-      case PoolSortFields.VolOverTvl:
-        return sortState.sortDirection === OrderDirection.Desc
-          ? (b.volOverTvl ?? 0) - (a.volOverTvl ?? 0)
-          : (a.volOverTvl ?? 0) - (b.volOverTvl ?? 0)
-      case PoolSortFields.Volume24h:
-        return sortState.sortDirection === OrderDirection.Desc
-          ? giveExploreStatDefaultValue(b.volume1Day?.value) - giveExploreStatDefaultValue(a.volume1Day?.value)
-          : giveExploreStatDefaultValue(a.volume1Day?.value) - giveExploreStatDefaultValue(b.volume1Day?.value)
-      case PoolSortFields.Volume30D:
-        return sortState.sortDirection === OrderDirection.Desc
-          ? giveExploreStatDefaultValue(b.volume30Day?.value) - giveExploreStatDefaultValue(a.volume30Day?.value)
-          : giveExploreStatDefaultValue(a.volume30Day?.value) - giveExploreStatDefaultValue(b.volume30Day?.value)
-      case PoolSortFields.Apr:
-        return sortState.sortDirection === OrderDirection.Desc
-          ? b.apr.greaterThan(a.apr)
-            ? 1
-            : -1
-          : a.apr.greaterThan(b.apr)
-            ? 1
-            : -1
-      case PoolSortFields.RewardApr:
-        return sortState.sortDirection === OrderDirection.Desc
-          ? (b.boostedApr ?? 0) - (a.boostedApr ?? 0)
-          : (a.boostedApr ?? 0) - (b.boostedApr ?? 0)
-      default:
-        return sortState.sortDirection === OrderDirection.Desc
-          ? giveExploreStatDefaultValue(b.totalLiquidity?.value) - giveExploreStatDefaultValue(a.totalLiquidity?.value)
-          : giveExploreStatDefaultValue(a.totalLiquidity?.value) - giveExploreStatDefaultValue(b.totalLiquidity?.value)
+  if (!pools || pools.length === 0) {
+    return pools
+  }
+  
+  return pools.sort((a, b) => {
+    try {
+      switch (sortState.sortBy) {
+        case PoolSortFields.VolOverTvl:
+          return sortState.sortDirection === OrderDirection.Desc
+            ? (b.volOverTvl ?? 0) - (a.volOverTvl ?? 0)
+            : (a.volOverTvl ?? 0) - (b.volOverTvl ?? 0)
+        case PoolSortFields.Volume24h:
+          return sortState.sortDirection === OrderDirection.Desc
+            ? giveExploreStatDefaultValue(b.volume1Day?.value) - giveExploreStatDefaultValue(a.volume1Day?.value)
+            : giveExploreStatDefaultValue(a.volume1Day?.value) - giveExploreStatDefaultValue(b.volume1Day?.value)
+        case PoolSortFields.Volume30D:
+          return sortState.sortDirection === OrderDirection.Desc
+            ? giveExploreStatDefaultValue(b.volume30Day?.value) - giveExploreStatDefaultValue(a.volume30Day?.value)
+            : giveExploreStatDefaultValue(a.volume30Day?.value) - giveExploreStatDefaultValue(b.volume30Day?.value)
+        case PoolSortFields.Apr:
+          return sortState.sortDirection === OrderDirection.Desc
+            ? b.apr.greaterThan(a.apr)
+              ? 1
+              : -1
+            : a.apr.greaterThan(b.apr)
+              ? 1
+              : -1
+        case PoolSortFields.RewardApr:
+          return sortState.sortDirection === OrderDirection.Desc
+            ? (b.boostedApr ?? 0) - (a.boostedApr ?? 0)
+            : (a.boostedApr ?? 0) - (b.boostedApr ?? 0)
+        case PoolSortFields.TVL:
+        default:
+          // Sort by TVL, with fallback to order found if TVL is missing
+          const aTvl = giveExploreStatDefaultValue(a.totalLiquidity?.value)
+          const bTvl = giveExploreStatDefaultValue(b.totalLiquidity?.value)
+          if (aTvl === 0 && bTvl === 0) {
+            // If both have no TVL, maintain original order (as found)
+            return 0
+          }
+          return sortState.sortDirection === OrderDirection.Desc
+            ? bTvl - aTvl
+            : aTvl - bTvl
+      }
+    } catch (error) {
+      // If sorting fails, maintain original order (as found)
+      console.warn('Error sorting pools, maintaining original order:', error)
+      return 0
     }
   })
 }
@@ -140,8 +158,27 @@ export function useTopPools({
   const { data, isLoading, isError } = topPoolData
   const poolStatsByProtocol = getPoolDataByProtocol(data, protocol)
 
+  // Debug logging for Base Sepolia (chainId 84532)
+  if (process.env.NODE_ENV !== 'production' && data?.stats) {
+    const chainId = data.stats.poolStats?.[0]?.chain || data.stats.poolStatsV3?.[0]?.chain
+    if (chainId === '84532') {
+      console.log('[useTopPools] Base Sepolia data extraction:', {
+        hasData: !!data,
+        hasStats: !!data.stats,
+        poolStatsCount: data.stats.poolStats?.length,
+        poolStatsV3Count: data.stats.poolStatsV3?.length,
+        poolStatsByProtocolCount: poolStatsByProtocol?.length,
+        protocol,
+      })
+    }
+  }
+
   const { sortedPoolStats, boostedPoolStats } = useMemo(() => {
-    const poolStats = poolStatsByProtocol?.map((poolStat: PoolStats) => convertPoolStatsToPoolStat(poolStat))
+    if (!poolStatsByProtocol || poolStatsByProtocol.length === 0) {
+      return { sortedPoolStats: undefined, boostedPoolStats: undefined }
+    }
+    
+    const poolStats = poolStatsByProtocol.map((poolStat: PoolStats) => convertPoolStatsToPoolStat(poolStat))
     const sortedPools = sortPools(sortState, poolStats)
     const boostedPools = sortedPools
       ?.filter((pool) => typeof pool.boostedApr === 'number' && pool.boostedApr > 0)

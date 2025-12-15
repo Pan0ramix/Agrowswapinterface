@@ -142,6 +142,10 @@ export const SearchModalList = memo(function _SearchModalList({
           />
         )
       case OnchainItemListOptionType.Token:
+        // Guard against partially populated currencyInfo when token metadata fails to load
+        if (!item.currencyInfo?.currency) {
+          return <></>
+        }
         return (
           <TokenOptionItem
             showTokenAddress

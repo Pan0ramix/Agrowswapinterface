@@ -186,7 +186,7 @@ function V2PositionPage() {
             <LiquidityPositionInfo positionInfo={positionInfo} />
           )}
           <Flex>
-            <PositionPageActionButtons buttonFill isOwner={isOwner} positionInfo={positionInfo} onMigrate={onMigrate} />
+            <PositionPageActionButtons buttonFill isOwner={isOwner} positionInfo={positionInfo} />
           </Flex>
           <Flex borderColor="$surface3" borderWidth="$spacing1" p="$spacing24" gap="$gap12" borderRadius="$rounded20">
             {positionLoading || !currency0Amount || !currency1Amount ? (

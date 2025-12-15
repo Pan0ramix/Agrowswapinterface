@@ -379,7 +379,7 @@ export const DepositStep = () => {
                   fontWeight="600"
                 >
                   {walletStatus.isAllowed 
-                    ? 'Wallet KYC\'d and allowed ✓'
+                    ? 'Wallet verified and approved ✓'
                     : 'Wallet not authorized'}
                 </Text>
                 {!walletStatus.isAllowed && (

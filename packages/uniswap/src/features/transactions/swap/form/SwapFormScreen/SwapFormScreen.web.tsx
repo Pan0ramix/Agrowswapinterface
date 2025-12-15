@@ -212,15 +212,43 @@ function SwapFormContent(): JSX.Element {
     return false
   }, [walletStatus, otherAddressWarnings])
 
-  // Import ErrorCallout for web - using dynamic import that will be resolved by web app's module resolution
-  // This import path works because web app has path aliases configured
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-  const ErrorCallout = require('components/ErrorCallout')?.ErrorCallout as React.ComponentType<{
+  // Inline error component to avoid import issues with web app components
+  // This matches the ErrorCallout interface from apps/web
+  const ErrorCallout = ({ errorMessage, description, title, isWarning }: {
     errorMessage: boolean | string
     description?: string
     title?: string
     isWarning?: boolean
-  }> | undefined
+  }) => {
+    if (!errorMessage) return null
+    return (
+      <Flex row gap="$spacing12" backgroundColor="$surface2" borderRadius="$rounded16" p="$padding12">
+        <Flex
+          backgroundColor={isWarning ? '$statusWarning2' : '$statusCritical2'}
+          p="$padding12"
+          borderRadius="$rounded12"
+          alignSelf="flex-start"
+        >
+          <AlertTriangleFilled color={isWarning ? '$statusWarning' : '$statusCritical'} size="$icon.20" />
+        </Flex>
+        <Flex alignItems="flex-start" flexWrap="wrap" flexShrink={1} gap="$gap4">
+          <Text color={isWarning ? '$statusWarning' : '$statusCritical'} variant="body3">
+            {title || t('common.card.error.description')}
+          </Text>
+          {description && (
+            <Text variant="body3" color="$neutral2">
+              {description}
+            </Text>
+          )}
+          {errorMessage !== true && (
+            <Text variant="body3" color="$neutral3">
+              {t('common.error.label')}: {errorMessage}
+            </Text>
+          )}
+        </Flex>
+      </Flex>
+    )
+  }
 
   return (
     <Flex grow gap="$spacing8" justifyContent="space-between">
@@ -286,7 +314,7 @@ function SwapFormContent(): JSX.Element {
                     fontWeight="600"
                   >
                     {walletStatus.isAllowed 
-                      ? 'Wallet KYC\'d and allowed ✓'
+                      ? 'Wallet verified and approved ✓'
                       : 'Wallet not authorized'}
                   </Text>
                   {!walletStatus.isAllowed && (
@@ -318,7 +346,7 @@ function SwapFormContent(): JSX.Element {
             )}
 
             {/* Other address warnings (Quoter, Router, etc.) - only show if there are non-wallet issues */}
-            {otherAddressWarnings && ErrorCallout && (
+            {otherAddressWarnings && (
               <ErrorCallout
                 errorMessage={true}
                 isWarning={false}

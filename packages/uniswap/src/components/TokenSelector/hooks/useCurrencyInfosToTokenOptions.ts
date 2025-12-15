@@ -71,32 +71,40 @@ export function useCurrencyInfosToTokenOptions({
   portfolioBalancesById?: Record<string, PortfolioBalance>
   disablePortfolio?: boolean
 }): TokenOption[] | undefined {
-  const safeCurrencyInfos = currencyInfos ?? []
-  const balancesKey = portfolioBalancesById ? Object.keys(portfolioBalancesById).length : 0
+  // Normalize to ensure stable dependency array - always use the same type (null/boolean instead of undefined)
+  const normalizedCurrencyInfos = currencyInfos ?? null
+  const normalizedPortfolioBalances = portfolioBalancesById ?? null
+  const normalizedSortAlphabetically = sortAlphabetically ?? false
+  // Use length to track array size changes
+  const currencyInfosLength = normalizedCurrencyInfos?.length ?? 0
 
   // we use useMemo here to avoid recalculation of internals when function params are the same,
   // but the component, where this hook is used is re-rendered
   return useMemo(() => {
-    if (safeCurrencyInfos.length === 0) {
+    const infosToUse = normalizedCurrencyInfos ?? []
+    if (currencyInfosLength === 0) {
       return []
     }
     if (disablePortfolio) {
-      return safeCurrencyInfos.map((currencyInfo) => createEmptyBalanceOption(currencyInfo))
+      return infosToUse.map((currencyInfo) => createEmptyBalanceOption(currencyInfo))
     }
-    const sortedCurrencyInfos = sortAlphabetically
-      ? [...safeCurrencyInfos].sort((a, b) => {
+    const sortedCurrencyInfos = normalizedSortAlphabetically
+      ? [...infosToUse].sort((a, b) => {
           if (a.currency.name && b.currency.name) {
             return a.currency.name.localeCompare(b.currency.name)
           }
           return 0
         })
-      : safeCurrencyInfos
+      : infosToUse
 
     return sortedCurrencyInfos.map((currencyInfo) => {
-      const portfolioBalance = portfolioBalancesById?.[normalizeCurrencyIdForMapLookup(currencyInfo.currencyId)]
+      const portfolioBalance = normalizedPortfolioBalances?.[normalizeCurrencyIdForMapLookup(currencyInfo.currencyId)]
       return portfolioBalance
         ? { type: OnchainItemListOptionType.Token, ...portfolioBalance }
         : createEmptyBalanceOption(currencyInfo)
     })
-  }, [safeCurrencyInfos, balancesKey, sortAlphabetically, disablePortfolio])
+    // CRITICAL: Use stable normalized values in dependency array to prevent size changes.
+    // All dependencies are always present with consistent types (null/boolean instead of undefined).
+    // Fixed array size: 5 dependencies always present.
+  }, [normalizedCurrencyInfos, currencyInfosLength, normalizedSortAlphabetically, disablePortfolio, normalizedPortfolioBalances])
 }

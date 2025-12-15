@@ -13,6 +13,7 @@ import { Flex, Text, useMedia } from 'ui/src'
 import { INTERFACE_NAV_HEIGHT } from 'ui/src/theme'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { SwapRedirectFn } from 'uniswap/src/features/transactions/components/TransactionModal/TransactionModalContext'
+import HeroAgroswapBg from 'assets/images/HeroAgroswap.jpg'
 
 interface HeroProps {
   scrollToRef: () => void
@@ -80,10 +81,31 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
       height="min-content"
       pt={INTERFACE_NAV_HEIGHT}
       pointerEvents="none"
+      style={{
+        backgroundImage: `url(${HeroAgroswapBg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
     >
+      {/* Dark overlay for better contrast and readability */}
+      <Flex
+        position="absolute"
+        top={0}
+        left={0}
+        right={0}
+        bottom={0}
+        backgroundColor="rgba(0, 0, 0, 0.65)"
+        pointerEvents="none"
+        style={{
+          zIndex: 0,
+        }}
+      />
+      
       {!media.sm && <TokenCloud />}
 
       <Flex
+        position="relative"
         alignSelf="center"
         maxWidth="85vw"
         pointerEvents="none"
@@ -95,6 +117,9 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
         $sm={{ pt: 8 }}
         $platform-web={{
           transition: transition ? 'shrinkAndFade 1s ease-in-out forwards' : undefined,
+        }}
+        style={{
+          zIndex: 1,
         }}
       >
         <Flex maxWidth={920} alignItems="center" pointerEvents="none">
@@ -149,7 +174,11 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
         centered
         pointerEvents="none"
         bottom={48}
-        style={{ transform: `translate(0px, ${translateY}px)`, opacity: opacityY }}
+        style={{ 
+          transform: `translate(0px, ${translateY}px)`, 
+          opacity: opacityY,
+          zIndex: 1,
+        }}
         $lgHeight={{ display: 'none' }}
       >
         <RiseIn $delay={0.3}>

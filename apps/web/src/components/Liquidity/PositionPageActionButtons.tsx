@@ -1,7 +1,6 @@
 import { PositionStatus, ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
 import { PositionInfo } from 'components/Liquidity/types'
 import { MobileBottomBar } from 'components/NavBar/MobileBottomBar'
-import { MouseoverTooltip } from 'components/Tooltip'
 import { ScrollDirection, useScroll } from 'hooks/useScroll'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -12,18 +11,15 @@ import { GridView } from 'ui/src/components/icons/GridView'
 import { X } from 'ui/src/components/icons/X'
 import { MenuOptionItem } from 'uniswap/src/components/menus/ContextMenuV2'
 import { ModalName } from 'uniswap/src/features/telemetry/constants'
-import { isV4UnsupportedChain } from 'utils/networkSupportsV4'
 
 export function PositionPageActionButtons({
   buttonFill = false,
   positionInfo,
   isOwner,
-  onMigrate,
 }: {
   buttonFill?: boolean
   positionInfo?: PositionInfo
   isOwner: boolean
-  onMigrate: () => void
 }) {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
@@ -33,18 +29,11 @@ export function PositionPageActionButtons({
 
   const { status, fee0Amount, fee1Amount } = positionInfo ?? {}
 
-  const showV4UnsupportedTooltip =
-    positionInfo?.version === ProtocolVersion.V3 && isV4UnsupportedChain(positionInfo.chainId)
   const hasFees = fee0Amount?.greaterThan(0) || fee1Amount?.greaterThan(0)
 
-  const { migrateOption, removeLiquidityOption, addLiquidityOption, collectFeesOption } = useMemo(() => {
-    const migrateOption: MenuOptionItem | undefined =
-      positionInfo?.version !== ProtocolVersion.V4 && status !== PositionStatus.CLOSED
-        ? {
-            label: t('pool.migrateLiquidity'),
-            onPress: onMigrate,
-          }
-        : undefined
+  const { removeLiquidityOption, addLiquidityOption, collectFeesOption } = useMemo(() => {
+    // Agroswap only supports v3, not v2 or v4, so migrate option is always disabled
+    const migrateOption: MenuOptionItem | undefined = undefined
 
     // Add remove liquidity option if position is not closed
     const removeLiquidityOption: MenuOptionItem | undefined =
@@ -91,12 +80,11 @@ export function PositionPageActionButtons({
         : undefined
 
     return {
-      migrateOption,
       removeLiquidityOption,
       addLiquidityOption,
       collectFeesOption,
     }
-  }, [dispatch, hasFees, positionInfo, status, t, onMigrate])
+  }, [dispatch, hasFees, positionInfo, status, t])
 
   if (!isOwner) {
     return null
@@ -110,7 +98,6 @@ export function PositionPageActionButtons({
             collectFeesOption,
             addLiquidityOption,
             removeLiquidityOption,
-            showV4UnsupportedTooltip ? undefined : migrateOption,
           ].filter((o): o is MenuOptionItem => o !== undefined)}
         />
       </MobileBottomBar>
@@ -119,20 +106,6 @@ export function PositionPageActionButtons({
 
   return (
     <Flex row gap="$gap12" alignItems="center" flexWrap="wrap">
-      {migrateOption && (
-        <MouseoverTooltip text={t('pool.migrateLiquidityDisabledTooltip')} disabled={!showV4UnsupportedTooltip}>
-          <Button
-            size="small"
-            emphasis="secondary"
-            fill={buttonFill}
-            isDisabled={showV4UnsupportedTooltip}
-            opacity={showV4UnsupportedTooltip ? 0.5 : 1}
-            onPress={migrateOption.onPress}
-          >
-            {migrateOption.label}
-          </Button>
-        </MouseoverTooltip>
-      )}
       <Button size="small" emphasis="secondary" fill={buttonFill} onPress={addLiquidityOption.onPress}>
         {addLiquidityOption.label}
       </Button>

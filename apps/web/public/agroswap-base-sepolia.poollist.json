@@ -1,0 +1,34 @@
+{
+  "name": "Agroswap Base Sepolia Pools",
+  "logoURI": "",
+  "keywords": ["agroswap", "base", "sepolia", "testnet", "pools"],
+  "timestamp": "2025-12-15T00:00:00+00:00",
+  "pools": [
+    {
+      "chainId": 84532,
+      "poolAddress": "",
+      "token0": {
+        "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "symbol": "USDC",
+        "name": "USD Coin",
+        "decimals": 6
+      },
+      "token1": {
+        "address": "0x0328b69C7b94b8f5814CfDe0482Ef3bE1D4D091c",
+        "symbol": "WETH",
+        "name": "Wrapped Ether",
+        "decimals": 18
+      },
+      "feeTier": 3000,
+      "protocolVersion": "V3",
+      "tvlUSD": 0,
+      "volume24hUSD": 0,
+      "apr": 0
+    }
+  ],
+  "version": {
+    "major": 0,
+    "minor": 0,
+    "patch": 1
+  }
+}

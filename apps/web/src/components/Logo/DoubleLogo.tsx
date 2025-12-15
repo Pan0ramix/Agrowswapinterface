@@ -76,6 +76,21 @@ export const DoubleCurrencyLogo = memo(function DoubleCurrencyLogo({
   const invalidCurrencyLogo1 = !currencyInfos[1]?.logoUrl
   const chainId = includeNetwork ? (currencyInfos[0]?.currency.chainId ?? null) : null
 
+  // If both currencies exist, always show SplitLogo (it handles missing logos gracefully)
+  // Only fall back to single logo or placeholder if one currency is missing
+  if (currencies[0] && currencies[1]) {
+    return (
+      <SplitLogo
+        chainId={chainId}
+        inputCurrencyInfo={currencyInfos[0]}
+        outputCurrencyInfo={currencyInfos[1]}
+        customIcon={customIcon}
+        size={size}
+      />
+    )
+  }
+
+  // Fallback logic when one currency is missing
   if (invalidCurrencyLogo0 && invalidCurrencyLogo1) {
     return <LogolessPlaceholder currency={currencies[0]} size={size} includeNetwork={Boolean(chainId)} />
   }
@@ -85,13 +100,6 @@ export const DoubleCurrencyLogo = memo(function DoubleCurrencyLogo({
   if (invalidCurrencyLogo1 && currencyInfos[0]?.logoUrl) {
     return <TokenLogo url={currencyInfos[0]?.logoUrl} size={size} chainId={chainId} />
   }
-  return (
-    <SplitLogo
-      chainId={chainId}
-      inputCurrencyInfo={currencyInfos[0]}
-      outputCurrencyInfo={currencyInfos[1]}
-      customIcon={customIcon}
-      size={size}
-    />
-  )
+  // Final fallback - show placeholder if we have at least one currency
+  return <LogolessPlaceholder currency={currencies[0] || currencies[1]} size={size} includeNetwork={Boolean(chainId)} />
 })

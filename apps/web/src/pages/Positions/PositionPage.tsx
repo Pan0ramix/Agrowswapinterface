@@ -384,7 +384,7 @@ function PositionPage({ chainId }: { chainId: EVMUniverseChainId | undefined }) 
               includeNetwork
               includeLpIncentives={isLpIncentivesEnabled}
             />
-            <PositionPageActionButtons isOwner={isOwner} positionInfo={positionInfo} onMigrate={onMigrate} />
+            <PositionPageActionButtons isOwner={isOwner} positionInfo={positionInfo} />
           </Flex>
         </Flex>
         <Flex row justifyContent="space-between" pt="$padding20" $lg={{ row: false, gap: '$gap24' }}>

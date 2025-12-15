@@ -18,6 +18,22 @@ export function TopPoolsCard({ pool }: { pool: PoolStat }) {
   const token0 = pool.token0 ? gqlToCurrency(unwrapToken(chainId, pool.token0)) : undefined
   const token1 = pool.token1 ? gqlToCurrency(unwrapToken(chainId, pool.token1)) : undefined
 
+  // Debug logging to diagnose token conversion issues
+  if (process.env.NODE_ENV !== 'production') {
+    if (!token0 || !token1) {
+      console.log('[TopPoolsCard] Token conversion issue:', {
+        poolId: pool.id,
+        chainId,
+        hasToken0: !!pool.token0,
+        hasToken1: !!pool.token1,
+        token0Converted: !!token0,
+        token1Converted: !!token1,
+        token0Data: pool.token0 ? { address: pool.token0.address, symbol: pool.token0.symbol, chain: pool.token0.chain } : null,
+        token1Data: pool.token1 ? { address: pool.token1.address, symbol: pool.token1.symbol, chain: pool.token1.chain } : null,
+      })
+    }
+  }
+
   const formattedApr = pool.boostedApr ? formatPercent(pool.boostedApr) : null
 
   return (

@@ -22,16 +22,19 @@ export function useTotalBalancesUsdPerChain(
     }
 
     try {
-      return gqlChains.reduce((chainAcc, chain) => {
-        chainAcc[chain] =
-          tokenBalances?.reduce((balanceAcc, tokenBalance) => {
-            if (tokenBalance?.token?.chain === chain && !tokenBalance.isHidden) {
-              return balanceAcc + (tokenBalance.denominatedValue?.value || 0)
-            }
-            return balanceAcc
-          }, 0) || 0
-        return chainAcc
-      }, {} as Record<string, number>)
+      return gqlChains.reduce(
+        (chainAcc, chain) => {
+          chainAcc[chain] =
+            tokenBalances.reduce((balanceAcc, tokenBalance) => {
+              if (tokenBalance?.token?.chain === chain && !tokenBalance.isHidden) {
+                return balanceAcc + (tokenBalance.denominatedValue?.value || 0)
+              }
+              return balanceAcc
+            }, 0) || 0
+          return chainAcc
+        },
+        {} as Record<string, number>,
+      )
     } catch (error) {
       logger.error('useTotalBalancesUsdPerChain', error)
       return undefined

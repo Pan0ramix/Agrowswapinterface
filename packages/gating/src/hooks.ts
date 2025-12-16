@@ -219,7 +219,7 @@ export function checkTypeGuard<ValType>({
 // obeys Rules of Hooks and returns undefined when no provider is present.
 export function useSafeStatsigClient(): StatsigClient | undefined {
   const ctx = useContext(StatsigContext)
-  return ctx?.client
+  return ctx.client
 }
 
 export function useStatsigClientStatus(): {
@@ -229,9 +229,7 @@ export function useStatsigClientStatus(): {
 } {
   const client = useSafeStatsigClient()
 
-  const [statsigStatus, setStatsigStatus] = useState<StatsigLoadingStatus>(
-    client?.loadingStatus ?? 'Uninitialized',
-  )
+  const [statsigStatus, setStatsigStatus] = useState<StatsigLoadingStatus>(client?.loadingStatus ?? 'Uninitialized')
 
   useEffect(() => {
     if (!client) {

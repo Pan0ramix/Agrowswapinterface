@@ -1,3 +1,4 @@
+import { useWagmiStoreReady } from 'hooks/useWagmiStoreReady'
 import { useMemo, useRef } from 'react'
 import { useSupportedChainId } from 'uniswap/src/features/chains/hooks/useSupportedChainId'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
@@ -9,7 +10,6 @@ import {
   // biome-ignore lint/style/noRestrictedImports: wagmi chain hook needed for chain management
   useChainId,
 } from 'wagmi'
-import { useWagmiStoreReady } from './useWagmiStoreReady'
 
 type ReplaceChainId<T> = T extends { chainId: number }
   ? Omit<T, 'chainId'> & { chainId: EVMUniverseChainId | undefined }
@@ -29,7 +29,7 @@ function useSafeWagmiHooks(): {
 } {
   // Check if Wagmi store is ready before calling hooks
   const isStoreReady = useWagmiStoreReady()
-  
+
   // Use refs to store fallback values to avoid dependency array issues
   const fallbackRef = useRef<{
     wagmiAccount: ReturnType<typeof useAccountWagmi> | undefined
@@ -53,7 +53,10 @@ function useSafeWagmiHooks(): {
     }
   } catch (error) {
     // If wagmi store isn't ready, use fallback from ref
-    if (error instanceof Error && (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))
+    ) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[useAccount] useAccountWagmi failed, using fallback', error)
       }
@@ -74,7 +77,10 @@ function useSafeWagmiHooks(): {
     }
   } catch (error) {
     // If wagmi store isn't ready, use fallback from ref
-    if (error instanceof Error && (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))
+    ) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[useAccount] useChainId failed, using fallback', error)
       }
@@ -83,7 +89,7 @@ function useSafeWagmiHooks(): {
       throw error
     }
   }
-  
+
   // If store isn't ready but we have valid values from hooks, use them
   // Only use fallback if hooks failed or returned undefined
   if (!isStoreReady && wagmiAccount === undefined) {

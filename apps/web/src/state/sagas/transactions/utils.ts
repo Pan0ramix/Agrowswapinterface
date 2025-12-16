@@ -311,11 +311,11 @@ function* submitTransaction(params: HandleOnChainStepParams): SagaGenerator<Vita
   const normalizedValue =
     typeof step.txRequest.value === 'bigint'
       ? `0x${step.txRequest.value.toString(16)}`
-      : step.txRequest.value ?? '0x0'
+      : (step.txRequest.value ?? '0x0')
 
   // Get connector info for logging
   const wagmiAccount = getAccount(wagmiConfig)
-  const connector = wagmiAccount?.connector
+  const connector = wagmiAccount.connector
 
   // eslint-disable-next-line no-console
   console.log('[SEND-TX] about-to-send', {
@@ -603,8 +603,8 @@ async function getProvider(): Promise<Web3Provider> {
 export async function getSigner(account: string): Promise<JsonRpcSigner> {
   // Hard entry log - must log unconditionally for chainId 84532
   const wagmiAccount = getAccount(wagmiConfig)
-  const connector = wagmiAccount?.connector
-  const chainId = wagmiAccount?.chainId
+  const connector = wagmiAccount.connector
+  const chainId = wagmiAccount.chainId
 
   // eslint-disable-next-line no-console
   console.log('[SIGNER] ENTER', {
@@ -627,7 +627,7 @@ export async function getSigner(account: string): Promise<JsonRpcSigner> {
   console.log('[SIGNER] resolved', {
     walletClientPresent: Boolean(signer),
     signerPresent: Boolean(signer),
-    providerType: provider.connection?.url || String(provider),
+    providerType: provider.connection.url || String(provider),
     chainId,
   })
 

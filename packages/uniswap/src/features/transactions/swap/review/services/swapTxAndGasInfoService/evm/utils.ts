@@ -1,4 +1,5 @@
 import type { GasStrategy } from '@universe/api'
+import type { providers } from 'ethers/lib/ethers'
 import type { TransactionSettings } from 'uniswap/src/features/transactions/components/settings/types'
 import type { ApprovalTxInfo } from 'uniswap/src/features/transactions/swap/review/hooks/useTokenApprovalInfo'
 import type { EVMSwapInstructionsService } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/evm/evmSwapInstructionsService'
@@ -7,6 +8,7 @@ import {
   createProcessSwapResponse,
   getSwapInputExceedsBalance,
 } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/utils'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import type {
   BridgeTrade,
@@ -16,8 +18,6 @@ import type {
 } from 'uniswap/src/features/transactions/swap/types/trade'
 import { ApprovalAction } from 'uniswap/src/features/transactions/swap/types/trade'
 import { tryCatch } from 'utilities/src/errors'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import type { providers } from 'ethers/lib/ethers'
 import { logger } from 'utilities/src/logger/logger'
 
 type GetEVMSwapTransactionRequestInfoFn = (params: {
@@ -47,40 +47,52 @@ export function createGetEVMSwapTransactionRequestInfo(ctx: {
 
     // Always log for Base Sepolia to debug the issue
     if (chainId === 84532) {
-      logger.debug('getEVMSwapTransactionRequestInfo', 'getEVMSwapTransactionRequestInfo', '[ONCHAIN-TX-BUILD] Checking for on-chain quote', {
-        chainId,
-        isOnChainOnly,
-        hasOnChainQuote: !!onChainQuote,
-        hasTxPayload: !!onChainQuote?.txPayload,
-        onChainQuoteKeys: onChainQuote ? Object.keys(onChainQuote) : [],
-        hasTradeQuote: !!trade?.quote,
-        hasTrade: !!trade,
-        onChainQuoteData: onChainQuote ? {
-          hasQuoteAmountIn: !!onChainQuote.quoteAmountIn,
-          hasQuoteAmountOut: !!onChainQuote.quoteAmountOut,
-          hasRoute: !!onChainQuote.route,
-          txPayloadKeys: onChainQuote.txPayload ? Object.keys(onChainQuote.txPayload) : [],
-          txPayloadTo: onChainQuote.txPayload?.to,
-          txPayloadDataLen: onChainQuote.txPayload?.data?.length,
-        } : null,
-      })
+      logger.debug(
+        'getEVMSwapTransactionRequestInfo',
+        'getEVMSwapTransactionRequestInfo',
+        '[ONCHAIN-TX-BUILD] Checking for on-chain quote',
+        {
+          chainId,
+          isOnChainOnly,
+          hasOnChainQuote: !!onChainQuote,
+          hasTxPayload: !!onChainQuote?.txPayload,
+          onChainQuoteKeys: onChainQuote ? Object.keys(onChainQuote) : [],
+          hasTradeQuote: !!trade.quote,
+          hasTrade: !!trade,
+          onChainQuoteData: onChainQuote
+            ? {
+                hasQuoteAmountIn: !!onChainQuote.quoteAmountIn,
+                hasQuoteAmountOut: !!onChainQuote.quoteAmountOut,
+                hasRoute: !!onChainQuote.route,
+                txPayloadKeys: onChainQuote.txPayload ? Object.keys(onChainQuote.txPayload) : [],
+                txPayloadTo: onChainQuote.txPayload.to,
+                txPayloadDataLen: onChainQuote.txPayload.data.length,
+              }
+            : null,
+        },
+      )
     }
 
     // For on-chain-only chains, use on-chain quote data instead of Trading API
     if (isOnChainOnly) {
       if (onChainQuote?.txPayload) {
         const txPayload = onChainQuote.txPayload
-        
+
         if (chainId === 84532) {
-          logger.debug('getEVMSwapTransactionRequestInfo', 'getEVMSwapTransactionRequestInfo', '[ONCHAIN-TX-BUILD] Building tx request from on-chain quote', {
-            chainId,
-            txTo: txPayload.to,
-            txDataLen: txPayload.data?.length,
-            txValue: txPayload.value,
-            txGasLimit: txPayload.gasLimit,
-          })
+          logger.debug(
+            'getEVMSwapTransactionRequestInfo',
+            'getEVMSwapTransactionRequestInfo',
+            '[ONCHAIN-TX-BUILD] Building tx request from on-chain quote',
+            {
+              chainId,
+              txTo: txPayload.to,
+              txDataLen: txPayload.data.length,
+              txValue: txPayload.value,
+              txGasLimit: txPayload.gasLimit,
+            },
+          )
         }
-        
+
         // Build transaction request from on-chain quote payload
         const swapTxRequest: providers.TransactionRequest = {
           to: txPayload.to as `0x${string}`,
@@ -108,13 +120,18 @@ export function createGetEVMSwapTransactionRequestInfo(ctx: {
       } else {
         // On-chain-only chain but no on-chain quote yet - this is expected during loading
         if (chainId === 84532) {
-          logger.debug('getEVMSwapTransactionRequestInfo', 'getEVMSwapTransactionRequestInfo', '[ONCHAIN-TX-BUILD] On-chain-only chain but no onChainQuote yet', {
-            chainId,
-            hasOnChainQuote: !!onChainQuote,
-            hasTxPayload: !!onChainQuote?.txPayload,
-            onChainQuoteType: onChainQuote ? typeof onChainQuote : 'null',
-            onChainQuoteKeys: onChainQuote ? Object.keys(onChainQuote) : [],
-          })
+          logger.debug(
+            'getEVMSwapTransactionRequestInfo',
+            'getEVMSwapTransactionRequestInfo',
+            '[ONCHAIN-TX-BUILD] On-chain-only chain but no onChainQuote yet',
+            {
+              chainId,
+              hasOnChainQuote: !!onChainQuote,
+              hasTxPayload: !!onChainQuote?.txPayload,
+              onChainQuoteType: onChainQuote ? typeof onChainQuote : 'null',
+              onChainQuoteKeys: onChainQuote ? Object.keys(onChainQuote) : [],
+            },
+          )
         }
         // Don't throw - return empty result so query can retry when onChainQuote becomes available
         return {
@@ -134,7 +151,7 @@ export function createGetEVMSwapTransactionRequestInfo(ctx: {
     }
 
     // Guard: fail safely if Trading API quote is missing (on-chain-only chains don't have trade.quote)
-    if (!trade?.quote?.quote) {
+    if (!trade.quote.quote) {
       throw new Error('Missing Trading API quote for classic tx request build')
     }
 

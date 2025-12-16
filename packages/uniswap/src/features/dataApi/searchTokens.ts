@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { SearchTokensResponse, SearchType } from '@uniswap/client-search/dist/search/v1/api_pb'
-import { GqlResult } from '@universe/api'
 import { Token } from '@uniswap/sdk-core'
+import { GqlResult } from '@universe/api'
 import { useMemo } from 'react'
 import { searchTokenToCurrencyInfo, useSearchTokensAndPoolsQuery } from 'uniswap/src/data/rest/searchTokensAndPools'
 import { useConnectionStatus } from 'uniswap/src/features/accounts/store/hooks'
@@ -9,11 +9,11 @@ import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledCh
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { CurrencyInfo } from 'uniswap/src/features/dataApi/types'
 import { buildCurrencyInfo } from 'uniswap/src/features/dataApi/utils/buildCurrency'
-import { NUMBER_OF_RESULTS_LONG } from 'uniswap/src/features/search/SearchModal/constants'
-import { isWSOL } from 'uniswap/src/utils/isWSOL'
-import { currencyId } from 'uniswap/src/utils/currencyId'
-import { useEvent } from 'utilities/src/react/hooks'
 import { Platform } from 'uniswap/src/features/platforms/types/Platform'
+import { NUMBER_OF_RESULTS_LONG } from 'uniswap/src/features/search/SearchModal/constants'
+import { currencyId } from 'uniswap/src/utils/currencyId'
+import { isWSOL } from 'uniswap/src/utils/isWSOL'
+import { useEvent } from 'utilities/src/react/hooks'
 
 export function useSearchTokens({
   searchQuery,
@@ -71,9 +71,7 @@ export function useSearchTokens({
         const q = searchQuery.toLowerCase()
         const addr = c.currency.isToken ? c.currency.address.toLowerCase() : ''
         return (
-          c.currency.symbol?.toLowerCase().includes(q) ||
-          c.currency.name?.toLowerCase().includes(q) ||
-          addr.includes(q)
+          c.currency.symbol?.toLowerCase().includes(q) || c.currency.name?.toLowerCase().includes(q) || addr.includes(q)
         )
       }) ?? []
 

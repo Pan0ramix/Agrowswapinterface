@@ -1,5 +1,5 @@
+import { type DedupeOptions, dedupeLog } from 'utilities/src/logger/dedupeLog'
 import { logger } from 'utilities/src/logger/logger'
-import { dedupeLog, type DedupeOptions } from 'utilities/src/logger/dedupeLog'
 
 type BoundaryPayload = {
   tags?: Record<string, unknown>
@@ -7,19 +7,14 @@ type BoundaryPayload = {
 }
 
 // Check if deduplication is enabled (default on in dev)
-const isDedupEnabled =
-  typeof process !== 'undefined' && process.env.REACT_APP_DEDUP_LOGS !== '0'
+const isDedupEnabled = typeof process !== 'undefined' && process.env.REACT_APP_DEDUP_LOGS !== '0'
 
 /**
  * Instrumentation logging helper for Base Sepolia (84532) swap flow debugging.
  * Uses logger.info to avoid triggering console.error stack spam from silenceReactDevNoise.ts
  * Immediate logging - use for critical events that must appear every time.
  */
-export function boundaryLog(
-  message: string,
-  payload: BoundaryPayload = {},
-  chainId?: number
-): void {
+export function boundaryLog(message: string, payload: BoundaryPayload = {}, chainId?: number): void {
   if (chainId !== 84532) return
   // Use logger.info to avoid dev console stack spam (logger.error triggers "Understand this error")
   // logger.info signature: (fileName, functionName, message, ...args)
@@ -39,7 +34,7 @@ export function boundaryLogDeduped(
   message: string,
   payload: BoundaryPayload = {},
   chainId?: number,
-  options?: DedupeOptions
+  options?: DedupeOptions,
 ): void {
   if (chainId !== 84532) return
 
@@ -67,7 +62,6 @@ export function boundaryLogDeduped(
       windowMs: 2000, // default window
       maxEntries: 250, // default max entries
       ...options,
-    }
+    },
   )
 }
-

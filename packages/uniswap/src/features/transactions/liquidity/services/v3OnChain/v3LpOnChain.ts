@@ -1,23 +1,20 @@
 /**
  * V3 LP On-Chain Service
- * 
+ *
  * Services for V3 concentrated liquidity position math and transaction building.
  * Uses @uniswap/v3-sdk for position calculations and builds transaction calldata
  * directly for NonfungiblePositionManager operations.
  */
 
-import { Currency, CurrencyAmount, Percent, Token } from '@uniswap/sdk-core'
-import { FeeAmount, Position, tickToPrice, nearestUsableTick, TICK_SPACINGS, Pool } from '@uniswap/v3-sdk'
+import { Currency, CurrencyAmount, NONFUNGIBLE_POSITION_MANAGER_ADDRESSES } from '@uniswap/sdk-core'
+import { FeeAmount, nearestUsableTick, Pool, Position, TICK_SPACINGS } from '@uniswap/v3-sdk'
 import { Interface } from 'ethers/lib/utils'
-import { PublicClient, type Address } from 'viem'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { NONFUNGIBLE_POSITION_MANAGER_ADDRESSES } from '@uniswap/sdk-core'
-import { getPositionManagerAddress } from 'uniswap/src/constants/v3Addresses'
 import { AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
+import { getPositionManagerAddress } from 'uniswap/src/constants/v3Addresses'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { fetchV3PoolState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
-import { simulateTransaction } from '../utils/decodeRevertReason'
 import { logger } from 'utilities/src/logger/logger'
-import JSBI from 'jsbi'
+import { type Address, PublicClient } from 'viem'
 
 /**
  * Transaction payload for LP operations
@@ -96,7 +93,10 @@ export interface BuildCollectFeesParams {
 function getPositionManagerContractAddress(chainId: EVMUniverseChainId): string {
   // Try Agroswap addresses first
   if (chainId === 84532) {
-    const address = AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[chainId as keyof typeof AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES]
+    const address =
+      AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[
+        chainId as keyof typeof AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES
+      ]
     if (address) {
       return address
     }
@@ -109,7 +109,8 @@ function getPositionManagerContractAddress(chainId: EVMUniverseChainId): string 
   }
 
   // Fall back to SDK addresses
-  const sdkAddress = NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[chainId as keyof typeof NONFUNGIBLE_POSITION_MANAGER_ADDRESSES]
+  const sdkAddress =
+    NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[chainId as keyof typeof NONFUNGIBLE_POSITION_MANAGER_ADDRESSES]
   if (!sdkAddress) {
     throw new Error(`Position Manager address not found for chain ${chainId}`)
   }
@@ -343,10 +344,9 @@ export async function buildMintPositionTx(
   const token0Wrapped = token0.wrapped
   const token1Wrapped = token1.wrapped
   const tokensNeedSwap = !token0Wrapped.sortsBefore(token1Wrapped)
-  const [finalToken0, finalToken1, finalAmount0, finalAmount1, finalAmount0Min, finalAmount1Min] =
-    tokensNeedSwap
-      ? [token1Wrapped, token0Wrapped, amount1Desired, amount0Desired, amount1Min, amount0Min]
-      : [token0Wrapped, token1Wrapped, amount0Desired, amount1Desired, amount0Min, amount1Min]
+  const [finalToken0, finalToken1, finalAmount0, finalAmount1, finalAmount0Min, finalAmount1Min] = tokensNeedSwap
+    ? [token1Wrapped, token0Wrapped, amount1Desired, amount0Desired, amount1Min, amount0Min]
+    : [token0Wrapped, token1Wrapped, amount0Desired, amount1Desired, amount0Min, amount1Min]
 
   // Dev-only: log token sorting and amount mapping
   if (process.env.NODE_ENV !== 'production') {
@@ -574,11 +574,8 @@ export async function buildMintPositionTx(
 /**
  * Build increase liquidity transaction payload
  */
-export function buildIncreaseLiquidityTx(
-  params: BuildIncreaseLiquidityParams,
-): LpTransactionPayload {
-  const { tokenId, amount0Desired, amount1Desired, amount0Min, amount1Min, deadline, chainId } =
-    params
+export function buildIncreaseLiquidityTx(params: BuildIncreaseLiquidityParams): LpTransactionPayload {
+  const { tokenId, amount0Desired, amount1Desired, amount0Min, amount1Min, deadline, chainId } = params
 
   const positionManagerAddress = getPositionManagerContractAddress(chainId) as `0x${string}`
   const positionManagerInterface = new Interface(NONFUNGIBLE_POSITION_MANAGER_ABI)
@@ -596,9 +593,7 @@ export function buildIncreaseLiquidityTx(
     deadline,
   }
 
-  const data = positionManagerInterface.encodeFunctionData('increaseLiquidity', [
-    increaseParams,
-  ]) as `0x${string}`
+  const data = positionManagerInterface.encodeFunctionData('increaseLiquidity', [increaseParams]) as `0x${string}`
 
   // Value is typically 0 for increase liquidity unless native token is involved
   const value = '0x0'
@@ -613,9 +608,7 @@ export function buildIncreaseLiquidityTx(
 /**
  * Build decrease liquidity transaction payload
  */
-export function buildDecreaseLiquidityTx(
-  params: BuildDecreaseLiquidityParams,
-): LpTransactionPayload {
+export function buildDecreaseLiquidityTx(params: BuildDecreaseLiquidityParams): LpTransactionPayload {
   const { tokenId, liquidity, amount0Min, amount1Min, deadline, chainId } = params
 
   const positionManagerAddress = getPositionManagerContractAddress(chainId) as `0x${string}`
@@ -629,9 +622,7 @@ export function buildDecreaseLiquidityTx(
     deadline,
   }
 
-  const data = positionManagerInterface.encodeFunctionData('decreaseLiquidity', [
-    decreaseParams,
-  ]) as `0x${string}`
+  const data = positionManagerInterface.encodeFunctionData('decreaseLiquidity', [decreaseParams]) as `0x${string}`
 
   return {
     to: positionManagerAddress,
@@ -733,4 +724,3 @@ export function getNearestUsableTicks(
     tickUpper: nearestUsableTick(tickUpper, tickSpacing),
   }
 }
-

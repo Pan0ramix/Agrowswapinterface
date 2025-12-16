@@ -2,7 +2,6 @@ import { GqlResult } from '@universe/api'
 import { useCallback, useMemo } from 'react'
 import { TokenOption } from 'uniswap/src/components/lists/items/types'
 import { useCurrencyInfosToTokenOptions } from 'uniswap/src/components/TokenSelector/hooks/useCurrencyInfosToTokenOptions'
-import { usePortfolioBalancesForAddressById } from 'uniswap/src/components/TokenSelector/hooks/usePortfolioBalancesForAddressById'
 import { useTrendingTokensCurrencyInfos } from 'uniswap/src/components/TokenSelector/hooks/useTrendingTokensCurrencyInfos'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 
@@ -29,11 +28,11 @@ export function useTrendingTokensOptions({
     loading: loadingTokens,
   } = useTrendingTokensCurrencyInfos(chainFilter, false, disablePortfolio) // Always enable query, don't skip
 
-  const tokenOptionsFromHook = useCurrencyInfosToTokenOptions({ 
-    currencyInfos: tokens, 
-    portfolioBalancesById: undefined 
+  const tokenOptionsFromHook = useCurrencyInfosToTokenOptions({
+    currencyInfos: tokens,
+    portfolioBalancesById: undefined,
   })
-  
+
   // Return undefined if we don't have data or if the hook returned empty array
   // This prevents creating empty arrays that get filtered out by useOnchainItemListSection
   const tokenOptions = useMemo(() => {

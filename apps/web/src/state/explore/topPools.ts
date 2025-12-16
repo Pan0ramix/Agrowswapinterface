@@ -49,7 +49,7 @@ function sortPools(sortState: PoolTableSortState, pools?: PoolStat[]) {
   if (!pools || pools.length === 0) {
     return pools
   }
-  
+
   return pools.sort((a, b) => {
     try {
       switch (sortState.sortBy) {
@@ -78,7 +78,7 @@ function sortPools(sortState: PoolTableSortState, pools?: PoolStat[]) {
             ? (b.boostedApr ?? 0) - (a.boostedApr ?? 0)
             : (a.boostedApr ?? 0) - (b.boostedApr ?? 0)
         case PoolSortFields.TVL:
-        default:
+        default: {
           // Sort by TVL, with fallback to order found if TVL is missing
           const aTvl = giveExploreStatDefaultValue(a.totalLiquidity?.value)
           const bTvl = giveExploreStatDefaultValue(b.totalLiquidity?.value)
@@ -86,9 +86,8 @@ function sortPools(sortState: PoolTableSortState, pools?: PoolStat[]) {
             // If both have no TVL, maintain original order (as found)
             return 0
           }
-          return sortState.sortDirection === OrderDirection.Desc
-            ? bTvl - aTvl
-            : aTvl - bTvl
+          return sortState.sortDirection === OrderDirection.Desc ? bTvl - aTvl : aTvl - bTvl
+        }
       }
     } catch (error) {
       // If sorting fails, maintain original order (as found)
@@ -160,13 +159,13 @@ export function useTopPools({
 
   // Debug logging for Base Sepolia (chainId 84532)
   if (process.env.NODE_ENV !== 'production' && data?.stats) {
-    const chainId = data.stats.poolStats?.[0]?.chain || data.stats.poolStatsV3?.[0]?.chain
+    const chainId = data.stats.poolStats[0]?.chain || data.stats.poolStatsV3[0]?.chain
     if (chainId === '84532') {
       console.log('[useTopPools] Base Sepolia data extraction:', {
         hasData: !!data,
         hasStats: !!data.stats,
-        poolStatsCount: data.stats.poolStats?.length,
-        poolStatsV3Count: data.stats.poolStatsV3?.length,
+        poolStatsCount: data.stats.poolStats.length,
+        poolStatsV3Count: data.stats.poolStatsV3.length,
         poolStatsByProtocolCount: poolStatsByProtocol?.length,
         protocol,
       })
@@ -177,7 +176,7 @@ export function useTopPools({
     if (!poolStatsByProtocol || poolStatsByProtocol.length === 0) {
       return { sortedPoolStats: undefined, boostedPoolStats: undefined }
     }
-    
+
     const poolStats = poolStatsByProtocol.map((poolStat: PoolStats) => convertPoolStatsToPoolStat(poolStat))
     const sortedPools = sortPools(sortState, poolStats)
     const boostedPools = sortedPools

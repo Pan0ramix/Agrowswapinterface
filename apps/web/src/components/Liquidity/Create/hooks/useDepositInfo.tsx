@@ -1,7 +1,7 @@
 import { ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
 import { Currency, CurrencyAmount, Price } from '@uniswap/sdk-core'
 import { Pair } from '@uniswap/v2-sdk'
-import { FeeAmount, Pool as V3Pool, priceToClosestTick, TickMath } from '@uniswap/v3-sdk'
+import { encodeSqrtRatioX96, FeeAmount, priceToClosestTick, TickMath, Pool as V3Pool } from '@uniswap/v3-sdk'
 import { Pool as V4Pool } from '@uniswap/v4-sdk'
 import { useNativeTokenPercentageBufferExperiment } from 'components/Liquidity/Create/hooks/useNativeTokenPercentageBufferExperiment'
 import { DepositInfo } from 'components/Liquidity/types'
@@ -10,9 +10,8 @@ import {
   getDependentAmountFromV3Position,
   getDependentAmountFromV4Position,
 } from 'components/Liquidity/utils/getDependentAmount'
-import { encodeSqrtRatioX96 } from '@uniswap/v3-sdk'
-import tryParseCurrencyAmount from 'lib/utils/tryParseCurrencyAmount'
 import JSBI from 'jsbi'
+import tryParseCurrencyAmount from 'lib/utils/tryParseCurrencyAmount'
 import { useMemo } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { PositionField } from 'types/position'
@@ -72,30 +71,38 @@ export function useDepositInfo(state: UseDepositInfoProps): DepositInfo {
   if (process.env.NODE_ENV !== 'production') {
     console.log('[useDepositInfo] Parsed amounts from user input', {
       exactField,
-      independentToken: independentToken ? {
-        address: independentToken.address,
-        symbol: independentToken.symbol,
-        decimals: independentToken.decimals,
-      } : undefined,
-      dependentToken: dependentToken ? {
-        address: dependentToken.address,
-        symbol: dependentToken.symbol,
-        decimals: dependentToken.decimals,
-      } : undefined,
+      independentToken: independentToken
+        ? {
+            address: independentToken.address,
+            symbol: independentToken.symbol,
+            decimals: independentToken.decimals,
+          }
+        : undefined,
+      dependentToken: dependentToken
+        ? {
+            address: dependentToken.address,
+            symbol: dependentToken.symbol,
+            decimals: dependentToken.decimals,
+          }
+        : undefined,
       independentAmountInput: exactAmounts[exactField],
-      independentAmount: independentAmount ? {
-        raw: independentAmount.quotient.toString(),
-        human: independentAmount.toExact(),
-        currency: independentAmount.currency.symbol,
-        decimals: independentAmount.currency.decimals,
-      } : undefined,
+      independentAmount: independentAmount
+        ? {
+            raw: independentAmount.quotient.toString(),
+            human: independentAmount.toExact(),
+            currency: independentAmount.currency.symbol,
+            decimals: independentAmount.currency.decimals,
+          }
+        : undefined,
       otherAmountInput: exactAmounts[exactField === PositionField.TOKEN0 ? PositionField.TOKEN1 : PositionField.TOKEN0],
-      otherAmount: otherAmount ? {
-        raw: otherAmount.quotient.toString(),
-        human: otherAmount.toExact(),
-        currency: otherAmount.currency.symbol,
-        decimals: otherAmount.currency.decimals,
-      } : undefined,
+      otherAmount: otherAmount
+        ? {
+            raw: otherAmount.quotient.toString(),
+            human: otherAmount.toExact(),
+            currency: otherAmount.currency.symbol,
+            decimals: otherAmount.currency.decimals,
+          }
+        : undefined,
     })
   }
 
@@ -125,8 +132,15 @@ export function useDepositInfo(state: UseDepositInfoProps): DepositInfo {
     // For V3: Create mock pool if poolOrPair is undefined (new pool scenario)
     // This matches upstream Uniswap's behavior in useV3DerivedMintInfo (lines 232-240)
     let poolForPosition: V3Pool | V4Pool | undefined = state.poolOrPair as V3Pool | V4Pool | undefined
-    
-    if (protocolVersion === ProtocolVersion.V3 && !poolForPosition && state.feeAmount && token0 && token1 && state.price) {
+
+    if (
+      protocolVersion === ProtocolVersion.V3 &&
+      !poolForPosition &&
+      state.feeAmount &&
+      token0 &&
+      token1 &&
+      state.price
+    ) {
       // Match upstream logic exactly: use price from context (derived from initialPrice or pool price)
       // Same as useV3DerivedMintInfo (lines 232-240): mockPool creation requires price, feeAmount, and tokens
       const token0Wrapped = token0.wrapped
@@ -134,23 +148,18 @@ export function useDepositInfo(state: UseDepositInfoProps): DepositInfo {
       // Ensure tokens are sorted (tokenA < tokenB by address) - same as upstream useV3DerivedMintInfo
       const tokenA = token0Wrapped.sortsBefore(token1Wrapped) ? token0Wrapped : token1Wrapped
       const tokenB = token0Wrapped.sortsBefore(token1Wrapped) ? token1Wrapped : token0Wrapped
-      
+
       // Wrap price to match sorted token order (same as createMockV3Pool in priceRangeInfo.ts lines 138-143)
       // This ensures the price's base/quote currencies match the pool's token0/token1 order
-      const wrappedPrice = new Price(
-        tokenA,
-        tokenB,
-        state.price.denominator,
-        state.price.numerator,
-      )
-      
+      const wrappedPrice = new Price(tokenA, tokenB, state.price.denominator, state.price.numerator)
+
       // Check for invalid price (same validation as upstream useV3DerivedMintInfo lines 218-229)
       const sqrtRatioX96 = encodeSqrtRatioX96(wrappedPrice.numerator, wrappedPrice.denominator)
       const invalidPrice = !(
         JSBI.greaterThanOrEqual(sqrtRatioX96, TickMath.MIN_SQRT_RATIO) &&
         JSBI.lessThan(sqrtRatioX96, TickMath.MAX_SQRT_RATIO)
       )
-      
+
       // Create mock pool using EXACT same logic as upstream useV3DerivedMintInfo (lines 232-240)
       if (!invalidPrice) {
         const currentTick = priceToClosestTick(wrappedPrice)
@@ -177,41 +186,49 @@ export function useDepositInfo(state: UseDepositInfoProps): DepositInfo {
             tickLower,
             tickUpper,
           })
-    
+
     // Dev-only: log dependent amount calculation
     if (process.env.NODE_ENV !== 'production') {
       console.log('[useDepositInfo] Dependent amount calculation', {
         protocolVersion,
         hasPool: !!state.poolOrPair,
-        poolForPosition: poolForPosition ? {
-          token0: poolForPosition.token0.address,
-          token1: poolForPosition.token1.address,
-          fee: (poolForPosition as V3Pool).fee,
-          sqrtPriceX96: (poolForPosition as V3Pool).sqrtRatioX96?.toString(),
-          tickCurrent: (poolForPosition as V3Pool).tickCurrent,
-        } : undefined,
-        independentAmount: independentAmount ? {
-          raw: independentAmount.quotient.toString(),
-          human: independentAmount.toExact(),
-          currency: independentAmount.currency.symbol,
-          address: independentAmount.currency.address,
-        } : undefined,
+        poolForPosition: poolForPosition
+          ? {
+              token0: poolForPosition.token0.address,
+              token1: poolForPosition.token1.address,
+              fee: (poolForPosition as V3Pool).fee,
+              sqrtPriceX96: (poolForPosition as V3Pool).sqrtRatioX96.toString(),
+              tickCurrent: (poolForPosition as V3Pool).tickCurrent,
+            }
+          : undefined,
+        independentAmount: independentAmount
+          ? {
+              raw: independentAmount.quotient.toString(),
+              human: independentAmount.toExact(),
+              currency: independentAmount.currency.symbol,
+              address: independentAmount.currency.address,
+            }
+          : undefined,
         tickLower,
         tickUpper,
-        dependentTokenAmount: dependentTokenAmount ? {
-          raw: dependentTokenAmount.quotient.toString(),
-          human: dependentTokenAmount.toExact(),
-          currency: dependentTokenAmount.currency.symbol,
-          address: dependentTokenAmount.currency.address,
-        } : undefined,
-        dependentToken: dependentToken ? {
-          symbol: dependentToken.symbol,
-          address: dependentToken.address,
-          decimals: dependentToken.decimals,
-        } : undefined,
+        dependentTokenAmount: dependentTokenAmount
+          ? {
+              raw: dependentTokenAmount.quotient.toString(),
+              human: dependentTokenAmount.toExact(),
+              currency: dependentTokenAmount.currency.symbol,
+              address: dependentTokenAmount.currency.address,
+            }
+          : undefined,
+        dependentToken: dependentToken
+          ? {
+              symbol: dependentToken.symbol,
+              address: dependentToken.address,
+              decimals: dependentToken.decimals,
+            }
+          : undefined,
       })
     }
-    
+
     return dependentToken && CurrencyAmount.fromRawAmount(dependentToken, dependentTokenAmount.quotient)
   }, [state, protocolVersion, independentAmount, otherAmount, dependentToken, exactField, token0, token1])
 
@@ -225,32 +242,36 @@ export function useDepositInfo(state: UseDepositInfoProps): DepositInfo {
       [PositionField.TOKEN0]: exactField === PositionField.TOKEN0 ? independentAmount : dependentAmount,
       [PositionField.TOKEN1]: exactField === PositionField.TOKEN0 ? dependentAmount : independentAmount,
     }
-    
+
     // Dev-only: log final parsed amounts mapping
     if (process.env.NODE_ENV !== 'production') {
       console.log('[useDepositInfo] Final parsed amounts mapping', {
         exactField,
-        TOKEN0: result[PositionField.TOKEN0] ? {
-          raw: result[PositionField.TOKEN0]!.quotient.toString(),
-          human: result[PositionField.TOKEN0]!.toExact(),
-          currency: result[PositionField.TOKEN0]!.currency.symbol,
-          address: result[PositionField.TOKEN0]!.currency.address,
-          decimals: result[PositionField.TOKEN0]!.currency.decimals,
-        } : null,
-        TOKEN1: result[PositionField.TOKEN1] ? {
-          raw: result[PositionField.TOKEN1]!.quotient.toString(),
-          human: result[PositionField.TOKEN1]!.toExact(),
-          currency: result[PositionField.TOKEN1]!.currency.symbol,
-          address: result[PositionField.TOKEN1]!.currency.address,
-          decimals: result[PositionField.TOKEN1]!.currency.decimals,
-        } : null,
+        TOKEN0: result[PositionField.TOKEN0]
+          ? {
+              raw: result[PositionField.TOKEN0]!.quotient.toString(),
+              human: result[PositionField.TOKEN0]!.toExact(),
+              currency: result[PositionField.TOKEN0]!.currency.symbol,
+              address: result[PositionField.TOKEN0]!.currency.address,
+              decimals: result[PositionField.TOKEN0]!.currency.decimals,
+            }
+          : null,
+        TOKEN1: result[PositionField.TOKEN1]
+          ? {
+              raw: result[PositionField.TOKEN1]!.quotient.toString(),
+              human: result[PositionField.TOKEN1]!.toExact(),
+              currency: result[PositionField.TOKEN1]!.currency.symbol,
+              address: result[PositionField.TOKEN1]!.currency.address,
+              decimals: result[PositionField.TOKEN1]!.currency.decimals,
+            }
+          : null,
         mapping: {
           TOKEN0: exactField === PositionField.TOKEN0 ? 'independentAmount' : 'dependentAmount',
           TOKEN1: exactField === PositionField.TOKEN0 ? 'dependentAmount' : 'independentAmount',
         },
       })
     }
-    
+
     return result
   }, [dependentAmount, independentAmount, exactField])
   const { [PositionField.TOKEN0]: currency0Amount, [PositionField.TOKEN1]: currency1Amount } = parsedAmounts

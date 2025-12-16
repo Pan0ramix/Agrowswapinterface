@@ -226,3 +226,6 @@ Given on-chain swap receipt:
 - Price impact math is confirmed correct (or fixed if bugs found)
 - Network cost row shows value (approval and/or swap), not "—"
 - No Trading API calls occur for on-chain-only chains (no CORS/401 noise)
+
+
+

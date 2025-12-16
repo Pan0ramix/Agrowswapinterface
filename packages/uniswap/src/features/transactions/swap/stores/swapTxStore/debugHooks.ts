@@ -12,7 +12,7 @@ export function debugMark(label: string) {
         ttlMs: 20000,
         minIntervalMs: 5000,
         keyParts: [label],
-      }
+      },
     )
   }
 }
@@ -23,17 +23,10 @@ export function debugMark(label: string) {
 export function debugHookTraceDeduped(label: string, payload?: Record<string, unknown>, chainId?: number): void {
   if (process.env.NODE_ENV !== 'production') {
     const effectiveChainId = chainId ?? 84532 // Default to Base Sepolia
-    boundaryLogDeduped(
-      `[HOOK TRACE] ${label}`,
-      { extra: payload },
-      effectiveChainId,
-      {
-        ttlMs: 20000,
-        minIntervalMs: 5000,
-        keyParts: [label, effectiveChainId],
-      }
-    )
+    boundaryLogDeduped(`[HOOK TRACE] ${label}`, { extra: payload }, effectiveChainId, {
+      ttlMs: 20000,
+      minIntervalMs: 5000,
+      keyParts: [label, effectiveChainId],
+    })
   }
 }
-
-

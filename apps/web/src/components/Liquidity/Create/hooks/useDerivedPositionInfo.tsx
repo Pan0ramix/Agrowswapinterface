@@ -12,7 +12,6 @@ import {
   PositionState,
 } from 'components/Liquidity/Create/types'
 import { getCurrencyWithWrap, getTokenOrZeroAddress, validateCurrencyInput } from 'components/Liquidity/utils/currency'
-import { areCurrenciesEqual } from 'uniswap/src/utils/currencyId'
 import { getFeeTierKey, isDynamicFeeTier } from 'components/Liquidity/utils/feeTiers'
 import { getSDKPoolFromPoolInformation, getV4SDKPoolFromRestPool } from 'components/Liquidity/utils/parseFromRest'
 import {
@@ -28,6 +27,7 @@ import { PositionField } from 'types/position'
 import { ZERO_ADDRESS } from 'uniswap/src/constants/misc'
 import { usePoolInfoQuery } from 'uniswap/src/data/apiClients/tradingApi/usePoolInfoQuery'
 import { useGetPoolsByTokens } from 'uniswap/src/data/rest/getPools'
+import { areCurrenciesEqual } from 'uniswap/src/utils/currencyId'
 
 function getSortedCurrencies(a: Maybe<Currency>, b: Maybe<Currency>): { [field in PositionField]: Maybe<Currency> } {
   if (!a || !b) {
@@ -261,35 +261,43 @@ export function useDerivedPositionInfo(
   // Log input currencies
   if (process.env.NODE_ENV !== 'production') {
     console.log('[useDerivedPositionInfo] Input currencies', {
-      tokenA: tokenA ? {
-        address: tokenA.isToken ? tokenA.address : 'native',
-        symbol: tokenA.symbol,
-        chainId: tokenA.chainId,
-      } : undefined,
-      tokenB: tokenB ? {
-        address: tokenB.isToken ? tokenB.address : 'native',
-        symbol: tokenB.symbol,
-        chainId: tokenB.chainId,
-      } : undefined,
+      tokenA: tokenA
+        ? {
+            address: tokenA.isToken ? tokenA.address : 'native',
+            symbol: tokenA.symbol,
+            chainId: tokenA.chainId,
+          }
+        : undefined,
+      tokenB: tokenB
+        ? {
+            address: tokenB.isToken ? tokenB.address : 'native',
+            symbol: tokenB.symbol,
+            chainId: tokenB.chainId,
+          }
+        : undefined,
       protocolVersion,
     })
   }
 
   const sortedCurrencies = getSortedCurrenciesForProtocol({ a: tokenA, b: tokenB, protocolVersion })
-  
+
   // Log sorted currencies
   if (process.env.NODE_ENV !== 'production') {
     console.log('[useDerivedPositionInfo] Sorted currencies', {
-      TOKEN0: sortedCurrencies.TOKEN0 ? {
-        address: sortedCurrencies.TOKEN0.isToken ? sortedCurrencies.TOKEN0.address : 'native',
-        symbol: sortedCurrencies.TOKEN0.symbol,
-        chainId: sortedCurrencies.TOKEN0.chainId,
-      } : undefined,
-      TOKEN1: sortedCurrencies.TOKEN1 ? {
-        address: sortedCurrencies.TOKEN1.isToken ? sortedCurrencies.TOKEN1.address : 'native',
-        symbol: sortedCurrencies.TOKEN1.symbol,
-        chainId: sortedCurrencies.TOKEN1.chainId,
-      } : undefined,
+      TOKEN0: sortedCurrencies.TOKEN0
+        ? {
+            address: sortedCurrencies.TOKEN0.isToken ? sortedCurrencies.TOKEN0.address : 'native',
+            symbol: sortedCurrencies.TOKEN0.symbol,
+            chainId: sortedCurrencies.TOKEN0.chainId,
+          }
+        : undefined,
+      TOKEN1: sortedCurrencies.TOKEN1
+        ? {
+            address: sortedCurrencies.TOKEN1.isToken ? sortedCurrencies.TOKEN1.address : 'native',
+            symbol: sortedCurrencies.TOKEN1.symbol,
+            chainId: sortedCurrencies.TOKEN1.chainId,
+          }
+        : undefined,
     })
   }
   const validCurrencyInput = validateCurrencyInput(sortedCurrencies)

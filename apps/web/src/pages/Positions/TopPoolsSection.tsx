@@ -4,7 +4,17 @@ import { TopPoolsCard } from 'pages/Positions/TopPoolsCard'
 import { PoolStat } from 'state/explore/types'
 import { Flex, Text } from 'ui/src'
 
-export function TopPoolsSection({ pools, title, isLoading, showEmptyState }: { pools: PoolStat[]; title: string; isLoading: boolean; showEmptyState?: boolean }) {
+export function TopPoolsSection({
+  pools,
+  title,
+  isLoading,
+  showEmptyState,
+}: {
+  pools: PoolStat[]
+  title: string
+  isLoading: boolean
+  showEmptyState?: boolean
+}) {
   if (isLoading) {
     return (
       <Flex gap="$gap20">

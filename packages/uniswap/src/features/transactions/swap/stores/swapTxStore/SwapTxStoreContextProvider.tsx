@@ -1,6 +1,9 @@
-import * as React from 'react'
-import { TradingApi } from '@universe/api'
 import { PERMIT2_ADDRESS } from '@uniswap/permit2-sdk'
+import { TradingApi } from '@universe/api'
+import * as React from 'react'
+import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
+import { UniverseChainId } from 'uniswap/src/features/chains/types'
+import type { TransactionEip1559FeeParams, TransactionLegacyFeeParams } from 'uniswap/src/features/gas/types'
 import { useSwapFormStore } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import { createSwapTxStore } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/createSwapTxStore'
 import { debugMark } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/debugHooks'
@@ -8,13 +11,10 @@ import { useSwapTxAndGasInfo as useLegacySwapTxAndGasInfo } from 'uniswap/src/fe
 import { SwapTxStoreContext } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/SwapTxStoreContext'
 import type { SwapTxAndGasInfo } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
 import { validateSwapTxContextWithReasons } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
-import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 import { estimateGasFee } from 'uniswap/src/features/transactions/swap/utils/estimateGasFee'
-import type { TransactionEip1559FeeParams, TransactionLegacyFeeParams } from 'uniswap/src/features/gas/types'
+import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
+import { boundaryLogDeduped } from 'uniswap/src/utils/boundaryLog'
 import { logger } from 'utilities/src/logger/logger'
-import { boundaryLog, boundaryLogDeduped } from 'uniswap/src/utils/boundaryLog'
-import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
-import { UniverseChainId } from 'uniswap/src/features/chains/types'
 
 // Universal Router address for Base Sepolia (Agroswap deployment)
 const BASE_SEPOLIA_UNIVERSAL_ROUTER_ADDRESS = '0xF2405e35650268a08a9c12d3Ab7Fc0B82EBa5318'
@@ -25,7 +25,7 @@ const BASE_SEPOLIA_UNIVERSAL_ROUTER_ADDRESS = '0xF2405e35650268a08a9c12d3Ab7Fc0B
  */
 function classifyTxRequest(
   txRequest: { to?: string; data?: string },
-  chainId: number
+  chainId: number,
 ): 'approval' | 'swap' | 'unknown' {
   if (!txRequest.to || !txRequest.data) {
     return 'unknown'
@@ -87,7 +87,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['SwapTxStore-React-instance'],
-      }
+      },
     )
   }
 
@@ -104,7 +104,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['SwapTxStore-provider-version'],
-      }
+      },
     )
   }
 
@@ -128,7 +128,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
   const hookProbeTXH01 = React.useRef(0)
   hookProbeTXH01.current += 1
   if (process.env.NODE_ENV !== 'production') {
-    const chainId = derivedSwapInfo?.chainId
+    const chainId = derivedSwapInfo.chainId
     logger.debugDeduped(
       'SwapTxStoreContextProvider',
       'LegacySwapTxStoreContextProvider',
@@ -141,7 +141,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['TX-H01', chainId],
-      }
+      },
     )
   }
 
@@ -149,24 +149,24 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
   // CRITICAL: useRef must be called unconditionally
   const hookProbeTXH02 = React.useRef(0)
   hookProbeTXH02.current += 1
-  const chainIdForProbe = derivedSwapInfo?.chainId
-    boundaryLogDeduped(
-      '[HookProbe] TX-H02: before useLegacySwapTxAndGasInfo',
-      {
-        tags: { file: 'SwapTxStoreContextProvider', function: 'LegacySwapTxStoreContextProvider' },
-        extra: {
-          chainId: chainIdForProbe,
-          hasOnChainQuote: !!derivedSwapInfo?.onChainQuote,
-          hasTrade: !!derivedSwapInfo?.trade?.trade,
-        },
+  const chainIdForProbe = derivedSwapInfo.chainId
+  boundaryLogDeduped(
+    '[HookProbe] TX-H02: before useLegacySwapTxAndGasInfo',
+    {
+      tags: { file: 'SwapTxStoreContextProvider', function: 'LegacySwapTxStoreContextProvider' },
+      extra: {
+        chainId: chainIdForProbe,
+        hasOnChainQuote: !!derivedSwapInfo.onChainQuote,
+        hasTrade: !!derivedSwapInfo.trade.trade,
       },
-      chainIdForProbe,
-      {
-        ttlMs: 5000,
-        minIntervalMs: 5000,
-        keyParts: ['TX-H02', chainIdForProbe],
-      }
-    )
+    },
+    chainIdForProbe,
+    {
+      ttlMs: 5000,
+      minIntervalMs: 5000,
+      keyParts: ['TX-H02', chainIdForProbe],
+    },
+  )
 
   debugMark('before useLegacySwapTxAndGasInfo')
   const txState = useLegacySwapTxAndGasInfo({ derivedSwapInfo, account })
@@ -176,7 +176,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
   const hookProbeTXH03 = React.useRef(0)
   hookProbeTXH03.current += 1
   if (process.env.NODE_ENV !== 'production') {
-    const chainId = derivedSwapInfo?.chainId
+    const chainId = derivedSwapInfo.chainId
     const routing = txState.routing
     logger.debugDeduped(
       'SwapTxStoreContextProvider',
@@ -192,7 +192,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['TX-H03', chainId, routing],
-      }
+      },
     )
   }
 
@@ -205,19 +205,13 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
   // Gas fee repair effect (Base Sepolia only)
   // CRITICAL: useEffect must be called unconditionally, dependency array must be stable
   React.useEffect(() => {
-    const chainId = derivedSwapInfo?.chainId
+    const chainId = derivedSwapInfo.chainId
     const txRequests = (txState as any)?.txRequests
     const firstTxRequest = txRequests?.[0]
     const accountAddress = account?.address
 
     // Only repair on Base Sepolia when conditions are met
-    if (
-      chainId !== 84532 ||
-      !firstTxRequest?.to ||
-      !firstTxRequest?.data ||
-      !accountAddress ||
-      isRepairing
-    ) {
+    if (chainId !== 84532 || !firstTxRequest?.to || !firstTxRequest?.data || !accountAddress || isRepairing) {
       // Clear repair state if conditions no longer met
       if (chainId !== 84532) {
         setRepairedGasFee(null)
@@ -258,7 +252,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['TX-CONTEXT-pre-validate', chainId],
-      }
+      },
     )
 
     // Only repair if INVALID_GAS_FEE is present
@@ -341,7 +335,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
               ttlMs: 5000,
               minIntervalMs: 5000,
               keyParts: ['TX-CONTEXT-repair-attempt', chainId],
-            }
+            },
           )
 
           boundaryLogDeduped(
@@ -360,7 +354,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
               ttlMs: 5000,
               minIntervalMs: 5000,
               keyParts: ['TX-CONTEXT-post-validate', chainId],
-            }
+            },
           )
         })
         .catch((error: Error) => {
@@ -381,7 +375,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
               ttlMs: 5000,
               minIntervalMs: 5000,
               keyParts: ['TX-CONTEXT-repair-failed', chainId],
-            }
+            },
           )
         })
     } else {
@@ -389,13 +383,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
       setRepairedGasFee(null)
       setRepairError(null)
     }
-  }, [
-    txState,
-    derivedSwapInfo?.chainId ?? null,
-    account?.address ?? null,
-    isRepairing,
-    repairedGasFee,
-  ])
+  }, [txState, derivedSwapInfo.chainId ?? null, account?.address ?? null, isRepairing, repairedGasFee])
 
   // Use repaired gasFee if available, otherwise use original
   const txStateToUse = React.useMemo(() => {
@@ -432,22 +420,22 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
   // CRITICAL: useRef must be called unconditionally
   const hookProbeTXH06 = React.useRef(0)
   hookProbeTXH06.current += 1
-  const chainIdForProbe6 = derivedSwapInfo?.chainId
-    boundaryLogDeduped(
-      '[HookProbe] TX-H06: before first useEffect',
-      {
-        tags: { file: 'SwapTxStoreContextProvider', function: 'LegacySwapTxStoreContextProvider' },
-        extra: {
-          chainId: chainIdForProbe6,
-        },
+  const chainIdForProbe6 = derivedSwapInfo.chainId
+  boundaryLogDeduped(
+    '[HookProbe] TX-H06: before first useEffect',
+    {
+      tags: { file: 'SwapTxStoreContextProvider', function: 'LegacySwapTxStoreContextProvider' },
+      extra: {
+        chainId: chainIdForProbe6,
       },
-      chainIdForProbe6,
-      {
-        ttlMs: 5000,
-        minIntervalMs: 5000,
-        keyParts: ['TX-H06', chainIdForProbe6],
-      }
-    )
+    },
+    chainIdForProbe6,
+    {
+      ttlMs: 5000,
+      minIntervalMs: 5000,
+      keyParts: ['TX-H06', chainIdForProbe6],
+    },
+  )
 
   debugMark('before cleanup effect')
   // CRITICAL: Cleanup function should be returned from effect, not included in deps
@@ -466,7 +454,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
   React.useEffect(() => {
     store.setState(txStateToUse)
     if (process.env.NODE_ENV !== 'production') {
-      const chainId = derivedSwapInfo?.chainId
+      const chainId = derivedSwapInfo.chainId
       const routing = txStateToUse.routing
       logger.debugDeduped(
         'SwapTxStoreContextProvider',
@@ -487,7 +475,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
           ttlMs: 5000,
           minIntervalMs: 5000,
           keyParts: ['SwapTxStore-setState', chainId, routing],
-        }
+        },
       )
     }
   }, [store, txStateToUse, derivedSwapInfo.chainId ?? null, repairedGasFee, isRepairing, repairError])
@@ -497,7 +485,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
   const hookProbeTXH07 = React.useRef(0)
   hookProbeTXH07.current += 1
   if (process.env.NODE_ENV !== 'production') {
-    const chainId = derivedSwapInfo?.chainId
+    const chainId = derivedSwapInfo.chainId
     logger.debugDeduped(
       'SwapTxStoreContextProvider',
       'LegacySwapTxStoreContextProvider',
@@ -509,7 +497,7 @@ const LegacySwapTxStoreContextProvider = ({ children }: { children: React.ReactN
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['TX-H07', chainId],
-      }
+      },
     )
   }
 

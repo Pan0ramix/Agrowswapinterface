@@ -1,22 +1,24 @@
 /**
  * Hook to compute on-chain swap details for swap review UI
- * 
+ *
  * Computes Rate, Price Impact, Network Cost, and Routing label using only on-chain data.
  */
 
-import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Address, PublicClient } from 'viem'
-import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { getOnChainSwapDetails, type OnChainSwapDetails } from 'uniswap/src/features/transactions/swap/utils/getOnChainSwapDetails'
+import { useMemo } from 'react'
 import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { logger } from 'utilities/src/logger/logger'
-import { ApprovalAction, type TokenApprovalInfo } from 'uniswap/src/features/transactions/swap/types/trade'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
+import { ApprovalAction, type TokenApprovalInfo } from 'uniswap/src/features/transactions/swap/types/trade'
+import {
+  getOnChainSwapDetails,
+  type OnChainSwapDetails,
+} from 'uniswap/src/features/transactions/swap/utils/getOnChainSwapDetails'
 import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
+import { logger } from 'utilities/src/logger/logger'
+import { Address } from 'viem'
 
 interface UseOnChainSwapDetailsParams {
   derivedSwapInfo: DerivedSwapInfo
@@ -39,7 +41,7 @@ export function useOnChainSwapDetails({
   error: Error | null
 } {
   const chainId = derivedSwapInfo.chainId as EVMUniverseChainId | undefined
-  const trade = derivedSwapInfo.trade?.trade
+  const trade = derivedSwapInfo.trade.trade
   const onChainQuote = derivedSwapInfo.onChainQuote
 
   // Only enable for on-chain-only chains
@@ -52,7 +54,7 @@ export function useOnChainSwapDetails({
     }
     return createViemClient({ chainId })
   }, [chainId])
-  
+
   const wallet = useWallet()
   const account = wallet.evmAccount?.address as Address | undefined
 
@@ -61,10 +63,10 @@ export function useOnChainSwapDetails({
       'onchain-swap-details',
       chainId,
       account,
-      trade?.inputAmount?.currency?.isToken ? trade.inputAmount.currency.address : undefined,
-      trade?.outputAmount?.currency?.isToken ? trade.outputAmount.currency.address : undefined,
-      trade?.inputAmount?.quotient?.toString(),
-      trade?.outputAmount?.quotient?.toString(),
+      trade?.inputAmount.currency.isToken ? trade.inputAmount.currency.address : undefined,
+      trade?.outputAmount.currency.isToken ? trade.outputAmount.currency.address : undefined,
+      trade?.inputAmount.quotient.toString(),
+      trade?.outputAmount.quotient.toString(),
       tokenApprovalInfo?.action,
       approveTxRequest?.to,
     ],
@@ -86,7 +88,7 @@ export function useOnChainSwapDetails({
         }
         return undefined
       })()
-      
+
       const amountOutQuotedRaw = amountOut.quotient.toString()
       const amountOutMinimumRaw = (() => {
         if ('minAmountOut' in trade && trade.minAmountOut) {
@@ -98,17 +100,19 @@ export function useOnChainSwapDetails({
       // Extract approval tx request from tokenApprovalInfo or approveTxRequest prop
       const approvalTxRequest: { to: Address; data: `0x${string}` } | undefined = (() => {
         // First try the prop (from swapTxContext)
-        if (approveTxRequest?.to && approveTxRequest?.data) {
+        if (approveTxRequest?.to && approveTxRequest.data) {
           return {
             to: approveTxRequest.to as Address,
             data: approveTxRequest.data as `0x${string}`,
           }
         }
         // Fallback to tokenApprovalInfo
-        if (tokenApprovalInfo && 
-            tokenApprovalInfo.action !== ApprovalAction.None && 
-            'txRequest' in tokenApprovalInfo &&
-            tokenApprovalInfo.txRequest) {
+        if (
+          tokenApprovalInfo &&
+          tokenApprovalInfo.action !== ApprovalAction.None &&
+          'txRequest' in tokenApprovalInfo &&
+          tokenApprovalInfo.txRequest
+        ) {
           return {
             to: tokenApprovalInfo.txRequest.to as Address,
             data: tokenApprovalInfo.txRequest.data as `0x${string}`,
@@ -116,10 +120,8 @@ export function useOnChainSwapDetails({
         }
         return undefined
       })()
-      
-      const needsApprove = tokenApprovalInfo 
-        ? tokenApprovalInfo.action !== ApprovalAction.None
-        : !!approvalTxRequest
+
+      const needsApprove = tokenApprovalInfo ? tokenApprovalInfo.action !== ApprovalAction.None : !!approvalTxRequest
 
       // Extract swap tx request from on-chain quote
       const swapTxRequest = onChainQuote.txPayload
@@ -140,7 +142,7 @@ export function useOnChainSwapDetails({
             value: onChainQuote.txPayload.value,
             gasLimit: onChainQuote.txPayload.gasLimit,
             deadline: undefined, // Deadline is in tx data, would need decoding
-            amountOutMinimumRaw: amountOutMinimumRaw,
+            amountOutMinimumRaw,
           }
         : undefined
 

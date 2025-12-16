@@ -1,3 +1,4 @@
+import HeroAgroswapBg from 'assets/images/HeroAgroswap.jpg'
 import { ColumnCenter } from 'components/deprecated/Column'
 import { useCurrency } from 'hooks/Tokens'
 import { useScroll } from 'hooks/useScroll'
@@ -13,7 +14,6 @@ import { Flex, Text, useMedia } from 'ui/src'
 import { INTERFACE_NAV_HEIGHT } from 'ui/src/theme'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { SwapRedirectFn } from 'uniswap/src/features/transactions/components/TransactionModal/TransactionModalContext'
-import HeroAgroswapBg from 'assets/images/HeroAgroswap.jpg'
 
 interface HeroProps {
   scrollToRef: () => void
@@ -101,7 +101,7 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
           zIndex: 0,
         }}
       />
-      
+
       {!media.sm && <TokenCloud />}
 
       <Flex
@@ -174,8 +174,8 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
         centered
         pointerEvents="none"
         bottom={48}
-        style={{ 
-          transform: `translate(0px, ${translateY}px)`, 
+        style={{
+          transform: `translate(0px, ${translateY}px)`,
           opacity: opacityY,
           zIndex: 1,
         }}

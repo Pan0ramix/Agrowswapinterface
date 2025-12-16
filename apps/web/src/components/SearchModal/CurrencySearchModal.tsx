@@ -35,7 +35,6 @@ export default memo(function CurrencySearchModal({
   selectedCurrency,
   otherSelectedCurrency,
 }: CurrencySearchModalProps) {
-
   return (
     <Modal
       isModalOpen={isOpen}

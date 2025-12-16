@@ -153,7 +153,7 @@ export function CreateLiquidityContextProvider({
     // Agroswap only supports V3 - force protocol version to V3
     protocolVersion: ProtocolVersion.V3,
   }))
-  
+
   // Ensure protocol version is always V3 (Agroswap only supports V3)
   useEffect(() => {
     if (positionState.protocolVersion !== ProtocolVersion.V3) {
@@ -197,16 +197,20 @@ export function CreateLiquidityContextProvider({
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {
       console.log('[CreateLiquidityContextProvider] currencyInputs changed', {
-        tokenA: currencyInputs.tokenA ? {
-          address: currencyInputs.tokenA.isToken ? currencyInputs.tokenA.address : 'native',
-          symbol: currencyInputs.tokenA.symbol,
-          chainId: currencyInputs.tokenA.chainId,
-        } : undefined,
-        tokenB: currencyInputs.tokenB ? {
-          address: currencyInputs.tokenB.isToken ? currencyInputs.tokenB.address : 'native',
-          symbol: currencyInputs.tokenB.symbol,
-          chainId: currencyInputs.tokenB.chainId,
-        } : undefined,
+        tokenA: currencyInputs.tokenA
+          ? {
+              address: currencyInputs.tokenA.isToken ? currencyInputs.tokenA.address : 'native',
+              symbol: currencyInputs.tokenA.symbol,
+              chainId: currencyInputs.tokenA.chainId,
+            }
+          : undefined,
+        tokenB: currencyInputs.tokenB
+          ? {
+              address: currencyInputs.tokenB.isToken ? currencyInputs.tokenB.address : 'native',
+              symbol: currencyInputs.tokenB.symbol,
+              chainId: currencyInputs.tokenB.chainId,
+            }
+          : undefined,
       })
     }
   }, [currencyInputs])

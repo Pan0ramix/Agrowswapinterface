@@ -340,3 +340,6 @@ The Button component architecture already prevents these props from reaching DOM
 - Added debug logging when Trading API is prevented
 - Gated bridging hooks for on-chain-only chains
 - All Trading API queries now properly disabled for chainId 84532
+
+
+

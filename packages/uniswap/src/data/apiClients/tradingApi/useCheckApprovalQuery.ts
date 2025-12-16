@@ -6,8 +6,8 @@ import {
 } from '@universe/api'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
 import { TradingApiClient } from 'uniswap/src/data/apiClients/tradingApi/TradingApiClient'
-import { ReactQueryCacheKey } from 'utilities/src/reactQuery/cache'
 import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { ReactQueryCacheKey } from 'utilities/src/reactQuery/cache'
 
 export function useCheckApprovalQuery({
   params,
@@ -24,11 +24,12 @@ export function useCheckApprovalQuery({
 
   return useQueryWithImmediateGarbageCollection<TradingApi.ApprovalResponse>({
     queryKey,
-    queryFn: params && !isOnChainOnly
-      ? async (): ReturnType<typeof TradingApiClient.fetchCheckApproval> =>
-          await TradingApiClient.fetchCheckApproval(params)
-      : skipToken,
-    enabled: (rest.enabled !== false) && !isOnChainOnly && !!params,
+    queryFn:
+      params && !isOnChainOnly
+        ? async (): ReturnType<typeof TradingApiClient.fetchCheckApproval> =>
+            await TradingApiClient.fetchCheckApproval(params)
+        : skipToken,
+    enabled: rest.enabled !== false && !isOnChainOnly && !!params,
     ...rest,
   })
 }

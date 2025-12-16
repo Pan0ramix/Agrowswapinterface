@@ -1,17 +1,17 @@
 /**
  * Decimals Safety Validation
- * 
+ *
  * Validates that token decimals used in UI match on-chain contract decimals
  * to prevent unsafe transactions with wildly incorrect amounts.
- * 
+ *
  * Gated to on-chain-only chains (testnets, chains without Trading API).
  */
 
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
-import { PublicClient, formatUnits, parseUnits } from 'viem'
+import ERC20_ABI from 'uniswap/src/abis/erc20.json'
 import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { logger } from 'utilities/src/logger/logger'
-import ERC20_ABI from 'uniswap/src/abis/erc20.json'
+import { formatUnits, PublicClient, parseUnits } from 'viem'
 
 const ONCHAIN_ONLY_CHAINS: UniverseChainId[] = [84532] // Base Sepolia
 
@@ -49,7 +49,7 @@ async function fetchOnChainDecimals(
 
 /**
  * Validate that a CurrencyAmount's decimals match on-chain contract decimals
- * 
+ *
  * @param amount - The CurrencyAmount to validate
  * @param publicClient - Viem public client for on-chain calls
  * @param tolerance - Allowed difference between formatted-back value and original (default: 0.0001)
@@ -89,35 +89,32 @@ export async function validateDecimalsSafety(
   if (uiDecimals !== onChainDecimals) {
     const humanValue = amount.toExact()
     const rawAmount = amount.quotient.toString()
-    
+
     // Calculate what the amount would be if we used correct decimals
     const correctRawAmount = parseUnits(humanValue, onChainDecimals)
     const formattedBackWithCorrectDecimals = formatUnits(correctRawAmount, onChainDecimals)
     const formattedBackWithWrongDecimals = formatUnits(BigInt(rawAmount), onChainDecimals)
-    
+
     const mismatchFactor = 10 ** Math.abs(onChainDecimals - uiDecimals)
-    
+
     // Log structured error
-    logger.error(
-      new Error('Token decimals mismatch detected'),
-      {
-        tags: {
-          file: 'validateDecimalsSafety',
-          function: 'validateDecimalsSafety',
-        },
-        extra: {
-          tokenAddress,
-          tokenSymbol: currency.symbol,
-          uiDecimals,
-          onChainDecimals,
-          humanValue,
-          rawAmount,
-          formattedBackWithCorrectDecimals,
-          formattedBackWithWrongDecimals,
-          mismatchFactor,
-        },
+    logger.error(new Error('Token decimals mismatch detected'), {
+      tags: {
+        file: 'validateDecimalsSafety',
+        function: 'validateDecimalsSafety',
       },
-    )
+      extra: {
+        tokenAddress,
+        tokenSymbol: currency.symbol,
+        uiDecimals,
+        onChainDecimals,
+        humanValue,
+        rawAmount,
+        formattedBackWithCorrectDecimals,
+        formattedBackWithWrongDecimals,
+        mismatchFactor,
+      },
+    })
 
     return `Token decimals mismatch for ${currency.symbol}. UI metadata: ${uiDecimals}, on-chain: ${onChainDecimals}. Prevented unsafe transaction.`
   }
@@ -133,31 +130,29 @@ export async function validateDecimalsSafety(
 
   // If difference is huge (>1e-6x or <1e6x), something is wrong
   if (relativeDifference > 1e-6 && difference > tolerance) {
-    const mismatchFactor = originalValue > 0 && formattedBackValue > 0 
-      ? Math.max(originalValue / formattedBackValue, formattedBackValue / originalValue)
-      : Infinity
+    const mismatchFactor =
+      originalValue > 0 && formattedBackValue > 0
+        ? Math.max(originalValue / formattedBackValue, formattedBackValue / originalValue)
+        : Infinity
 
     if (mismatchFactor > 1e6 || mismatchFactor < 1e-6) {
-      logger.error(
-        new Error('Amount conversion mismatch detected'),
-        {
-          tags: {
-            file: 'validateDecimalsSafety',
-            function: 'validateDecimalsSafety',
-          },
-          extra: {
-            tokenAddress,
-            tokenSymbol: currency.symbol,
-            decimals: uiDecimals,
-            originalValue,
-            formattedBackValue,
-            difference,
-            relativeDifference,
-            mismatchFactor,
-            rawAmount: amount.quotient.toString(),
-          },
+      logger.error(new Error('Amount conversion mismatch detected'), {
+        tags: {
+          file: 'validateDecimalsSafety',
+          function: 'validateDecimalsSafety',
         },
-      )
+        extra: {
+          tokenAddress,
+          tokenSymbol: currency.symbol,
+          decimals: uiDecimals,
+          originalValue,
+          formattedBackValue,
+          difference,
+          relativeDifference,
+          mismatchFactor,
+          rawAmount: amount.quotient.toString(),
+        },
+      })
 
       return `Amount conversion mismatch for ${currency.symbol}. Original: ${originalValue}, formatted back: ${formattedBackValue}. Prevented unsafe transaction.`
     }
@@ -182,4 +177,3 @@ export async function validateDecimalsSafetyMultiple(
   }
   return null
 }
-

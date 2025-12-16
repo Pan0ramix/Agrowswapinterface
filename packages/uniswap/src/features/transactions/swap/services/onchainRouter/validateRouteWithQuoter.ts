@@ -1,23 +1,21 @@
 /**
  * Route Validation with QuoterV2
- * 
+ *
  * Validates candidate routes by calling QuoterV2 contract.
  * Routes that revert are discarded, only successful quotes are kept.
  */
 
-import JSBI from 'jsbi'
-import { Currency, CurrencyAmount, Token } from '@uniswap/sdk-core'
+import { Currency, CurrencyAmount, QUOTER_ADDRESSES, Token } from '@uniswap/sdk-core'
 import { Pool } from '@uniswap/v3-sdk'
-import { PublicClient } from 'viem'
 import { Interface } from 'ethers/lib/utils'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { CandidateRoute } from './generateCandidateRoutes'
-import { getQuoterV2Address, getV3FactoryAddress } from 'uniswap/src/constants/v3Addresses'
+import JSBI from 'jsbi'
 import { AGROSWAP_QUOTER_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
-import { QUOTER_ADDRESSES } from '@uniswap/sdk-core'
-import { logger } from 'utilities/src/logger/logger'
+import { getQuoterV2Address, getV3FactoryAddress } from 'uniswap/src/constants/v3Addresses'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { decodeQuoterRevert } from 'uniswap/src/features/transactions/swap/utils/decodeQuoterRevert'
-import { Address } from 'viem'
+import { logger } from 'utilities/src/logger/logger'
+import { Address, PublicClient } from 'viem'
+import { CandidateRoute } from 'uniswap/src/features/transactions/swap/services/onchainRouter/generateCandidateRoutes'
 
 // ABI for checking token restrictions (ERC20Restricted from OpenZeppelin)
 const RESTRICTION_ABI = [
@@ -77,7 +75,10 @@ const QUOTER_V2_ABI = [
   {
     inputs: [
       {
-        internalType: 'bytes', name: 'path', type: 'bytes' },
+        internalType: 'bytes',
+        name: 'path',
+        type: 'bytes',
+      },
       { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
     ],
     name: 'quoteExactInput',
@@ -273,7 +274,7 @@ function encodePath(hops: CandidateRoute['hops']): `0x${string}` {
   for (let i = 0; i < hops.length; i++) {
     const hop = hops[i]
     if (!hop) continue
-    
+
     // Remove '0x' prefix and pad to 40 characters (20 bytes)
     const address = hop.tokenIn.address.slice(2).toLowerCase().padStart(40, '0')
     path += address
@@ -344,7 +345,7 @@ async function quoteSingleHop(
     sqrtPriceX96: string
     tick: number
   } | null = null
-  
+
   try {
     const poolInterface = new Interface(V3_POOL_ABI)
     const [slot0Data, liquidityData, token0Data, token1Data, feeData, tickSpacingData] = await Promise.all([
@@ -368,10 +369,12 @@ async function quoteSingleHop(
         to: pool,
         data: poolInterface.encodeFunctionData('fee') as `0x${string}`,
       }),
-      publicClient.call({
-        to: pool,
-        data: poolInterface.encodeFunctionData('tickSpacing') as `0x${string}`,
-      }).catch(() => ({ data: null })),
+      publicClient
+        .call({
+          to: pool,
+          data: poolInterface.encodeFunctionData('tickSpacing') as `0x${string}`,
+        })
+        .catch(() => ({ data: null })),
     ])
 
     if (slot0Data.data && liquidityData.data && token0Data.data && token1Data.data && feeData.data) {
@@ -380,10 +383,10 @@ async function quoteSingleHop(
       const token0 = poolInterface.decodeFunctionResult('token0', token0Data.data)[0] as string
       const token1 = poolInterface.decodeFunctionResult('token1', token1Data.data)[0] as string
       const poolFee = Number(poolInterface.decodeFunctionResult('fee', feeData.data)[0])
-      const tickSpacing = tickSpacingData.data 
+      const tickSpacing = tickSpacingData.data
         ? Number(poolInterface.decodeFunctionResult('tickSpacing', tickSpacingData.data)[0])
         : undefined
-      
+
       poolState = {
         token0: token0.toLowerCase(),
         token1: token1.toLowerCase(),
@@ -393,7 +396,7 @@ async function quoteSingleHop(
         sqrtPriceX96: slot0.sqrtPriceX96.toString(),
         tick: Number(slot0.tick),
       }
-      
+
       // Step C: Log all pool state values
       if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
         console.log('[QUOTER-DIAG] Step C: Pool state verified (on-chain reads)', {
@@ -418,7 +421,7 @@ async function quoteSingleHop(
           poolInitialized: poolState.sqrtPriceX96 !== '0' && poolState.liquidity !== '0',
         })
       }
-      
+
       // Check if pool is initialized and has liquidity
       if (poolState.sqrtPriceX96 === '0' || poolState.liquidity === '0') {
         if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
@@ -444,14 +447,19 @@ async function quoteSingleHop(
         }
         return null
       }
-      
+
       // Verify token ordering matches
       const tokenInLower = hop.tokenIn.address.toLowerCase()
       const tokenOutLower = hop.tokenOut.address.toLowerCase()
       const isTokenInToken0 = tokenInLower === poolState.token0
       const isTokenOutToken1 = tokenOutLower === poolState.token1
-      
-      if (!isTokenInToken0 && !isTokenOutToken1 && tokenInLower !== poolState.token1 && tokenOutLower !== poolState.token0) {
+
+      if (
+        !isTokenInToken0 &&
+        !isTokenOutToken1 &&
+        tokenInLower !== poolState.token1 &&
+        tokenOutLower !== poolState.token0
+      ) {
         if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
           console.error('[QUOTER-DIAG] Step C: Token ordering mismatch', {
             poolToken0: poolState.token0,
@@ -463,7 +471,7 @@ async function quoteSingleHop(
           })
         }
       }
-      
+
       // Verify fee matches
       if (poolState.fee !== hop.fee) {
         if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
@@ -487,13 +495,18 @@ async function quoteSingleHop(
         error: error instanceof Error ? error.message : String(error),
         fullError: error,
       })
-      logger.debug('validateRouteWithQuoter', 'quoteSingleHop', 'Failed to check pool liquidity, proceeding with quote', {
-        fee: hop.fee,
-        tokenIn: hop.tokenIn.symbol,
-        tokenOut: hop.tokenOut.symbol,
-        pool,
-        error: error instanceof Error ? error.message : String(error),
-      })
+      logger.debug(
+        'validateRouteWithQuoter',
+        'quoteSingleHop',
+        'Failed to check pool liquidity, proceeding with quote',
+        {
+          fee: hop.fee,
+          tokenIn: hop.tokenIn.symbol,
+          tokenOut: hop.tokenOut.symbol,
+          pool,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      )
     }
   }
 
@@ -540,13 +553,13 @@ async function quoteSingleHop(
   }
 
   // C) Gate quoter calls - check if quoter is allowlisted for restricted tokens
-  
+
   // If quoterAllowed is explicitly false, skip the quoter call
   if (quoterAllowed === false) {
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
       console.log('[QUOTER-DIAG] Skipping quoter: not allowlisted for restricted token', {
         restrictedToken: hop.tokenOut.address, // tokenOut is likely the restricted token (CPRV1)
-        quoterAddress: quoterAddress,
+        quoterAddress,
         tokenIn: hop.tokenIn.symbol,
         tokenOut: hop.tokenOut.symbol,
         fee: hop.fee,
@@ -554,7 +567,7 @@ async function quoteSingleHop(
       })
       logger.debug('validateRouteWithQuoter', 'quoteSingleHop', '[QUOTER-DIAG] Skipping quoter: not allowlisted', {
         restrictedToken: hop.tokenOut.address,
-        quoterAddress: quoterAddress,
+        quoterAddress,
         tokenIn: hop.tokenIn.symbol,
         tokenOut: hop.tokenOut.symbol,
         fee: hop.fee,
@@ -563,67 +576,81 @@ async function quoteSingleHop(
     }
     return null // Return null to indicate quote unavailable (will be treated as invalid route)
   }
-  
+
   // If quoterAllowed is undefined, check directly if either token is restricted and quoter is not allowed
   // This is a fallback check in case quoterAllowed wasn't passed
   if (quoterAllowed === undefined && quoterAddress) {
     try {
       // Check if tokenOut is restricted (most common case - CPRV1 as output)
-      const tokenOutIsAllowed = await publicClient.readContract({
-        address: hop.tokenOut.address as Address,
-        abi: RESTRICTION_ABI,
-        functionName: 'isUserAllowed',
-        args: [quoterAddress as Address],
-      }).catch(() => true) // If call fails, assume not restricted or allowed
-      
+      const tokenOutIsAllowed = await publicClient
+        .readContract({
+          address: hop.tokenOut.address as Address,
+          abi: RESTRICTION_ABI,
+          functionName: 'isUserAllowed',
+          args: [quoterAddress as Address],
+        })
+        .catch(() => true) // If call fails, assume not restricted or allowed
+
       if (tokenOutIsAllowed === false) {
         if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
           console.log('[QUOTER-DIAG] Skipping quoter: not allowlisted for restricted token (direct check)', {
             restrictedToken: hop.tokenOut.address,
-            quoterAddress: quoterAddress,
+            quoterAddress,
             tokenIn: hop.tokenIn.symbol,
             tokenOut: hop.tokenOut.symbol,
             fee: hop.fee,
             chainId,
           })
-          logger.debug('validateRouteWithQuoter', 'quoteSingleHop', '[QUOTER-DIAG] Skipping quoter: not allowlisted (direct check)', {
-            restrictedToken: hop.tokenOut.address,
-            quoterAddress: quoterAddress,
-            tokenIn: hop.tokenIn.symbol,
-            tokenOut: hop.tokenOut.symbol,
-            fee: hop.fee,
-            chainId,
-          })
+          logger.debug(
+            'validateRouteWithQuoter',
+            'quoteSingleHop',
+            '[QUOTER-DIAG] Skipping quoter: not allowlisted (direct check)',
+            {
+              restrictedToken: hop.tokenOut.address,
+              quoterAddress,
+              tokenIn: hop.tokenIn.symbol,
+              tokenOut: hop.tokenOut.symbol,
+              fee: hop.fee,
+              chainId,
+            },
+          )
         }
         return null
       }
-      
+
       // Also check tokenIn if it might be restricted
-      const tokenInIsAllowed = await publicClient.readContract({
-        address: hop.tokenIn.address as Address,
-        abi: RESTRICTION_ABI,
-        functionName: 'isUserAllowed',
-        args: [quoterAddress as Address],
-      }).catch(() => true)
-      
+      const tokenInIsAllowed = await publicClient
+        .readContract({
+          address: hop.tokenIn.address as Address,
+          abi: RESTRICTION_ABI,
+          functionName: 'isUserAllowed',
+          args: [quoterAddress as Address],
+        })
+        .catch(() => true)
+
       if (tokenInIsAllowed === false) {
         if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
           console.log('[QUOTER-DIAG] Skipping quoter: not allowlisted for restricted token (direct check)', {
             restrictedToken: hop.tokenIn.address,
-            quoterAddress: quoterAddress,
+            quoterAddress,
             tokenIn: hop.tokenIn.symbol,
             tokenOut: hop.tokenOut.symbol,
             fee: hop.fee,
             chainId,
           })
-          logger.debug('validateRouteWithQuoter', 'quoteSingleHop', '[QUOTER-DIAG] Skipping quoter: not allowlisted (direct check)', {
-            restrictedToken: hop.tokenIn.address,
-            quoterAddress: quoterAddress,
-            tokenIn: hop.tokenIn.symbol,
-            tokenOut: hop.tokenOut.symbol,
-            fee: hop.fee,
-            chainId,
-          })
+          logger.debug(
+            'validateRouteWithQuoter',
+            'quoteSingleHop',
+            '[QUOTER-DIAG] Skipping quoter: not allowlisted (direct check)',
+            {
+              restrictedToken: hop.tokenIn.address,
+              quoterAddress,
+              tokenIn: hop.tokenIn.symbol,
+              tokenOut: hop.tokenOut.symbol,
+              fee: hop.fee,
+              chainId,
+            },
+          )
         }
         return null
       }
@@ -679,7 +706,7 @@ async function quoteSingleHop(
       rpcLabel,
       rpcOrigin,
     })
-    
+
     logger.debug('validateRouteWithQuoter', 'quoteSingleHop', '[QUOTER-DIAG] Calling QuoterV2', {
       chainId,
       quoterAddress,
@@ -773,13 +800,13 @@ async function quoteSingleHop(
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
       // Step B: Log decoded revert info
       const rawDataLength = revertInfo.rawData ? revertInfo.rawData.length - 2 : 0 // Subtract '0x'
-      const rawDataPreview = revertInfo.rawData 
-        ? `${revertInfo.rawData.slice(0, 66)}${revertInfo.rawData.length > 66 ? '...' : ''}` 
+      const rawDataPreview = revertInfo.rawData
+        ? `${revertInfo.rawData.slice(0, 66)}${revertInfo.rawData.length > 66 ? '...' : ''}`
         : 'null'
-      
+
       const isSTF = revertInfo.decoded.includes('STF') || revertInfo.decoded.includes('Safe transfer from failed')
       const isTransferError = isSTF || revertInfo.decoded.includes('TF') || revertInfo.decoded.includes('Transfer')
-      
+
       console.error('[QUOTER-DIAG] Step B: Decoded revert data', {
         chainId,
         quoterAddress,
@@ -809,24 +836,27 @@ async function quoteSingleHop(
         errorShortMessage: (error as any)?.shortMessage,
         // STF/Transfer error diagnostics
         isTransferError,
-        transferErrorDiagnosis: isTransferError ? {
-          warning: '⚠️ Transfer error detected in Quoter call - this is abnormal',
-          explanation: 'Quoter should NOT perform token transfers. This suggests:',
-          possibleCauses: [
-            'Wrong Quoter contract (using SwapRouter instead of Quoter?)',
-            'Wrong ABI/function signature (calling swap function instead of quote?)',
-            'Token restriction hook blocking even view calls',
-            'Pool contract has non-standard behavior',
-          ],
-          quoterAddress,
-          expectedQuoterAddress: '0x9B988c0B5720c3ab8a60a04e7C17126519AF64e4',
-          quoterAddressMatch: quoterAddress.toLowerCase() === '0x9B988c0B5720c3ab8a60a04e7C17126519AF64e4'.toLowerCase(),
-          functionName: 'quoteExactInputSingle',
-          expectedFunctionSignature: 'quoteExactInputSingle((address,address,uint256,uint24,uint160))',
-          callDataSelector,
-        } : undefined,
+        transferErrorDiagnosis: isTransferError
+          ? {
+              warning: '⚠️ Transfer error detected in Quoter call - this is abnormal',
+              explanation: 'Quoter should NOT perform token transfers. This suggests:',
+              possibleCauses: [
+                'Wrong Quoter contract (using SwapRouter instead of Quoter?)',
+                'Wrong ABI/function signature (calling swap function instead of quote?)',
+                'Token restriction hook blocking even view calls',
+                'Pool contract has non-standard behavior',
+              ],
+              quoterAddress,
+              expectedQuoterAddress: '0x9B988c0B5720c3ab8a60a04e7C17126519AF64e4',
+              quoterAddressMatch:
+                quoterAddress.toLowerCase() === '0x9B988c0B5720c3ab8a60a04e7C17126519AF64e4'.toLowerCase(),
+              functionName: 'quoteExactInputSingle',
+              expectedFunctionSignature: 'quoteExactInputSingle((address,address,uint256,uint24,uint160))',
+              callDataSelector,
+            }
+          : undefined,
       })
-      
+
       // Also log to console for immediate visibility
       console.error('[QUOTER-DIAG] QuoterV2 reverted', {
         chainId,
@@ -845,7 +875,7 @@ async function quoteSingleHop(
         rpcOrigin,
         fullError: error,
       })
-      
+
       logger.error(error, {
         tags: { file: 'validateRouteWithQuoter', function: 'quoteSingleHop' },
         extra: {
@@ -873,7 +903,8 @@ async function quoteSingleHop(
     // - Pool exists and has liquidity (already validated above)
     // - Revert is NOT a real execution failure (STF, TF, transfer restrictions)
     // - Revert is NOT a panic
-    const shouldTrySDKFallback = pool !== null &&
+    const shouldTrySDKFallback =
+      pool !== null &&
       !revertInfo.decoded.includes('STF') &&
       !revertInfo.decoded.includes('TF') &&
       !revertInfo.decoded.includes('Transfer') &&
@@ -893,108 +924,113 @@ async function quoteSingleHop(
           revertReason: revertInfo.decoded,
         })
       }
-    
+
       // Fallback: Calculate quote using SDK Pool class directly from pool state
       try {
-      const poolInterface = new Interface(V3_POOL_ABI)
-      const [slot0Data, liquidityData] = await Promise.all([
-        publicClient.call({
-          to: pool!,
-          data: poolInterface.encodeFunctionData('slot0') as `0x${string}`,
-        }),
-        publicClient.call({
-          to: pool!,
-          data: poolInterface.encodeFunctionData('liquidity') as `0x${string}`,
-        }),
-      ])
-      
-      if (slot0Data.data && liquidityData.data) {
-        const slot0 = poolInterface.decodeFunctionResult('slot0', slot0Data.data)
-        const liquidity = poolInterface.decodeFunctionResult('liquidity', liquidityData.data)[0]
-        const sqrtPriceX96 = slot0.sqrtPriceX96
-        const tick = Number(slot0.tick)
-        
-        // Check if pool has liquidity (using JSBI comparison for sqrtPriceX96)
-        const sqrtPriceX96Zero = sqrtPriceX96 === BigInt(0)
-        const liquidityZero = liquidity === BigInt(0)
-        if (sqrtPriceX96Zero || liquidityZero) {
+        const poolInterface = new Interface(V3_POOL_ABI)
+        const [slot0Data, liquidityData] = await Promise.all([
+          publicClient.call({
+            to: pool!,
+            data: poolInterface.encodeFunctionData('slot0') as `0x${string}`,
+          }),
+          publicClient.call({
+            to: pool!,
+            data: poolInterface.encodeFunctionData('liquidity') as `0x${string}`,
+          }),
+        ])
+
+        if (slot0Data.data && liquidityData.data) {
+          const slot0 = poolInterface.decodeFunctionResult('slot0', slot0Data.data)
+          const liquidity = poolInterface.decodeFunctionResult('liquidity', liquidityData.data)[0]
+          const sqrtPriceX96 = slot0.sqrtPriceX96
+          const tick = Number(slot0.tick)
+
+          // Check if pool has liquidity (using JSBI comparison for sqrtPriceX96)
+          const sqrtPriceX96Zero = sqrtPriceX96 === BigInt(0)
+          const liquidityZero = liquidity === BigInt(0)
+          if (sqrtPriceX96Zero || liquidityZero) {
+            if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+              logger.debug('validateRouteWithQuoter', 'quoteSingleHop', 'SDK fallback: pool has no liquidity', {
+                fee: hop.fee,
+                tokenIn: hop.tokenIn.symbol,
+                tokenOut: hop.tokenOut.symbol,
+                pool,
+              })
+            }
+            return null
+          }
+
+          // Build Pool instance and calculate quote using SDK
+          const tokenInWrapped = hop.tokenIn.wrapped as Token
+          const tokenOutWrapped = hop.tokenOut.wrapped as Token
+          const sdkPool = new Pool(
+            tokenInWrapped,
+            tokenOutWrapped,
+            hop.fee,
+            sqrtPriceX96.toString(),
+            liquidity.toString(),
+            tick,
+          )
+
+          // Calculate output amount using SDK Pool.getOutputAmount
+          // Note: TypeScript types may indicate Promise, but SDK method is synchronous
+          const amountInWrapped = CurrencyAmount.fromRawAmount(
+            tokenInWrapped,
+            amountIn.quotient.toString(),
+          ) as CurrencyAmount<Token>
+
+          // Call getOutputAmount - SDK method returns [CurrencyAmount, Pool] tuple synchronously
+          // getOutputAmount returns [CurrencyAmount<Token>, Pool] tuple
+          const outputResult = sdkPool.getOutputAmount(amountInWrapped)
+          const amountOut = Array.isArray(outputResult) ? outputResult[0] : (outputResult as any)[0]
+
+          if (!amountOut || !amountOut.quotient) {
+            throw new Error(`SDK getOutputAmount returned invalid result: ${JSON.stringify(outputResult)}`)
+          }
+
           if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-            logger.debug('validateRouteWithQuoter', 'quoteSingleHop', 'SDK fallback: pool has no liquidity', {
+            logger.debug('validateRouteWithQuoter', 'quoteSingleHop', 'SDK fallback quote succeeded', {
               fee: hop.fee,
               tokenIn: hop.tokenIn.symbol,
               tokenOut: hop.tokenOut.symbol,
+              amountInRaw: amountIn.quotient.toString(),
+              amountOutRaw: amountOut.quotient.toString(),
               pool,
             })
           }
-          return null
-        }
-        
-        // Build Pool instance and calculate quote using SDK
-        const tokenInWrapped = hop.tokenIn.wrapped as Token
-        const tokenOutWrapped = hop.tokenOut.wrapped as Token
-        const sdkPool = new Pool(
-          tokenInWrapped,
-          tokenOutWrapped,
-          hop.fee,
-          sqrtPriceX96.toString(),
-          liquidity.toString(),
-          tick,
-        )
-        
-        // Calculate output amount using SDK Pool.getOutputAmount
-        // Note: TypeScript types may indicate Promise, but SDK method is synchronous
-        const amountInWrapped = CurrencyAmount.fromRawAmount(
-          tokenInWrapped,
-          amountIn.quotient.toString(),
-        ) as CurrencyAmount<Token>
-        
-        // Call getOutputAmount - SDK method returns [CurrencyAmount, Pool] tuple synchronously
-        // getOutputAmount returns [CurrencyAmount<Token>, Pool] tuple
-        const outputResult = sdkPool.getOutputAmount(amountInWrapped)
-        const amountOut = Array.isArray(outputResult) ? outputResult[0] : (outputResult as any)[0]
-        
-        if (!amountOut || !amountOut.quotient) {
-          throw new Error(`SDK getOutputAmount returned invalid result: ${JSON.stringify(outputResult)}`)
-        }
-        
-        if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-          logger.debug('validateRouteWithQuoter', 'quoteSingleHop', 'SDK fallback quote succeeded', {
-            fee: hop.fee,
-            tokenIn: hop.tokenIn.symbol,
-            tokenOut: hop.tokenOut.symbol,
-            amountInRaw: amountIn.quotient.toString(),
-            amountOutRaw: amountOut.quotient.toString(),
-            pool,
-          })
-        }
-        
-        // Return quote result in same format as quoter
-        // Mark as estimated since it's from SDK, not Quoter
-        if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-          logger.debug('validateRouteWithQuoter', 'quoteSingleHop', '[QUOTER-DIAG] SDK fallback quote succeeded (ESTIMATED)', {
-            chainId,
-            quoterAddress,
-            poolAddress: pool,
-            fee: hop.fee,
-            tokenIn: hop.tokenIn.symbol,
-            tokenOut: hop.tokenOut.symbol,
-            amountInRaw: amountIn.quotient.toString(),
-            amountOutRaw: amountOut.quotient.toString(),
-            note: 'This is an estimated quote from SDK, not from Quoter contract',
-          })
-        }
 
-        return {
-          amountOut: amountOut.quotient.toString(),
-          sqrtPriceX96After: sqrtPriceX96.toString(), // Approximate - SDK doesn't give us the after price
-          initializedTicksCrossed: 0, // SDK doesn't provide this
-          gasEstimate: '0', // SDK doesn't provide gas estimate
+          // Return quote result in same format as quoter
+          // Mark as estimated since it's from SDK, not Quoter
+          if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
+            logger.debug(
+              'validateRouteWithQuoter',
+              'quoteSingleHop',
+              '[QUOTER-DIAG] SDK fallback quote succeeded (ESTIMATED)',
+              {
+                chainId,
+                quoterAddress,
+                poolAddress: pool,
+                fee: hop.fee,
+                tokenIn: hop.tokenIn.symbol,
+                tokenOut: hop.tokenOut.symbol,
+                amountInRaw: amountIn.quotient.toString(),
+                amountOutRaw: amountOut.quotient.toString(),
+                note: 'This is an estimated quote from SDK, not from Quoter contract',
+              },
+            )
+          }
+
+          return {
+            amountOut: amountOut.quotient.toString(),
+            sqrtPriceX96After: sqrtPriceX96.toString(), // Approximate - SDK doesn't give us the after price
+            initializedTicksCrossed: 0, // SDK doesn't provide this
+            gasEstimate: '0', // SDK doesn't provide gas estimate
+          }
         }
-      }
       } catch (fallbackError) {
         // SDK fallback also failed
         const fallbackErrorMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-        
+
         if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
           console.error('[QUOTER-DIAG] SDK fallback also failed', {
             chainId,
@@ -1010,7 +1046,7 @@ async function quoteSingleHop(
             fallbackErrorStack: fallbackError instanceof Error ? fallbackError.stack : undefined,
             fullFallbackError: fallbackError,
           })
-          
+
           logger.error(fallbackError, {
             tags: { file: 'validateRouteWithQuoter', function: 'quoteSingleHop' },
             extra: {
@@ -1031,7 +1067,7 @@ async function quoteSingleHop(
         }
       }
     }
-    
+
     // Both quoter and SDK fallback failed (or fallback was not attempted)
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
       console.error('[QUOTER-DIAG] Single-hop quote failed (no valid fallback)', {
@@ -1055,7 +1091,7 @@ async function quoteSingleHop(
         rpcOrigin,
         fullError: error,
       })
-      
+
       logger.error(error, {
         tags: { file: 'validateRouteWithQuoter', function: 'quoteSingleHop' },
         extra: {
@@ -1144,14 +1180,19 @@ async function quoteSingleHopExactOutput(
     }
   } catch (error) {
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-      logger.debug('validateRouteWithQuoter', 'quoteSingleHopExactOutput', 'Failed to check pool liquidity, proceeding with quote', {
-        fee: hop.fee,
-        tokenIn: hop.tokenIn.symbol,
-        tokenOut: hop.tokenOut.symbol,
-        pool,
-        error: error instanceof Error ? error.message : String(error),
-        chainId,
-      })
+      logger.debug(
+        'validateRouteWithQuoter',
+        'quoteSingleHopExactOutput',
+        'Failed to check pool liquidity, proceeding with quote',
+        {
+          fee: hop.fee,
+          tokenIn: hop.tokenIn.symbol,
+          tokenOut: hop.tokenOut.symbol,
+          pool,
+          error: error instanceof Error ? error.message : String(error),
+          chainId,
+        },
+      )
     }
   }
 
@@ -1187,14 +1228,19 @@ async function quoteSingleHopExactOutput(
   // Check quoter allowlist (same as exact input)
   if (quoterAllowed === false) {
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-      logger.debug('validateRouteWithQuoter', 'quoteSingleHopExactOutput', '[QUOTER-DIAG] Skipping quoter: not allowlisted', {
-        restrictedToken: hop.tokenOut.address,
-        quoterAddress: quoterAddress,
-        tokenIn: hop.tokenIn.symbol,
-        tokenOut: hop.tokenOut.symbol,
-        fee: hop.fee,
-        chainId,
-      })
+      logger.debug(
+        'validateRouteWithQuoter',
+        'quoteSingleHopExactOutput',
+        '[QUOTER-DIAG] Skipping quoter: not allowlisted',
+        {
+          restrictedToken: hop.tokenOut.address,
+          quoterAddress,
+          tokenIn: hop.tokenIn.symbol,
+          tokenOut: hop.tokenOut.symbol,
+          fee: hop.fee,
+          chainId,
+        },
+      )
     }
     return null
   }
@@ -1203,26 +1249,31 @@ async function quoteSingleHopExactOutput(
   const callData = quoterInterface.encodeFunctionData('quoteExactOutputSingle', [quoteParams]) as `0x${string}`
 
   if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-    logger.debug('validateRouteWithQuoter', 'quoteSingleHopExactOutput', '[QUOTER-DIAG] Calling QuoterV2 (exact output)', {
-      chainId,
-      quoterAddress,
-      poolAddress: pool,
-      functionName: 'quoteExactOutputSingle',
-      callParams: {
-        tokenIn: hop.tokenIn.address,
-        tokenOut: hop.tokenOut.address,
-        tokenInSymbol: hop.tokenIn.symbol,
-        tokenOutSymbol: hop.tokenOut.symbol,
-        amountOut: amountOutRaw.toString(),
-        amountOutExact: amountOut.toExact(),
-        fee: hop.fee,
-        sqrtPriceLimitX96: '0',
+    logger.debug(
+      'validateRouteWithQuoter',
+      'quoteSingleHopExactOutput',
+      '[QUOTER-DIAG] Calling QuoterV2 (exact output)',
+      {
+        chainId,
+        quoterAddress,
+        poolAddress: pool,
+        functionName: 'quoteExactOutputSingle',
+        callParams: {
+          tokenIn: hop.tokenIn.address,
+          tokenOut: hop.tokenOut.address,
+          tokenInSymbol: hop.tokenIn.symbol,
+          tokenOutSymbol: hop.tokenOut.symbol,
+          amountOut: amountOutRaw.toString(),
+          amountOutExact: amountOut.toExact(),
+          fee: hop.fee,
+          sqrtPriceLimitX96: '0',
+        },
+        callData,
+        rpcMethod: 'call',
+        rpcLabel,
+        rpcOrigin,
       },
-      callData,
-      rpcMethod: 'call',
-      rpcLabel,
-      rpcOrigin,
-    })
+    )
   }
 
   try {
@@ -1247,20 +1298,25 @@ async function quoteSingleHopExactOutput(
     const [amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate] = decoded as any
 
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-      logger.debug('validateRouteWithQuoter', 'quoteSingleHopExactOutput', '[QUOTER-DIAG] Single-hop exact output quote succeeded', {
-        chainId,
-        quoterAddress,
-        poolAddress: pool,
-        fee: hop.fee,
-        tokenIn: hop.tokenIn.symbol,
-        tokenOut: hop.tokenOut.symbol,
-        amountOutRaw: amountOut.quotient.toString(),
-        amountOutExact: amountOut.toExact(),
-        amountIn: amountIn?.toString?.(),
-        sqrtPriceX96After: sqrtPriceX96After?.toString?.(),
-        initializedTicksCrossed: Number(initializedTicksCrossed),
-        gasEstimate: gasEstimate?.toString?.(),
-      })
+      logger.debug(
+        'validateRouteWithQuoter',
+        'quoteSingleHopExactOutput',
+        '[QUOTER-DIAG] Single-hop exact output quote succeeded',
+        {
+          chainId,
+          quoterAddress,
+          poolAddress: pool,
+          fee: hop.fee,
+          tokenIn: hop.tokenIn.symbol,
+          tokenOut: hop.tokenOut.symbol,
+          amountOutRaw: amountOut.quotient.toString(),
+          amountOutExact: amountOut.toExact(),
+          amountIn: amountIn?.toString?.(),
+          sqrtPriceX96After: sqrtPriceX96After?.toString?.(),
+          initializedTicksCrossed: Number(initializedTicksCrossed),
+          gasEstimate: gasEstimate?.toString?.(),
+        },
+      )
     }
 
     return {
@@ -1312,13 +1368,13 @@ async function quoteMultiHop(
         logger.debug('validateRouteWithQuoter', 'quoteMultiHop', 'Skipped: pool does not exist', {
           tokenIn: hop.tokenIn.symbol,
           tokenOut: hop.tokenOut.symbol,
-        tokenInAddress: hop.tokenIn.address,
-        tokenOutAddress: hop.tokenOut.address,
-        fee: hop.fee,
-        chainId,
-        rpcLabel,
-        rpcUrl: rpcOrigin,
-        rpcOrigin,
+          tokenInAddress: hop.tokenIn.address,
+          tokenOutAddress: hop.tokenOut.address,
+          fee: hop.fee,
+          chainId,
+          rpcLabel,
+          rpcUrl: rpcOrigin,
+          rpcOrigin,
         })
       }
       return null
@@ -1351,7 +1407,7 @@ async function quoteMultiHop(
 
     const path = encodePath(route.hops)
     const amountInRaw = BigInt(amountIn.quotient.toString())
-    
+
     const callData = quoterInterface.encodeFunctionData('quoteExactInput', [path, amountInRaw]) as `0x${string}`
     const callDataSelector = callData.slice(0, 10) as `0x${string}`
 
@@ -1473,7 +1529,7 @@ export async function validateRouteWithQuoter(
   quoterAllowed?: boolean,
 ): Promise<ValidatedRoute | null> {
   const isExactOut = !!amountOut && !amountIn
-  
+
   try {
     // Single hop route
     if (route.hops.length === 1) {
@@ -1481,18 +1537,23 @@ export async function validateRouteWithQuoter(
       if (!firstHop) {
         return null
       }
-      
+
       if (isExactOut && amountOut) {
         // Exact output: quote how much input is needed for desired output
-        const quoteResult = await quoteSingleHopExactOutput(firstHop, amountOut, chainId, publicClient, rpcLabel, rpcOrigin, quoterAllowed)
+        const quoteResult = await quoteSingleHopExactOutput(
+          firstHop,
+          amountOut,
+          chainId,
+          publicClient,
+          rpcLabel,
+          rpcOrigin,
+          quoterAllowed,
+        )
         if (!quoteResult) {
           return null
         }
 
-        const amountInCurrency = CurrencyAmount.fromRawAmount(
-          tokenIn,
-          quoteResult.amountIn,
-        )
+        const amountInCurrency = CurrencyAmount.fromRawAmount(tokenIn, quoteResult.amountIn)
 
         return {
           route,
@@ -1506,15 +1567,20 @@ export async function validateRouteWithQuoter(
         }
       } else if (amountIn) {
         // Exact input: quote how much output we get for given input
-        const quoteResult = await quoteSingleHop(firstHop, amountIn, chainId, publicClient, rpcLabel, rpcOrigin, quoterAllowed)
+        const quoteResult = await quoteSingleHop(
+          firstHop,
+          amountIn,
+          chainId,
+          publicClient,
+          rpcLabel,
+          rpcOrigin,
+          quoterAllowed,
+        )
         if (!quoteResult) {
           return null
         }
 
-        const amountOutCurrency = CurrencyAmount.fromRawAmount(
-          tokenOut,
-          quoteResult.amountOut,
-        )
+        const amountOutCurrency = CurrencyAmount.fromRawAmount(tokenOut, quoteResult.amountOut)
 
         return {
           route,
@@ -1525,7 +1591,7 @@ export async function validateRouteWithQuoter(
           gasEstimate: quoteResult.gasEstimate,
         }
       }
-      
+
       return null
     }
 
@@ -1541,11 +1607,11 @@ export async function validateRouteWithQuoter(
       }
       return null
     }
-    
+
     if (!amountIn) {
       return null
     }
-    
+
     const quoteResult = await quoteMultiHop(route, amountIn, chainId, publicClient, rpcLabel, rpcOrigin)
     if (!quoteResult) {
       return null
@@ -1566,6 +1632,3 @@ export async function validateRouteWithQuoter(
     return null
   }
 }
-
-
-

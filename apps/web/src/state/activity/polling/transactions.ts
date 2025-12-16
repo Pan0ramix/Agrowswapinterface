@@ -1,5 +1,4 @@
 import { TradingApi } from '@universe/api'
-import { FeatureFlags, useFeatureFlag } from '@universe/gating'
 import { useAccount } from 'hooks/useAccount'
 import useCurrentBlockTimestamp from 'hooks/useCurrentBlockTimestamp'
 import useBlockNumber from 'lib/hooks/useBlockNumber'
@@ -11,14 +10,12 @@ import { useAppDispatch } from 'state/hooks'
 import { useMultichainTransactions, useTransactionRemover } from 'state/transactions/hooks'
 import { PendingTransactionDetails } from 'state/transactions/types'
 import { isPendingTx } from 'state/transactions/utils'
-import { TradingApiClient } from 'uniswap/src/data/apiClients/tradingApi/TradingApiClient'
 import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
 import { RetryOptions, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { InterfaceEventName } from 'uniswap/src/features/telemetry/constants'
 import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
 import { checkedTransaction } from 'uniswap/src/features/transactions/slice'
 import { isUniswapX } from 'uniswap/src/features/transactions/swap/utils/routing'
-import { toTradingApiSupportedChainId } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
 import { TransactionReceipt, TransactionStatus } from 'uniswap/src/features/transactions/types/transactionDetails'
 import { receiptFromViemReceipt } from 'uniswap/src/features/transactions/utils/receipt'
 import { shouldCheckTransaction } from 'uniswap/src/utils/polling'
@@ -90,7 +87,7 @@ export function usePollPendingTransactions(onActivityUpdate: OnActivityUpdate) {
                 if (blockTimestamp && tx.deadline < Number(blockTimestamp)) {
                   removeTransaction(tx.id)
                 }
-              // Without a deadline, drop stale pending txs after 30 minutes to avoid UI lockups.
+                // Without a deadline, drop stale pending txs after 30 minutes to avoid UI lockups.
               } else if (tx.addedTime + ms(`30m`) < Date.now()) {
                 removeTransaction(tx.id)
               }

@@ -13,8 +13,8 @@ import { TradeableAsset } from 'uniswap/src/entities/assets'
 import { useBridgingTokensOptions } from 'uniswap/src/features/bridging/hooks/tokens'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { getChainLabel } from 'uniswap/src/features/chains/utils'
-import { isPortfolioSupportedChain } from 'uniswap/src/features/portfolio/utils/chainSupport'
 import type { CurrencyInfo } from 'uniswap/src/features/dataApi/types'
+import { isPortfolioSupportedChain } from 'uniswap/src/features/portfolio/utils/chainSupport'
 
 /**
  * Web-specific version of useTokenSectionsForSearchResults that includes

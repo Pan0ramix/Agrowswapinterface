@@ -106,5 +106,11 @@ export function useCurrencyInfosToTokenOptions({
     // CRITICAL: Use stable normalized values in dependency array to prevent size changes.
     // All dependencies are always present with consistent types (null/boolean instead of undefined).
     // Fixed array size: 5 dependencies always present.
-  }, [normalizedCurrencyInfos, currencyInfosLength, normalizedSortAlphabetically, disablePortfolio, normalizedPortfolioBalances])
+  }, [
+    normalizedCurrencyInfos,
+    currencyInfosLength,
+    normalizedSortAlphabetically,
+    disablePortfolio,
+    normalizedPortfolioBalances,
+  ])
 }

@@ -6,15 +6,12 @@ import { SwapBottomCard } from 'components/SwapBottomCard'
 import { SwitchLocaleLink } from 'components/SwitchLocaleLink'
 import { PageWrapper } from 'components/swap/styled'
 import { useAccount } from 'hooks/useAccount'
-import { useDeferredComponent } from 'hooks/useDeferredComponent'
 import { PageType, useIsPage } from 'hooks/useIsPage'
 import { useModalState } from 'hooks/useModalState'
 import { useResetOverrideOneClickSwapFlag } from 'pages/Swap/settings/OneClickSwap'
 import { useWebSwapSettings } from 'pages/Swap/settings/useWebSwapSettings'
 import { TDPContext } from 'pages/TokenDetails/TDPContext'
 import { useCallback, useContext, useEffect, useMemo } from 'react'
-import { useSwapFormStoreDerivedSwapInfo } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
-import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
 import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 import { useLocation, useNavigate } from 'react-router'
@@ -31,7 +28,6 @@ import { zIndexes } from 'ui/src/theme'
 import { useUniswapContext } from 'uniswap/src/contexts/UniswapContext'
 import { useIsModeMismatch } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
-import { RampDirection } from 'uniswap/src/features/fiatOnRamp/types'
 import { useGetPasskeyAuthStatus } from 'uniswap/src/features/passkey/hooks/useGetPasskeyAuthStatus'
 import { WebFORNudgeProvider } from 'uniswap/src/features/providers/webForNudgeProvider'
 import { InterfaceEventName, InterfacePageName, ModalName } from 'uniswap/src/features/telemetry/constants'
@@ -48,10 +44,12 @@ import { selectFilteredChainIds } from 'uniswap/src/features/transactions/swap/s
 import { SwapDependenciesStoreContextProvider } from 'uniswap/src/features/transactions/swap/stores/swapDependenciesStore/SwapDependenciesStoreContextProvider'
 import { SwapFormStoreContextProvider } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/SwapFormStoreContextProvider'
 import type { SwapFormState } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/types'
+import { useSwapFormStoreDerivedSwapInfo } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import { currencyToAsset } from 'uniswap/src/features/transactions/swap/utils/asset'
 import { TransactionState } from 'uniswap/src/features/transactions/types/transactionState'
 import { CurrencyField } from 'uniswap/src/types/currency'
 import { SwapTab } from 'uniswap/src/types/screens/interface'
+import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
 import { isMobileWeb } from 'utilities/src/platform'
 import { noop } from 'utilities/src/react/noop'
 import { isIFramed } from 'utils/isIFramed'
@@ -265,14 +263,17 @@ function UniversalSwapFlow({
         {
           tags: { file: 'Swap/index', function: 'document-pointerdown' },
           extra: {
-            targetTagName: (e.target as HTMLElement)?.tagName,
-            targetId: (e.target as HTMLElement)?.id,
-            targetClassName: (e.target as HTMLElement)?.className,
+            targetTagName: (e.target as HTMLElement).tagName,
+            targetId: (e.target as HTMLElement).id,
+            targetClassName: (e.target as HTMLElement).className,
             eventPhase: e.eventPhase,
-            composedPath: e.composedPath().slice(0, 3).map((el) => (el as HTMLElement)?.tagName),
+            composedPath: e
+              .composedPath()
+              .slice(0, 3)
+              .map((el) => (el as HTMLElement).tagName),
           },
         },
-        chainId
+        chainId,
       )
     }
     const clickHandler = (e: MouseEvent) => {
@@ -281,14 +282,17 @@ function UniversalSwapFlow({
         {
           tags: { file: 'Swap/index', function: 'document-click' },
           extra: {
-            targetTagName: (e.target as HTMLElement)?.tagName,
-            targetId: (e.target as HTMLElement)?.id,
-            targetClassName: (e.target as HTMLElement)?.className,
+            targetTagName: (e.target as HTMLElement).tagName,
+            targetId: (e.target as HTMLElement).id,
+            targetClassName: (e.target as HTMLElement).className,
             eventPhase: e.eventPhase,
-            composedPath: e.composedPath().slice(0, 3).map((el) => (el as HTMLElement)?.tagName),
+            composedPath: e
+              .composedPath()
+              .slice(0, 3)
+              .map((el) => (el as HTMLElement).tagName),
           },
         },
-        chainId
+        chainId,
       )
     }
     document.addEventListener('pointerdown', pointerHandler, true) // capture phase

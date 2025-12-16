@@ -102,8 +102,8 @@ export const approvedERC20: InteractiveToken[] = [
       'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/optimism/assets/0x4200000000000000000000000000000000000042/logo.png',
   },
   {
-    name: 'Uniswap',
-    symbol: 'UNI',
+    name: 'Agroswap',
+    symbol: 'AGX',
     color: '#FF007A',
     logoUrl:
       'https://raw.githubusercontent.com/Uniswap/assets/master/blockchains/ethereum/assets/0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984/logo.png',

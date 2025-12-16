@@ -1,6 +1,6 @@
 /**
  * Shared hook for restricted token warnings
- * 
+ *
  * This hook provides a standardized warning model that can be used across platforms.
  * It wraps useRestrictedTokenAllowlistChecks and transforms the data into a
  * platform-agnostic warning structure.
@@ -8,12 +8,10 @@
 
 import { useMemo } from 'react'
 import { Address } from 'viem'
-import { Currency, FeeAmount } from '@uniswap/sdk-core'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import {
-  useRestrictedTokenAllowlistChecks,
   type UseRestrictedTokenAllowlistChecksParams,
-} from './useRestrictedTokenAllowlistChecks'
+  useRestrictedTokenAllowlistChecks,
+} from 'uniswap/src/features/transactions/hooks/useRestrictedTokenAllowlistChecks'
 
 export type WarningSeverity = 'blocking' | 'warning'
 
@@ -83,7 +81,7 @@ export function useRestrictedTokenWarnings({
     // Determine wallet status
     const walletChecks = allowlistChecks.debug.checked.filter((check) => check.subjectLabel === 'Wallet')
     const walletCheck = walletChecks.length > 0 ? walletChecks[0] : null
-    
+
     let walletStatus: WalletStatus = 'unknown'
     if (allowlistChecks.isLoading && walletChecks.length === 0) {
       walletStatus = 'loading'
@@ -220,4 +218,3 @@ export function useRestrictedTokenWarnings({
 
   return result
 }
-

@@ -30,16 +30,16 @@ export function createApprovalTransactionStep({
   if (missingTo || missingData || missingAmountIn) {
     // Debug logging for why approval step creation failed (Base Sepolia on-chain-only)
     if (process.env.NODE_ENV !== 'production' && txRequest?.chainId === 84532) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[APPROVAL-STEP] returned-undefined', {
         missingTo,
         missingData,
         missingAmountIn,
-        to: txRequest?.to,
+        to: txRequest.to,
         dataLen,
         hasAmountIn: !!amountIn,
-        amountInValue: amountIn?.quotient?.toString(),
-        chainId: txRequest?.chainId,
+        amountInValue: amountIn?.quotient.toString(),
+        chainId: txRequest.chainId,
       })
     }
     return undefined
@@ -52,7 +52,7 @@ export function createApprovalTransactionStep({
 
   // Debug logging for successful approval step creation (Base Sepolia on-chain-only)
   if (process.env.NODE_ENV !== 'production' && txRequest.chainId === 84532) {
-    // eslint-disable-next-line no-console
+     
     console.log('[APPROVAL-STEP] approval step created successfully', {
       chainId: txRequest.chainId,
       token: token.address,

@@ -14,6 +14,7 @@ import {
   getIsNotificationServiceEnabled,
   type NotificationService,
 } from '@universe/notifications'
+import { useAccount } from 'hooks/useAccount'
 import { createLocalStorageAdapter } from 'notification-service/createLocalStorageAdapter'
 import { createLegacyBannersNotificationDataSource } from 'notification-service/data-sources/createLegacyBannersNotificationDataSource'
 import { createPollingNotificationDataSource } from 'notification-service/data-sources/createPollingNotificationDataSource'
@@ -26,7 +27,6 @@ import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import store from 'state'
 import { useIsDarkMode } from 'ui/src'
-import { useAccount } from 'hooks/useAccount'
 import { mapLocaleToBackendLocale } from 'uniswap/src/features/language/constants'
 import { getLocale } from 'uniswap/src/features/language/hooks'
 import { selectCurrentLanguage } from 'uniswap/src/features/settings/selectors'

@@ -12,8 +12,7 @@
 // Gate dedupe maps behind __DEV__ to avoid overhead in production
 // Also check REACT_APP_DEDUP_LOGS env var (default on in dev, can be disabled with REACT_APP_DEDUP_LOGS=0)
 const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV !== 'production'
-const isDedupEnabled =
-  isDev && (typeof process === 'undefined' || process.env.REACT_APP_DEDUP_LOGS !== '0')
+const isDedupEnabled = isDev && (typeof process === 'undefined' || process.env.REACT_APP_DEDUP_LOGS !== '0')
 
 export interface DedupeOptions {
   ttlMs?: number // default 1500
@@ -113,12 +112,7 @@ function pick(obj: any, keys: string[]): any {
  * Excludes volatile fields like renderCount, ts, timestamp, stack.
  * Supports explicit keyParts for maximum stability.
  */
-function buildDedupeKey(
-  message: string,
-  payload: any,
-  chainId?: number,
-  options?: DedupeOptions
-): string {
+function buildDedupeKey(message: string, payload: any, chainId?: number, options?: DedupeOptions): string {
   // Explicit key takes precedence
   if (options?.key) {
     return options.key
@@ -236,7 +230,9 @@ function checkGlobalBurstGuard(level?: string): boolean {
   if (globalLogCount > GLOBAL_MAX_LOGS_PER_SEC) {
     globalThrottleUntil = now + 1000
     // biome-ignore lint/suspicious/noConsole: Dev-only throttling message
-    console.warn(`[DEDUPED] global throttle engaged (suppressed ${globalLogCount - GLOBAL_MAX_LOGS_PER_SEC} logs in last 1s)`)
+    console.warn(
+      `[DEDUPED] global throttle engaged (suppressed ${globalLogCount - GLOBAL_MAX_LOGS_PER_SEC} logs in last 1s)`,
+    )
     return true
   }
 
@@ -254,7 +250,7 @@ export function dedupeLog(
   message: string,
   payload?: any,
   chainId?: number,
-  options?: DedupeOptions
+  options?: DedupeOptions,
 ): void {
   // Bypass deduplication if requested or not enabled
   if (options?.bypass || !isDedupEnabled) {
@@ -360,12 +356,7 @@ export function createDedupeLogger({
   defaultTtlMs?: number
   maxEntries?: number
 }) {
-  return (
-    message: string,
-    payload?: any,
-    chainId?: number,
-    options?: DedupeOptions
-  ): void => {
+  return (message: string, payload?: any, chainId?: number, options?: DedupeOptions): void => {
     dedupeLog(logFn, message, payload, chainId, {
       ttlMs: defaultTtlMs,
       maxEntries,
@@ -373,4 +364,3 @@ export function createDedupeLogger({
     })
   }
 }
-

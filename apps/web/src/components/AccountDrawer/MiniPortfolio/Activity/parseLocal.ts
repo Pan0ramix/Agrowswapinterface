@@ -620,7 +620,7 @@ export function getTransactionToActivityQueryOptions({
       // Never return undefined from a React Query queryFn – use null to represent "no data".
       // transactionToActivity already returns null when details is missing, but we also disable the query.
       const result = await transactionToActivity({ details: transaction, formatNumber })
-      
+
       // Dev-only: log result
       if (process.env.NODE_ENV !== 'production') {
         console.log('[TransactionToActivity] queryFn completed', {

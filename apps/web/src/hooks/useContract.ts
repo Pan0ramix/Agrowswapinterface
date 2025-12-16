@@ -11,10 +11,8 @@ import NonfungiblePositionManagerJson from '@uniswap/v3-periphery/artifacts/cont
 import V3MigratorJson from '@uniswap/v3-periphery/artifacts/contracts/V3Migrator.sol/V3Migrator.json'
 import { useAccount } from 'hooks/useAccount'
 import { useEthersProvider } from 'hooks/useEthersProvider'
+import { useWagmiStoreReady } from 'hooks/useWagmiStoreReady'
 import { useEffect, useMemo, useRef } from 'react'
-import { useWagmiStoreReady } from './useWagmiStoreReady'
-// biome-ignore lint/style/noRestrictedImports: wagmi chain hook needed for chain management
-import { useChainId } from 'wagmi'
 import ERC20_ABI from 'uniswap/src/abis/erc20.json'
 import { Erc20, Erc721, Weth } from 'uniswap/src/abis/types'
 import { NonfungiblePositionManager, UniswapInterfaceMulticall } from 'uniswap/src/abis/types/v3'
@@ -30,6 +28,8 @@ import { InterfaceEventName } from 'uniswap/src/features/telemetry/constants'
 import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
 import { getContract } from 'utilities/src/contracts/getContract'
 import { logger } from 'utilities/src/logger/logger'
+// biome-ignore lint/style/noRestrictedImports: wagmi chain hook needed for chain management
+import { useChainId } from 'wagmi'
 
 const { abi: IUniswapV2PairABI } = IUniswapV2PairJson
 const { abi: MulticallABI } = UniswapInterfaceMulticallJson
@@ -121,7 +121,7 @@ export function usePairContract(pairAddress?: string, withSignerIfPossible?: boo
 function useSafeChainId(): number | undefined {
   const fallbackRef = useRef<number | undefined>(undefined)
   const isStoreReady = useWagmiStoreReady()
-  
+
   // Hook must be called unconditionally (React rules)
   // But we check store readiness to handle errors gracefully
   try {
@@ -135,7 +135,10 @@ function useSafeChainId(): number | undefined {
   } catch (error) {
     // If wagmi store isn't ready, return last known value or undefined
     // This can happen during SSR or when wagmi provider isn't set up yet
-    if (error instanceof Error && (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))
+    ) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[useSafeChainId] Wagmi store not ready, returning undefined', error)
       }
@@ -156,7 +159,10 @@ function useSafeAccount(): ReturnType<typeof useAccount> {
   } catch (error) {
     // If wagmi store isn't ready, return a safe fallback
     // This can happen during SSR or when wagmi provider isn't set up yet
-    if (error instanceof Error && (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))
+    ) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[useSafeAccount] Wagmi store not ready, using fallback', error)
       }

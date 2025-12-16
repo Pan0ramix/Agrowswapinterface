@@ -73,7 +73,7 @@ const WAGMI_CHAINS =
         // Check if baseSepolia is already in ORDERED_EVM_CHAINS (it might be)
         const hasBaseSepolia = baseChains.some((chain) => chain.id === baseSepolia.id)
         const hasPolygonAmoy = baseChains.some((chain) => chain.id === polygonAmoy.id)
-        
+
         const testnetChains: Chain[] = []
         if (!hasBaseSepolia) {
           testnetChains.push(baseSepolia)
@@ -81,7 +81,7 @@ const WAGMI_CHAINS =
         if (!hasPolygonAmoy) {
           testnetChains.push(polygonAmoy)
         }
-        
+
         return [...baseChains, ...testnetChains] as const
       })()
     : (ORDERED_EVM_CHAINS as const)

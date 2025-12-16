@@ -2,8 +2,8 @@ import { type UseQueryResult, useQuery } from '@tanstack/react-query'
 import type { TradingApi, UseQueryApiHelperHookArgs } from '@universe/api'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
 import { TradingApiClient } from 'uniswap/src/data/apiClients/tradingApi/TradingApiClient'
-import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { getTradeSettingsDeadline } from 'uniswap/src/data/apiClients/tradingApi/utils/getTradeSettingsDeadline'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { ReactQueryCacheKey } from 'utilities/src/reactQuery/cache'
 
 export function useCreateLpPositionCalldataQuery({

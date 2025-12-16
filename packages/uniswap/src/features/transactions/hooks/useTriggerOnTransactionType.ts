@@ -1,9 +1,8 @@
 import { useEffect, useMemo } from 'react'
+import { useActiveAddresses } from 'uniswap/src/features/accounts/store/hooks'
 import { usePendingTransactions } from 'uniswap/src/features/transactions/hooks/usePendingTransactions'
 import { TransactionType } from 'uniswap/src/features/transactions/types/transactionDetails'
 import { usePrevious } from 'utilities/src/react/hooks'
-import { useActiveAddresses } from 'uniswap/src/features/accounts/store/hooks'
-import type { Address } from 'viem'
 
 /**
  * Trigger a function when a transaction of a given type is confirmed
@@ -30,4 +29,3 @@ export function useTriggerOnTransactionType(type: TransactionType, trigger: () =
     }
   }, [numPendingTransactions, prevNumPendingTransactions, trigger])
 }
-

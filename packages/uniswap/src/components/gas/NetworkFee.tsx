@@ -68,7 +68,7 @@ export function NetworkFee({
             )}
             {gasFee.error ? (
               <Text color="$neutral2" variant="body3">
-                {'—'}
+                —
               </Text>
             ) : uniswapXGasBreakdown ? (
               <UniswapXFee gasFee={gasFeeFormatted} preSavingsGasFee={uniswapXGasFeeInfo?.preSavingsGasFeeFormatted} />

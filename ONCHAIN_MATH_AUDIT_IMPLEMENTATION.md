@@ -249,3 +249,6 @@ All prices are computed from raw amounts first, then formatted:
 4. **Quoter Cross-Check**: Compares displayed quote with Quoter contract
 5. **Swap Simulation**: callStatic to detect revert reasons
 6. **Pool Selection**: Logs and verifies 1% pool selection
+
+
+

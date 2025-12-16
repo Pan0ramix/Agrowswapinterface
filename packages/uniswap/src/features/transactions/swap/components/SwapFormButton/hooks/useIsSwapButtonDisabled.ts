@@ -4,11 +4,11 @@ import { useIsShowingWebFORNudge, useIsWebFORNudgeEnabled } from 'uniswap/src/fe
 import { useTransactionModalContext } from 'uniswap/src/features/transactions/components/TransactionModal/TransactionModalContext'
 import { useIsMissingPlatformWallet } from 'uniswap/src/features/transactions/swap/components/SwapFormButton/hooks/useIsMissingPlatformWallet'
 import { useParsedSwapWarnings } from 'uniswap/src/features/transactions/swap/hooks/useSwapWarnings/useSwapWarnings'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import {
   useSwapFormStore,
   useSwapFormStoreDerivedSwapInfo,
 } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { useIsBlocked } from 'uniswap/src/features/trm/hooks'
 import { boundaryLogDeduped } from 'uniswap/src/utils/boundaryLog'
 
@@ -61,7 +61,7 @@ const useIsReviewButtonDisabled = (): boolean => {
     {
       ttlMs: 3000,
       includeKeys: ['chainId', 'isOnChainOnly', 'reasonsString', 'blockingWarning'],
-    }
+    },
   )
 
   return disabled

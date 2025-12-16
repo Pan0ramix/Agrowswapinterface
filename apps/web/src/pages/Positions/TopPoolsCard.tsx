@@ -28,8 +28,12 @@ export function TopPoolsCard({ pool }: { pool: PoolStat }) {
         hasToken1: !!pool.token1,
         token0Converted: !!token0,
         token1Converted: !!token1,
-        token0Data: pool.token0 ? { address: pool.token0.address, symbol: pool.token0.symbol, chain: pool.token0.chain } : null,
-        token1Data: pool.token1 ? { address: pool.token1.address, symbol: pool.token1.symbol, chain: pool.token1.chain } : null,
+        token0Data: pool.token0
+          ? { address: pool.token0.address, symbol: pool.token0.symbol, chain: pool.token0.chain }
+          : null,
+        token1Data: pool.token1
+          ? { address: pool.token1.address, symbol: pool.token1.symbol, chain: pool.token1.chain }
+          : null,
       })
     }
   }

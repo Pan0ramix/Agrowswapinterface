@@ -1,23 +1,26 @@
 /**
  * V3 Liquidity Operations Hooks
- * 
+ *
  * Hooks for increase, decrease, and collect operations on existing V3 positions.
  * These replace Trading API endpoints: /v1/lp/increase, /v1/lp/decrease, /v1/lp/claim
  */
 
+import { skipToken, useQuery } from '@tanstack/react-query'
 import { CurrencyAmount, Percent } from '@uniswap/sdk-core'
-import { skipToken, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import {
-  buildIncreaseLiquidityTx,
-  buildDecreaseLiquidityTx,
-  buildCollectFeesTx,
-  type LpTransactionPayload,
-} from '../services/v3OnChain'
-import { calculateAmountOutMinimum, getDeadline } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3SwapTxBuilder'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
+import {
+  calculateAmountOutMinimum,
+  getDeadline,
+} from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3SwapTxBuilder'
 import { logger } from 'utilities/src/logger/logger'
+import {
+  buildCollectFeesTx,
+  buildDecreaseLiquidityTx,
+  buildIncreaseLiquidityTx,
+  type LpTransactionPayload,
+} from 'uniswap/src/features/transactions/liquidity/services/v3OnChain'
 
 /**
  * Increase Liquidity Parameters
@@ -60,9 +63,7 @@ const V3_COLLECT_FEES_CACHE_KEY = 'V3CollectFees'
 /**
  * Hook for increasing liquidity in an existing position
  */
-export function useV3IncreaseLiquidity(
-  params: UseV3IncreaseLiquidityParams,
-): {
+export function useV3IncreaseLiquidity(params: UseV3IncreaseLiquidityParams): {
   txPayload: LpTransactionPayload | undefined
   isLoading: boolean
   isError: boolean
@@ -141,9 +142,7 @@ export function useV3IncreaseLiquidity(
 /**
  * Hook for decreasing liquidity in an existing position
  */
-export function useV3DecreaseLiquidity(
-  params: UseV3DecreaseLiquidityParams,
-): {
+export function useV3DecreaseLiquidity(params: UseV3DecreaseLiquidityParams): {
   txPayload: LpTransactionPayload | undefined
   isLoading: boolean
   isError: boolean
@@ -152,7 +151,14 @@ export function useV3DecreaseLiquidity(
   const { tokenId, liquidity, amount0Min, amount1Min, chainId, enabled = true } = params
 
   const queryKey = useMemo(
-    () => [V3_DECREASE_LIQUIDITY_CACHE_KEY, chainId, tokenId, liquidity, amount0Min?.quotient.toString(), amount1Min?.quotient.toString()],
+    () => [
+      V3_DECREASE_LIQUIDITY_CACHE_KEY,
+      chainId,
+      tokenId,
+      liquidity,
+      amount0Min?.quotient.toString(),
+      amount1Min?.quotient.toString(),
+    ],
     [chainId, tokenId, liquidity, amount0Min?.quotient.toString(), amount1Min?.quotient.toString()],
   )
 
@@ -210,7 +216,10 @@ export function useV3CollectFees(params: UseV3CollectFeesParams): {
 } {
   const { tokenId, recipient, chainId, enabled = true } = params
 
-  const queryKey = useMemo(() => [V3_COLLECT_FEES_CACHE_KEY, chainId, tokenId, recipient], [chainId, tokenId, recipient])
+  const queryKey = useMemo(
+    () => [V3_COLLECT_FEES_CACHE_KEY, chainId, tokenId, recipient],
+    [chainId, tokenId, recipient],
+  )
 
   const queryFn = useMemo(() => {
     if (!tokenId || !recipient || !chainId) {
@@ -251,5 +260,3 @@ export function useV3CollectFees(params: UseV3CollectFeesParams): {
     error: error instanceof Error ? error : error ? new Error(String(error)) : null,
   }
 }
-
-

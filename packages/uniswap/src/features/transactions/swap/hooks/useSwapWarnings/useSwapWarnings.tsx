@@ -2,37 +2,34 @@ import type { TFunction } from 'i18next'
 import isEqual from 'lodash/isEqual'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
 import type { ParsedWarnings, Warning } from 'uniswap/src/components/modals/WarningModal/types'
 import { WarningAction, WarningLabel, WarningSeverity } from 'uniswap/src/components/modals/WarningModal/types'
 import { useUniswapContext } from 'uniswap/src/contexts/UniswapContext'
 import { useActiveAddress } from 'uniswap/src/features/accounts/store/hooks'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { useTransactionGasWarning } from 'uniswap/src/features/gas/hooks'
 import type { LocalizationContextState } from 'uniswap/src/features/language/LocalizationContext'
 import { useLocalizationContext } from 'uniswap/src/features/language/LocalizationContext'
+import { getPoolAddressesFromTrade } from 'uniswap/src/features/transactions/hooks/getPoolAddressesFromTrade'
 import {
   getNetworkWarning,
   useFormattedWarnings,
 } from 'uniswap/src/features/transactions/hooks/useParsedTransactionWarnings'
+import { useRestrictedTokenWarnings } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenWarnings'
 import { getBalanceWarning } from 'uniswap/src/features/transactions/swap/hooks/useSwapWarnings/getBalanceWarning'
 import { getFormIncompleteWarning } from 'uniswap/src/features/transactions/swap/hooks/useSwapWarnings/getFormIncompleteWarning'
 import { getPriceImpactWarning } from 'uniswap/src/features/transactions/swap/hooks/useSwapWarnings/getPriceImpactWarning'
 import { getSwapWarningFromError } from 'uniswap/src/features/transactions/swap/hooks/useSwapWarnings/getSwapWarningFromError'
 import { getTokenBlockedWarning } from 'uniswap/src/features/transactions/swap/hooks/useSwapWarnings/getTokenBlockedWarning'
-import { getTokenWhitelistWarning } from 'uniswap/src/features/transactions/swap/hooks/useSwapWarnings/getTokenWhitelistWarning'
 import { useSwapFormStore } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import { useSwapTxStore } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/useSwapTxStore'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
-import { getPriceImpact } from 'uniswap/src/features/transactions/swap/utils/getPriceImpact'
-import { useIsOffline } from 'utilities/src/connection/useIsOffline'
-import { useRestrictedTokenWarnings } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenWarnings'
-import { getPoolAddressesFromTrade } from 'uniswap/src/features/transactions/hooks/getPoolAddressesFromTrade'
 import { ClassicTrade } from 'uniswap/src/features/transactions/swap/types/trade'
-import { useMemoCompare } from 'utilities/src/react/hooks'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { getPriceImpact } from 'uniswap/src/features/transactions/swap/utils/getPriceImpact'
 import { CurrencyField } from 'uniswap/src/types/currency'
+import { useIsOffline } from 'utilities/src/connection/useIsOffline'
+import { useMemoCompare } from 'utilities/src/react/hooks'
 import { Address } from 'viem'
-import { PERMIT2_ADDRESS } from '@uniswap/permit2-sdk'
 
 export function getSwapWarnings({
   t,
@@ -140,34 +137,41 @@ export function useParsedSwapWarnings(): ParsedWarnings {
   })
 
   // Convert warnings to legacy format for compatibility with existing warning system
-  const allowlistChecks = useMemo(() => ({
-    isBlocked: warnings.isBlocked,
-    blockingWarnings: warnings.warnings.filter((w) => w.severity === 'blocking').map((w) => ({
-      tokenAddress: w.tokenAddress,
-      tokenSymbol: w.tokenSymbol,
-      subjectAddress: w.address,
-      subjectLabel: w.subjectLabel,
-      message: '', // Not used in this context
-    })),
-    nonBlockingWarnings: warnings.warnings.filter((w) => w.severity === 'warning').map((w) => ({
-      tokenAddress: w.tokenAddress,
-      tokenSymbol: w.tokenSymbol,
-      subjectAddress: w.address,
-      subjectLabel: w.subjectLabel,
-      message: '', // Not used in this context
-    })),
-    debug: {
-      restrictedTokens: warnings.restrictedTokens,
-      checked: warnings.subjects.map((s) => ({
-        tokenAddress: s.tokenAddress,
-        tokenSymbol: s.tokenSymbol,
-        subjectAddress: s.address,
-        subjectLabel: s.type,
-        isAllowed: s.isAllowed,
-        error: s.error,
-      })),
-    },
-  }), [warnings])
+  const allowlistChecks = useMemo(
+    () => ({
+      isBlocked: warnings.isBlocked,
+      blockingWarnings: warnings.warnings
+        .filter((w) => w.severity === 'blocking')
+        .map((w) => ({
+          tokenAddress: w.tokenAddress,
+          tokenSymbol: w.tokenSymbol,
+          subjectAddress: w.address,
+          subjectLabel: w.subjectLabel,
+          message: '', // Not used in this context
+        })),
+      nonBlockingWarnings: warnings.warnings
+        .filter((w) => w.severity === 'warning')
+        .map((w) => ({
+          tokenAddress: w.tokenAddress,
+          tokenSymbol: w.tokenSymbol,
+          subjectAddress: w.address,
+          subjectLabel: w.subjectLabel,
+          message: '', // Not used in this context
+        })),
+      debug: {
+        restrictedTokens: warnings.restrictedTokens,
+        checked: warnings.subjects.map((s) => ({
+          tokenAddress: s.tokenAddress,
+          tokenSymbol: s.tokenSymbol,
+          subjectAddress: s.address,
+          subjectLabel: s.type,
+          isAllowed: s.isAllowed,
+          error: s.error,
+        })),
+      },
+    }),
+    [warnings],
+  )
 
   // Convert allowlist checks to warning format
   const whitelistWarning = useMemo(() => {
@@ -203,10 +207,7 @@ export function useParsedSwapWarnings(): ParsedWarnings {
     }
 
     // Group other warnings by token
-    const warningsByToken = new Map<
-      string,
-      Array<{ subjectLabel: string; subjectAddress: Address; message: string }>
-    >()
+    const warningsByToken = new Map<string, Array<{ subjectLabel: string; subjectAddress: Address; message: string }>>()
 
     for (const warning of [...otherWarnings, ...nonBlockingWarnings]) {
       const key = warning.tokenAddress

@@ -21,7 +21,6 @@ import {
 import { getSymbolDisplayText } from 'uniswap/src/utils/currency'
 import { currencyId } from 'uniswap/src/utils/currencyId'
 import { NumberType } from 'utilities/src/format/types'
-import { swapDebug } from 'uniswap/src/utils/swapDebug'
 import { logger } from 'utilities/src/logger/logger'
 
 export function tradeToTransactionInfo({
@@ -131,10 +130,10 @@ export function requireAcceptNewTrade(oldTrade: Maybe<Trade>, newTrade: Maybe<Tr
  * ( input rate amount / input coin ratio )
  *
  * Example:
- * Swap: 1.50 ETH = 367.351 UNI
- * ETH USD Price: $4,839.93, UNI USD Price: $4,755.47
+ * Swap: 1.50 ETH = 367.351 AGX
+ * ETH USD Price: $4,839.93, AGX USD Price: $4,755.47
  * Corrected Rate Calculation:
- * 1 UNI USD Rate = 4,755.47 / 367.351 = 12.94 USD
+ * 1 AGX USD Rate = 4,755.47 / 367.351 = 12.94 USD
  * 1 ETH USD Rate = (4,755.47 / 367.351) * 244.9 = 3,170 USD
  */
 export function calculateRateLine({
@@ -195,8 +194,8 @@ export function getRateToDisplay({
   // Check if symbols exist (currency metadata may not be loaded yet)
   // For native currencies, symbol should exist, but we check defensively
   // Use optional chaining to safely access symbol property
-  const quoteCurrencySymbol = getSymbolDisplayText(quoteCurrency?.symbol)
-  const baseCurrencySymbol = getSymbolDisplayText(baseCurrency?.symbol)
+  const quoteCurrencySymbol = getSymbolDisplayText(quoteCurrency.symbol)
+  const baseCurrencySymbol = getSymbolDisplayText(baseCurrency.symbol)
 
   // If either symbol is missing, return null (rate will be hidden until metadata loads)
   if (!quoteCurrencySymbol || !baseCurrencySymbol) {
@@ -230,7 +229,7 @@ export function getProtocolVersionFromTrade(trade: Trade): Protocol | undefined 
   const routes = (trade as any).routes
   if (!routes || !Array.isArray(routes) || routes.length === 0) {
     // Log fallback when debug is enabled
-    const chainId = trade.inputAmount?.currency?.chainId
+    const chainId = trade.inputAmount.currency.chainId
     if (chainId && process.env.NODE_ENV !== 'production') {
       logger.debugDeduped(
         'trade',
@@ -248,7 +247,7 @@ export function getProtocolVersionFromTrade(trade: Trade): Protocol | undefined 
           ttlMs: 5000,
           minIntervalMs: 5000,
           keyParts: ['ANALYTICS-protocolVersion-fallback', chainId],
-        }
+        },
       )
     }
     // Return undefined as safe default (callers should handle undefined)

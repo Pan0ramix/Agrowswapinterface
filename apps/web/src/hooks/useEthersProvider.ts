@@ -40,14 +40,14 @@ export function useEthersProvider({ chainId }: { chainId?: number } = {}) {
   // Use safe account wrapper to avoid errors when wagmi store isn't ready
   // Note: We must call hooks unconditionally, but we can handle errors gracefully
   const account = useAccount()
-  
+
   // These hooks might fail if wagmi store isn't ready, but we can't conditionally call them
   // If they fail, React will handle it via error boundary, or we return undefined
   const connectorClientResult = useConnectorClient({ chainId })
   const disconnectedClient = useClient({ chainId })
-  
+
   const client = connectorClientResult.data
-  const accountChainId = account?.chainId
+  const accountChainId = account.chainId
 
   return useMemo(
     () => {

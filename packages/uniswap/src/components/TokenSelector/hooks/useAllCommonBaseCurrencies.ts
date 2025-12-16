@@ -28,16 +28,13 @@ export function useAllCommonBaseCurrencies(): GqlResult<CurrencyInfo[]> {
   // than synthesizing partial CurrencyInfos (which can break downstream filters).
   const stableIds = baseCurrencyIds
   const result = useCurrencies(stableIds)
-  
-  return useMemo(
-    () => {
-      return {
-      data: result?.data ?? [],
-      error: result?.error,
-      refetch: result?.refetch,
-      loading: result?.loading ?? false,
-      }
-    },
-    [result],
-  )
+
+  return useMemo(() => {
+    return {
+      data: result.data ?? [],
+      error: result.error,
+      refetch: result.refetch,
+      loading: result.loading ?? false,
+    }
+  }, [result])
 }

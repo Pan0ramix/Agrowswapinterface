@@ -3,6 +3,7 @@ import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'reac
 import { useDispatch } from 'react-redux'
 import type { TradeableAsset } from 'uniswap/src/entities/assets'
 import { useMaxAmountSpend } from 'uniswap/src/features/gas/hooks/useMaxAmountSpend'
+import { LocalizationContext, LocalizationContextProvider } from 'uniswap/src/features/language/LocalizationContext'
 import { useSwapAnalytics } from 'uniswap/src/features/transactions/swap/analytics'
 import {
   createSwapFormStore,
@@ -22,15 +23,11 @@ import type {
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import { TransactionType } from 'uniswap/src/features/transactions/types/transactionDetails'
 import { CurrencyField } from 'uniswap/src/types/currency'
+import { logger } from 'utilities/src/logger/logger'
 import { useEvent } from 'utilities/src/react/hooks'
 import { useValueAsRef } from 'utilities/src/react/useValueAsRef'
 import { useStore } from 'zustand'
 import { useShallow } from 'zustand/shallow'
-import {
-  LocalizationContext,
-  LocalizationContextProvider,
-} from 'uniswap/src/features/language/LocalizationContext'
-import { logger } from 'utilities/src/logger/logger'
 
 const useCalculatedInitialDerivedSwapInfo = (
   partialSwapFormState: Pick<
@@ -119,13 +116,13 @@ function SwapFormStoreContextProviderBase({
 
   // CRITICAL: This logging happens BEFORE any hooks to avoid affecting hook order
   if (process.env.NODE_ENV !== 'production') {
-    const chainId = initialDerivedSwapInfo?.chainId
+    const chainId = initialDerivedSwapInfo.chainId
     const renderSignature = {
       chainId,
-      hasInput: !!initialDerivedSwapInfo?.currencies?.[CurrencyField.INPUT],
-      hasOutput: !!initialDerivedSwapInfo?.currencies?.[CurrencyField.OUTPUT],
-      hasTrade: !!initialDerivedSwapInfo?.trade,
-      hasOnChainQuote: !!initialDerivedSwapInfo?.onChainQuote,
+      hasInput: !!initialDerivedSwapInfo.currencies[CurrencyField.INPUT],
+      hasOutput: !!initialDerivedSwapInfo.currencies[CurrencyField.OUTPUT],
+      hasTrade: !!initialDerivedSwapInfo.trade,
+      hasOnChainQuote: !!initialDerivedSwapInfo.onChainQuote,
       hideFooter: !!hideFooter,
       hideSettings: !!hideSettings,
       hasPrefilledState: !!prefilledState,
@@ -139,7 +136,7 @@ function SwapFormStoreContextProviderBase({
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['SwapFormStore-Render-signature', chainId],
-      }
+      },
     )
   }
 
@@ -232,7 +229,7 @@ function SwapFormStoreContextProviderBase({
   const hookProbeH01 = useRef(0)
   if (process.env.NODE_ENV !== 'production') {
     hookProbeH01.current += 1
-    const chainId = initialDerivedSwapInfo?.chainId
+    const chainId = initialDerivedSwapInfo.chainId
     logger.debugDeduped(
       'SwapFormStoreContextProvider',
       'SwapFormStoreContextProviderBase',
@@ -244,7 +241,7 @@ function SwapFormStoreContextProviderBase({
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['H01', chainId],
-      }
+      },
     )
   }
 
@@ -262,7 +259,7 @@ function SwapFormStoreContextProviderBase({
   const hookProbeH02 = useRef(0)
   if (process.env.NODE_ENV !== 'production') {
     hookProbeH02.current += 1
-    const chainId = latestDerivedSwapInfo?.chainId
+    const chainId = latestDerivedSwapInfo.chainId
     logger.debugDeduped(
       'SwapFormStoreContextProvider',
       'SwapFormStoreContextProviderBase',
@@ -274,7 +271,7 @@ function SwapFormStoreContextProviderBase({
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['H02', chainId],
-      }
+      },
     )
   }
 
@@ -284,7 +281,7 @@ function SwapFormStoreContextProviderBase({
   const hookProbeH03 = useRef(0)
   if (process.env.NODE_ENV !== 'production') {
     hookProbeH03.current += 1
-    const chainId = derivedSwapInfo?.chainId
+    const chainId = derivedSwapInfo.chainId
     logger.debugDeduped(
       'SwapFormStoreContextProvider',
       'SwapFormStoreContextProviderBase',
@@ -297,7 +294,7 @@ function SwapFormStoreContextProviderBase({
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['H03', chainId],
-      }
+      },
     )
   }
 
@@ -311,7 +308,7 @@ function SwapFormStoreContextProviderBase({
   const hookProbeH03b = useRef(0)
   if (process.env.NODE_ENV !== 'production') {
     hookProbeH03b.current += 1
-    const chainId = derivedSwapInfo?.chainId
+    const chainId = derivedSwapInfo.chainId
     logger.debugDeduped(
       'SwapFormStoreContextProvider',
       'SwapFormStoreContextProviderBase',
@@ -323,7 +320,7 @@ function SwapFormStoreContextProviderBase({
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['H03b', chainId],
-      }
+      },
     )
   }
 
@@ -334,7 +331,7 @@ function SwapFormStoreContextProviderBase({
   const hookProbeH03c = useRef(0)
   if (process.env.NODE_ENV !== 'production') {
     hookProbeH03c.current += 1
-    const chainId = derivedSwapInfo?.chainId
+    const chainId = derivedSwapInfo.chainId
     logger.debugDeduped(
       'SwapFormStoreContextProvider',
       'SwapFormStoreContextProviderBase',
@@ -346,7 +343,7 @@ function SwapFormStoreContextProviderBase({
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['H03c', chainId],
-      }
+      },
     )
   }
 
@@ -354,7 +351,7 @@ function SwapFormStoreContextProviderBase({
   const hookProbeH03d = useRef(0)
   if (process.env.NODE_ENV !== 'production') {
     hookProbeH03d.current += 1
-    const chainId = derivedSwapInfo?.chainId
+    const chainId = derivedSwapInfo.chainId
     logger.debugDeduped(
       'SwapFormStoreContextProvider',
       'SwapFormStoreContextProviderBase',
@@ -366,7 +363,7 @@ function SwapFormStoreContextProviderBase({
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['H03d', chainId],
-      }
+      },
     )
   }
 
@@ -388,7 +385,7 @@ function SwapFormStoreContextProviderBase({
   const hookProbeH03e = useRef(0)
   if (process.env.NODE_ENV !== 'production') {
     hookProbeH03e.current += 1
-    const chainId = derivedSwapInfo?.chainId
+    const chainId = derivedSwapInfo.chainId
     logger.debugDeduped(
       'SwapFormStoreContextProvider',
       'SwapFormStoreContextProviderBase',
@@ -400,7 +397,7 @@ function SwapFormStoreContextProviderBase({
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['H03e', chainId],
-      }
+      },
     )
   }
 
@@ -409,7 +406,7 @@ function SwapFormStoreContextProviderBase({
   // inputAmount is normalized to null (never undefined) to prevent dependency array shape changes.
   const maybeUpdatedIsMax = useMemo((): boolean => {
     // exact-input-field forms are handled in `updateSwapForm()`
-    const inputAmountString = inputAmount?.toExact?.() ?? null
+    const inputAmountString = inputAmount?.toExact() ?? null
 
     if (
       derivedSwapInfo.exactCurrencyField === CurrencyField.OUTPUT &&
@@ -435,7 +432,7 @@ function SwapFormStoreContextProviderBase({
   const hookProbeH06 = useRef(0)
   if (process.env.NODE_ENV !== 'production') {
     hookProbeH06.current += 1
-    const chainId = derivedSwapInfo?.chainId
+    const chainId = derivedSwapInfo.chainId
     logger.debugDeduped(
       'SwapFormStoreContextProvider',
       'SwapFormStoreContextProviderBase',
@@ -447,7 +444,7 @@ function SwapFormStoreContextProviderBase({
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['H06', chainId],
-      }
+      },
     )
   }
 
@@ -555,10 +552,7 @@ export const SwapFormStoreContextProvider = ({
   if (!initialDerivedSwapInfo) {
     return (
       <MaybeLocalizationProvider>
-        <SwapFormStoreContextProviderInitializer
-          initialState={initialStateToUse}
-          onReady={setInitialDerivedSwapInfo}
-        />
+        <SwapFormStoreContextProviderInitializer initialState={initialStateToUse} onReady={setInitialDerivedSwapInfo} />
       </MaybeLocalizationProvider>
     )
   }

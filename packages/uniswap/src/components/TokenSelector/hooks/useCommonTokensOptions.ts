@@ -41,7 +41,7 @@ export function useCommonTokensOptions({
   const filteredCommonBaseCurrencies = useMemo(() => {
     if (!commonBaseCurrencies?.length) return []
     return commonBaseCurrencies.filter((currency) => {
-      const c = currency?.currency
+      const c = currency.currency
       if (!c) return false
       return (
         c.isNative ||
@@ -67,22 +67,16 @@ export function useCommonTokensOptions({
   const error =
     (!portfolioBalancesById && portfolioBalancesByIdError) || (!commonBaseCurrencies && commonBaseCurrenciesError)
 
-  const filteredCommonBaseTokenOptions = useMemo(
-    () => {
-      return commonBaseTokenOptions && filter({ tokenOptions: commonBaseTokenOptions, chainFilter })
-    },
-    [chainFilter, commonBaseTokenOptions],
-  )
+  const filteredCommonBaseTokenOptions = useMemo(() => {
+    return commonBaseTokenOptions && filter({ tokenOptions: commonBaseTokenOptions, chainFilter })
+  }, [chainFilter, commonBaseTokenOptions])
 
-  return useMemo(
-    () => {
-      return {
+  return useMemo(() => {
+    return {
       data: filteredCommonBaseTokenOptions,
       refetch,
       error: error || undefined,
       loading: loadingPorfolioBalancesById || loadingCommonBaseCurrencies,
-      }
-    },
-    [error, loadingCommonBaseCurrencies, loadingPorfolioBalancesById, filteredCommonBaseTokenOptions, refetch],
-  )
+    }
+  }, [error, loadingCommonBaseCurrencies, loadingPorfolioBalancesById, filteredCommonBaseTokenOptions, refetch])
 }

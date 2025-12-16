@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import { useFeatureFlaggedChainIds } from 'uniswap/src/features/chains/hooks/useFeatureFlaggedChainIds'
 // This is the only file that should be importing `useOrderedChainIds` directly.
@@ -21,7 +20,11 @@ export function useEnabledChains(options?: { platform?: Platform; includeTestnet
   const isTestnetModeEnabled = useSelector(selectIsTestnetModeEnabled)
   const featureFlagsKey = safeFeatureFlaggedChainIds.join(',')
 
-  const { chains: unorderedChains, gqlChains, defaultChainId } = getEnabledChains({
+  const {
+    chains: unorderedChains,
+    gqlChains,
+    defaultChainId,
+  } = getEnabledChains({
     platform: options?.platform,
     includeTestnets: options?.includeTestnets,
     isTestnetModeEnabled,

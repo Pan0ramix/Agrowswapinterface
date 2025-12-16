@@ -1,29 +1,29 @@
 /**
  * V3 Mint Position Hook
- * 
+ *
  * Hook for creating new V3 concentrated liquidity positions using on-chain data.
  * Replaces Trading API /v1/lp/create endpoint.
  */
 
+import { skipToken, useQuery } from '@tanstack/react-query'
 import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
-import JSBI from 'jsbi'
 import { FeeAmount, Pool } from '@uniswap/v3-sdk'
-import { skipToken, useQuery, type UseQueryResult } from '@tanstack/react-query'
+import JSBI from 'jsbi'
 import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { fetchV3PoolState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
+import { getDeadline } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3SwapTxBuilder'
+import { logger } from 'utilities/src/logger/logger'
+import { validateDecimalsSafetyMultiple } from 'uniswap/src/features/transactions/utils/validateDecimalsSafety'
 import {
   buildMintPositionTx,
   calculatePositionAmounts,
   getNearestUsableTicks,
   type LpTransactionPayload,
-} from '../services/v3OnChain'
-import { fetchV3PoolState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
-import { getDeadline } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3SwapTxBuilder'
-import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { simulateTransaction } from '../utils/decodeRevertReason'
-import { logger } from 'utilities/src/logger/logger'
-import { validateDecimalsSafetyMultiple } from '../../utils/validateDecimalsSafety'
+} from 'uniswap/src/features/transactions/liquidity/services/v3OnChain'
+import { simulateTransaction } from 'uniswap/src/features/transactions/liquidity/utils/decodeRevertReason'
 
 /**
  * Hook parameters
@@ -159,7 +159,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
       slippageDenominatorStr,
       recipient,
       creatingPoolOrPair,
-      poolForPosition?.sqrtRatioX96?.toString(),
+      poolForPosition?.sqrtRatioX96.toString(),
     ],
     [
       chainId,
@@ -204,7 +204,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
         const slippage = new Percent(slippageNumeratorBI, slippageDenominatorBI)
 
         // Step 1: Try to fetch pool state (may not exist for new pools)
-        let poolState = await fetchV3PoolState({
+        const poolState = await fetchV3PoolState({
           tokenIn: token0,
           tokenOut: token1,
           fee,
@@ -213,9 +213,12 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
         })
 
         // Compute pool address for diagnostics (even if pool doesn't exist)
-        const factoryAddress = chainId === 84532 
-          ? (await import('uniswap/src/constants/agroswapAddresses')).AGROSWAP_V3_CORE_FACTORY_ADDRESSES[chainId]
-          : (await import('@uniswap/sdk-core')).V3_CORE_FACTORY_ADDRESSES[chainId as keyof typeof import('@uniswap/sdk-core').V3_CORE_FACTORY_ADDRESSES]
+        const factoryAddress =
+          chainId === 84532
+            ? (await import('uniswap/src/constants/agroswapAddresses')).AGROSWAP_V3_CORE_FACTORY_ADDRESSES[chainId]
+            : (await import('@uniswap/sdk-core')).V3_CORE_FACTORY_ADDRESSES[
+                chainId as keyof typeof import('@uniswap/sdk-core').V3_CORE_FACTORY_ADDRESSES
+              ]
         const { computePoolAddress } = await import('@uniswap/v3-sdk')
         const tokenA = token0.wrapped
         const tokenB = token1.wrapped
@@ -234,7 +237,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
         try {
           const poolCode = await publicClient.getBytecode({ address: poolAddress })
           poolCodeExists = !!poolCode && poolCode !== '0x'
-          
+
           if (poolCodeExists) {
             // Try to read slot0 to check if pool is initialized
             const poolInterface = new (await import('ethers/lib/utils')).Interface([
@@ -274,14 +277,14 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
         }
 
         // Extract initial price from mock pool (used for create path)
-        const initialPriceFromPool = poolForPosition?.sqrtRatioX96?.toString()
+        const initialPriceFromPool = poolForPosition?.sqrtRatioX96.toString()
 
         // Decide whether we should create the pool on-chain (create + initialize + mint)
         const poolInitialized = slot0 ? slot0.sqrtPriceX96 > 0n : !!poolState?.pool
         const sqrtPriceForCreationCandidate =
           initialPriceFromPool ??
           (slot0 ? slot0.sqrtPriceX96.toString() : undefined) ??
-          poolState?.pool?.sqrtRatioX96?.toString()
+          poolState?.pool.sqrtRatioX96.toString()
 
         const shouldCreatePoolOnChain =
           isOnChainRouterEnabled(chainId) &&
@@ -302,8 +305,8 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
             poolCodeExists,
             slot0: slot0
               ? {
-              sqrtPriceX96: slot0.sqrtPriceX96.toString(),
-              tick: slot0.tick,
+                  sqrtPriceX96: slot0.sqrtPriceX96.toString(),
+                  tick: slot0.tick,
                 }
               : null,
             poolInitialized,
@@ -329,18 +332,22 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
               symbol: token1.symbol,
               decimals: token1.decimals,
             },
-            amount0Desired: amount0Desired ? {
-              raw: amount0Desired.quotient.toString(),
-              human: amount0Desired.toExact(),
-              currency: amount0Desired.currency.symbol,
-              decimals: amount0Desired.currency.decimals,
-            } : undefined,
-            amount1Desired: amount1Desired ? {
-              raw: amount1Desired.quotient.toString(),
-              human: amount1Desired.toExact(),
-              currency: amount1Desired.currency.symbol,
-              decimals: amount1Desired.currency.decimals,
-            } : undefined,
+            amount0Desired: amount0Desired
+              ? {
+                  raw: amount0Desired.quotient.toString(),
+                  human: amount0Desired.toExact(),
+                  currency: amount0Desired.currency.symbol,
+                  decimals: amount0Desired.currency.decimals,
+                }
+              : undefined,
+            amount1Desired: amount1Desired
+              ? {
+                  raw: amount1Desired.quotient.toString(),
+                  human: amount1Desired.toExact(),
+                  currency: amount1Desired.currency.symbol,
+                  decimals: amount1Desired.currency.decimals,
+                }
+              : undefined,
             slippageTolerance: {
               numerator: slippage.numerator.toString(),
               denominator: slippage.denominator.toString(),
@@ -363,7 +370,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
             fee: number
             poolAddress: string
           }
-          
+
           poolNotFoundError.code = 'POOL_NOT_FOUND'
           poolNotFoundError.userMessage = poolNotFoundError.message
           poolNotFoundError.chainId = chainId
@@ -398,7 +405,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
             fee: number
             poolAddress: string
           }
-          
+
           poolNotInitializedError.code = 'POOL_NOT_INITIALIZED'
           poolNotInitializedError.userMessage = poolNotInitializedError.message
           poolNotInitializedError.chainId = chainId
@@ -433,7 +440,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
         if (poolState) {
           // Pool exists - calculate position amounts from pool state
           // Use Uniswap's Position class for accurate calculations
-          
+
           // Dev-only: log before calculatePositionAmounts
           if (process.env.NODE_ENV !== 'production') {
             console.log('[useV3MintPosition] Pool exists - calculating position amounts', {
@@ -441,24 +448,28 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
                 token0: poolState.pool.token0.address,
                 token1: poolState.pool.token1.address,
                 fee: poolState.pool.fee,
-                sqrtPriceX96: poolState.pool.sqrtRatioX96?.toString(),
+                sqrtPriceX96: poolState.pool.sqrtRatioX96.toString(),
                 tickCurrent: poolState.pool.tickCurrent,
               },
               tickLower,
               tickUpper,
-              amount0Desired: amount0Desired ? {
-                raw: amount0Desired.quotient.toString(),
-                human: amount0Desired.toExact(),
-                currency: amount0Desired.currency.symbol,
-              } : undefined,
-              amount1Desired: amount1Desired ? {
-                raw: amount1Desired.quotient.toString(),
-                human: amount1Desired.toExact(),
-                currency: amount1Desired.currency.symbol,
-              } : undefined,
+              amount0Desired: amount0Desired
+                ? {
+                    raw: amount0Desired.quotient.toString(),
+                    human: amount0Desired.toExact(),
+                    currency: amount0Desired.currency.symbol,
+                  }
+                : undefined,
+              amount1Desired: amount1Desired
+                ? {
+                    raw: amount1Desired.quotient.toString(),
+                    human: amount1Desired.toExact(),
+                    currency: amount1Desired.currency.symbol,
+                  }
+                : undefined,
             })
           }
-          
+
           const positionResult = calculatePositionAmounts(
             poolState.pool,
             tickLower,
@@ -466,7 +477,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
             amount0Desired,
             amount1Desired,
           )
-          
+
           // Dev-only: log after calculatePositionAmounts
           if (process.env.NODE_ENV !== 'production') {
             console.log('[useV3MintPosition] Position amounts calculated (pool exists)', {
@@ -484,31 +495,35 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
                 liquidity: positionResult.liquidity,
               },
               inputVsOutput: {
-                amount0DesiredVsCalculated: amount0Desired ? {
-                  input: amount0Desired.quotient.toString(),
-                  calculated: positionResult.amount0.quotient.toString(),
-                  match: amount0Desired.quotient.toString() === positionResult.amount0.quotient.toString(),
-                } : undefined,
-                amount1DesiredVsCalculated: amount1Desired ? {
-                  input: amount1Desired.quotient.toString(),
-                  calculated: positionResult.amount1.quotient.toString(),
-                  match: amount1Desired.quotient.toString() === positionResult.amount1.quotient.toString(),
-                } : undefined,
+                amount0DesiredVsCalculated: amount0Desired
+                  ? {
+                      input: amount0Desired.quotient.toString(),
+                      calculated: positionResult.amount0.quotient.toString(),
+                      match: amount0Desired.quotient.toString() === positionResult.amount0.quotient.toString(),
+                    }
+                  : undefined,
+                amount1DesiredVsCalculated: amount1Desired
+                  ? {
+                      input: amount1Desired.quotient.toString(),
+                      calculated: positionResult.amount1.quotient.toString(),
+                      match: amount1Desired.quotient.toString() === positionResult.amount1.quotient.toString(),
+                    }
+                  : undefined,
               },
             })
           }
-          
+
           positionAmounts = {
             amount0: positionResult.amount0,
             amount1: positionResult.amount1,
             liquidity: positionResult.liquidity,
           }
           pool = poolState.pool
-          sqrtPriceX96ForCall = poolState.pool?.sqrtRatioX96?.toString() ?? sqrtPriceForCreation
+          sqrtPriceX96ForCall = poolState.pool.sqrtRatioX96.toString() ?? sqrtPriceForCreation
 
           // Use Position.mintAmountsWithSlippage() - Uniswap's standard pattern
           const { amount0: min0, amount1: min1 } = positionResult.position.mintAmountsWithSlippage(slippage)
-          
+
           // Dev-only: log slippage application
           if (process.env.NODE_ENV !== 'production') {
             console.log('[useV3MintPosition] Slippage applied (pool exists)', {
@@ -533,7 +548,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
               },
             })
           }
-          
+
           amount0Min = min0
           amount1Min = min1
         } else {
@@ -544,7 +559,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
             throw new Error('Both token amounts are required for new pool creation')
           }
           sqrtPriceX96ForCall = sqrtPriceForCreation
-          
+
           positionAmounts = {
             amount0: amount0Desired,
             amount1: amount1Desired,
@@ -554,14 +569,8 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
           pool = undefined
 
           // complement = 1 - slippage = (denominator - numerator) / denominator
-          const complementNumeratorBI = JSBI.subtract(
-            slippageDenominatorBI,
-            slippageNumeratorBI,
-          )
-          const slippageComplement = new Percent(
-            complementNumeratorBI,
-            slippageDenominatorBI,
-          )
+          const complementNumeratorBI = JSBI.subtract(slippageDenominatorBI, slippageNumeratorBI)
+          const slippageComplement = new Percent(complementNumeratorBI, slippageDenominatorBI)
 
           amount0Min = amount0Desired.multiply(slippageComplement)
           amount1Min = amount1Desired.multiply(slippageComplement)
@@ -743,10 +752,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
         // Validate decimals safety (on-chain-only chains) before building transaction
         // This prevents unsafe transactions with incorrect token decimals
         if (publicClient && amount0Desired && amount1Desired) {
-          const decimalsError = await validateDecimalsSafetyMultiple(
-            [amount0Desired, amount1Desired],
-            publicClient,
-          )
+          const decimalsError = await validateDecimalsSafetyMultiple([amount0Desired, amount1Desired], publicClient)
           if (decimalsError) {
             throw new Error(decimalsError)
           }
@@ -780,7 +786,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
             callSequence: txPayload.callSequence,
             sqrtPriceX96: txPayload.sqrtPriceX96,
             selectorPrefix: txPayload.data.substring(0, 10),
-        })
+          })
         }
 
         // Dev-only: log mint params before simulation
@@ -845,7 +851,8 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
                   'Pool is not initialized for this pair and fee tier. Pool initialization is required before minting.'
                 errorReason = `Pool not initialized: ${poolAddress}`
               } else if (!poolCodeExists) {
-                userFriendlyError = 'Pool does not exist for this pair and fee tier. Pool creation is required before minting.'
+                userFriendlyError =
+                  'Pool does not exist for this pair and fee tier. Pool creation is required before minting.'
                 errorReason = `Pool does not exist: ${poolAddress}`
               } else if (errorReason.includes('0x88316456')) {
                 userFriendlyError = `Mint transaction would revert. ${
@@ -974,7 +981,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
-        
+
         logger.error(error, {
           tags: {
             file: 'useV3MintPosition',
@@ -1032,4 +1039,3 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
     data,
   }
 }
-

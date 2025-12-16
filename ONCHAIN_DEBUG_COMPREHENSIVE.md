@@ -235,3 +235,6 @@ Single structured JSON bundle in console:
 - Network cost row shows value (approval or swap)
 - Zero Trading API calls (no 401 errors)
 - No `NativeCurrency.onChain` runtime error
+
+
+

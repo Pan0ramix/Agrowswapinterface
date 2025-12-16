@@ -1,18 +1,17 @@
 /**
  * Swap Transaction Builder
- * 
+ *
  * Builds swap transaction payloads with proper path encoding for single and multi-hop swaps.
  * Uses Uniswap's exact path encoding format: address | fee | address | fee | address
  */
 
 import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
-import { FeeAmount } from '@uniswap/v3-sdk'
 import { Interface } from 'ethers/lib/utils'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { getSwapRouterAddress } from 'uniswap/src/constants/v3Addresses'
 import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
-import { ValidatedRoute } from './validateRouteWithQuoter'
+import { getSwapRouterAddress } from 'uniswap/src/constants/v3Addresses'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { logger } from 'utilities/src/logger/logger'
+import { ValidatedRoute } from 'uniswap/src/features/transactions/swap/services/onchainRouter/validateRouteWithQuoter'
 
 /**
  * Transaction payload for swap
@@ -131,16 +130,16 @@ const SWAP_ROUTER_ABI = [
 /**
  * Encode path for multi-hop swap
  * Format: address (20 bytes) | fee (3 bytes) | address (20 bytes) | fee (3 bytes) | address (20 bytes)
- * 
+ *
  * Example for 2 hops:
  * token0 (20 bytes) | fee0 (3 bytes) | token1 (20 bytes) | fee1 (3 bytes) | token2 (20 bytes)
  */
 function encodePath(hops: ValidatedRoute['route']['hops']): `0x${string}` {
   let path = '0x'
-  
+
   for (let i = 0; i < hops.length; i++) {
     const hop = hops[i]
-    
+
     // Add tokenIn address (20 bytes = 40 hex chars)
     // Remove '0x' prefix and pad to 40 characters
     const address = hop.tokenIn.address.slice(2).toLowerCase().padStart(40, '0')
@@ -156,27 +155,18 @@ function encodePath(hops: ValidatedRoute['route']['hops']): `0x${string}` {
       path += lastAddress
     }
   }
-  
+
   return path as `0x${string}`
 }
 
 /**
  * Build swap transaction payload
- * 
+ *
  * @param params - Swap parameters
  * @returns Transaction payload with to, data, and value
  */
 export function buildSwapTx(params: BuildSwapTxParams): SwapTransactionPayload {
-  const {
-    route,
-    amountIn,
-    minAmountOut,
-    maxAmountIn,
-    chainId,
-    recipient,
-    deadline,
-    sqrtPriceLimitX96,
-  } = params
+  const { route, amountIn, minAmountOut, maxAmountIn, chainId, recipient, deadline, sqrtPriceLimitX96 } = params
 
   const routerAddress = getSwapRouterContractAddress(chainId)
   const routerInterface = new Interface(SWAP_ROUTER_ABI)
@@ -207,7 +197,7 @@ export function buildSwapTx(params: BuildSwapTxParams): SwapTransactionPayload {
     logger.debug('buildSwapTx', 'buildSwapTx', 'Building swap tx payload', {
       chainId,
       routerAddress,
-      hops: (route.route?.hops ?? []).map((h) => ({
+      hops: (route.route.hops ?? []).map((h) => ({
         tokenIn: h.tokenIn.symbol,
         tokenOut: h.tokenOut.symbol,
         fee: h.fee,
@@ -232,7 +222,7 @@ export function buildSwapTx(params: BuildSwapTxParams): SwapTransactionPayload {
     if (isExactOut && maxAmountIn) {
       // Exact output: use exactOutputSingle
       const amountOutRaw = route.amountOutCurrency?.quotient.toString() || '0'
-      
+
       if (chainId === 84532) {
         console.log('[BUILD-SWAP-TX] Building exactOutputSingle', {
           chainId,
@@ -243,7 +233,7 @@ export function buildSwapTx(params: BuildSwapTxParams): SwapTransactionPayload {
           fee: hop.fee,
         })
       }
-      
+
       const data = routerInterface.encodeFunctionData('exactOutputSingle', [
         {
           tokenIn: hop.tokenIn.address,
@@ -256,47 +246,47 @@ export function buildSwapTx(params: BuildSwapTxParams): SwapTransactionPayload {
           sqrtPriceLimitX96: priceLimit,
         },
       ])
-      
+
       const result = {
         to: routerAddress,
         data,
         value: hop.tokenIn.isNative ? amountInRaw : '0x0',
       }
-      
+
       if (chainId === 84532) {
         console.log('[BUILD-SWAP-TX] exactOutputSingle result', {
           chainId,
           to: result.to,
-          dataLen: result.data?.length,
+          dataLen: result.data.length,
           value: result.value,
         })
       }
-      
+
       return result
     } else {
       // Exact input: use exactInputSingle
       const data = routerInterface.encodeFunctionData('exactInputSingle', [
-      {
-        tokenIn: hop.tokenIn.address,
-        tokenOut: hop.tokenOut.address,
-        fee: hop.fee,
-        recipient,
-        deadline,
-        amountIn: amountInRaw,
-        amountOutMinimum: amountOutMinimumRaw,
-        sqrtPriceLimitX96: priceLimit,
-      },
-    ])
+        {
+          tokenIn: hop.tokenIn.address,
+          tokenOut: hop.tokenOut.address,
+          fee: hop.fee,
+          recipient,
+          deadline,
+          amountIn: amountInRaw,
+          amountOutMinimum: amountOutMinimumRaw,
+          sqrtPriceLimitX96: priceLimit,
+        },
+      ])
 
-    // Determine value (native token amount if tokenIn is native)
-    const value = amountIn.currency.isNative ? amountIn.quotient.toString() : '0'
+      // Determine value (native token amount if tokenIn is native)
+      const value = amountIn.currency.isNative ? amountIn.quotient.toString() : '0'
 
-    return {
-      to: routerAddress,
-      data,
-      value: value !== '0' ? `0x${BigInt(value).toString(16)}` : '0x0',
-      gasLimit: route.gasEstimate,
-    }
+      return {
+        to: routerAddress,
+        data,
+        value: value !== '0' ? `0x${BigInt(value).toString(16)}` : '0x0',
+        gasLimit: route.gasEstimate,
+      }
     }
   }
 
@@ -333,18 +323,17 @@ export function calculateAmountOutMinimum(
   slippageTolerance: Percent | { numerator?: bigint | number; denominator?: bigint | number } | number,
 ): CurrencyAmount<Currency> {
   // Guard against malformed slippage inputs (e.g. plain numbers or dehydrated objects)
-  const percent = slippageTolerance instanceof Percent
-    ? slippageTolerance
-    : new Percent(
-        (slippageTolerance as any)?.numerator ?? Math.round((Number(slippageTolerance) || 0.5) * 100),
-        (slippageTolerance as any)?.denominator ?? 10_000,
-      )
+  const percent =
+    slippageTolerance instanceof Percent
+      ? slippageTolerance
+      : new Percent(
+          (slippageTolerance as any)?.numerator ?? Math.round((Number(slippageTolerance) || 0.5) * 100),
+          (slippageTolerance as any)?.denominator ?? 10_000,
+        )
 
   // complement() = (1 - slippage); if complement is unavailable, fall back to no slippage
   const complement =
-    typeof (percent as any).complement === 'function'
-      ? (percent as any).complement()
-      : new Percent(1, 1)
+    typeof (percent as any).complement === 'function' ? (percent as any).complement() : new Percent(1, 1)
 
   return amountOut.multiply(complement)
 }
@@ -352,7 +341,7 @@ export function calculateAmountOutMinimum(
 /**
  * Get deadline timestamp (current time + TTL seconds)
  * Uniswap-like behavior: deadline is computed fresh at tx build time.
- * 
+ *
  * @param ttlSeconds - Time-to-live in seconds (default 1200 = 20 minutes)
  * @returns Unix timestamp in seconds (BigInt)
  */
@@ -370,6 +359,3 @@ export function getDeadline(minutesFromNow: number = 20): number {
   const deadline = getDeadlineSecondsFromNow(minutesFromNow * 60)
   return Number(deadline)
 }
-
-
-

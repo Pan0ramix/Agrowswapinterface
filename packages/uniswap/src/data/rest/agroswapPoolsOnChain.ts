@@ -3,9 +3,8 @@
  * This can be replaced with subgraph queries (e.g., Goldsky) later
  */
 
-import { PublicClient, decodeEventLog } from 'viem'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
-import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
+import { decodeEventLog, PublicClient } from 'viem'
 
 // Factory deployment blocks for each chain (optimization: start querying from deployment block)
 // These should be set to the block number when the factory was deployed
@@ -35,25 +34,27 @@ async function getFactoryDeploymentBlock(
     // This is a simplified approach - in production, you might want to use a block explorer API
     // or query the contract's creation transaction hash if known
     const currentBlock = await publicClient.getBlockNumber()
-    
+
     // Search backwards from current block (limit to last 10,000 blocks for performance)
     const searchLimit = 10000n
     const startBlock = currentBlock > searchLimit ? currentBlock - searchLimit : 0n
-    
+
     // For now, return null and let the caller set it manually
     // In production, you could implement a binary search or use block explorer API
     return null
   } catch (error) {
-    console.error('Error querying factory deployment block:', error)
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error querying factory deployment block:', error)
+    }
     return null
   }
 }
 
 // Cache keys for storing query state
-const getBlockCacheKey = (chainId: UniverseChainId, factoryAddress: string) => 
+const getBlockCacheKey = (chainId: UniverseChainId, factoryAddress: string) =>
   `agroswap-pools-last-block-${chainId}-${factoryAddress.toLowerCase()}`
 
-const getPoolsCacheKey = (chainId: UniverseChainId, factoryAddress: string) => 
+const getPoolsCacheKey = (chainId: UniverseChainId, factoryAddress: string) =>
   `agroswap-pools-addresses-${chainId}-${factoryAddress.toLowerCase()}`
 
 /**
@@ -61,7 +62,7 @@ const getPoolsCacheKey = (chainId: UniverseChainId, factoryAddress: string) =>
  */
 function getLastQueriedBlock(chainId: UniverseChainId, factoryAddress: string): bigint | null {
   if (typeof window === 'undefined') return null
-  
+
   try {
     const cached = localStorage.getItem(getBlockCacheKey(chainId, factoryAddress))
     if (cached) {
@@ -69,7 +70,9 @@ function getLastQueriedBlock(chainId: UniverseChainId, factoryAddress: string): 
       return blockNumber
     }
   } catch (error) {
-    console.warn('Error reading cached block number:', error)
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Error reading cached block number:', error)
+    }
   }
   return null
 }
@@ -79,11 +82,13 @@ function getLastQueriedBlock(chainId: UniverseChainId, factoryAddress: string): 
  */
 function setLastQueriedBlock(chainId: UniverseChainId, factoryAddress: string, blockNumber: bigint): void {
   if (typeof window === 'undefined') return
-  
+
   try {
     localStorage.setItem(getBlockCacheKey(chainId, factoryAddress), blockNumber.toString())
   } catch (error) {
-    console.warn('Error caching block number:', error)
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Error caching block number:', error)
+    }
   }
 }
 
@@ -92,7 +97,7 @@ function setLastQueriedBlock(chainId: UniverseChainId, factoryAddress: string, b
  */
 function getCachedPoolAddresses(chainId: UniverseChainId, factoryAddress: string): Set<string> {
   if (typeof window === 'undefined') return new Set()
-  
+
   try {
     const cached = localStorage.getItem(getPoolsCacheKey(chainId, factoryAddress))
     if (cached) {
@@ -100,7 +105,9 @@ function getCachedPoolAddresses(chainId: UniverseChainId, factoryAddress: string
       return new Set(addresses)
     }
   } catch (error) {
-    console.warn('Error reading cached pool addresses:', error)
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Error reading cached pool addresses:', error)
+    }
   }
   return new Set()
 }
@@ -110,11 +117,13 @@ function getCachedPoolAddresses(chainId: UniverseChainId, factoryAddress: string
  */
 function setCachedPoolAddresses(chainId: UniverseChainId, factoryAddress: string, addresses: string[]): void {
   if (typeof window === 'undefined') return
-  
+
   try {
     localStorage.setItem(getPoolsCacheKey(chainId, factoryAddress), JSON.stringify(addresses))
   } catch (error) {
-    console.warn('Error caching pool addresses:', error)
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Error caching pool addresses:', error)
+    }
   }
 }
 
@@ -123,12 +132,14 @@ function setCachedPoolAddresses(chainId: UniverseChainId, factoryAddress: string
  */
 export function clearPoolCache(chainId: UniverseChainId, factoryAddress: string): void {
   if (typeof window === 'undefined') return
-  
+
   try {
     localStorage.removeItem(getBlockCacheKey(chainId, factoryAddress))
     localStorage.removeItem(getPoolsCacheKey(chainId, factoryAddress))
   } catch (error) {
-    console.warn('Error clearing pool cache:', error)
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Error clearing pool cache:', error)
+    }
   }
 }
 
@@ -254,15 +265,15 @@ export interface OnChainPoolData {
 
 /**
  * Query all pools created by the factory contract
- * 
+ *
  * Performance optimizations:
  * 1. Caches last queried block to avoid re-scanning events from block 0
  * 2. Uses factory deployment block as starting point (if set) to avoid scanning from genesis
  * 3. Filters out pools with liquidity === 0 (only returns active pools)
- * 
+ *
  * Note: Pool data (TVL, liquidity) is always fetched fresh to ensure accurate values.
  * Only the event scanning is optimized with caching.
- * 
+ *
  * TODO: Replace with subgraph query (e.g., Goldsky) for better performance
  */
 export async function queryFactoryPools(
@@ -281,14 +292,14 @@ export async function queryFactoryPools(
     const cachedLastBlock = getLastQueriedBlock(chainId, factoryAddress)
     const cachedPoolAddresses = getCachedPoolAddresses(chainId, factoryAddress)
     const deploymentBlock = FACTORY_DEPLOYMENT_BLOCKS[chainId]
-    
+
     // Determine if this is an incremental query (we have cached pools) or full query
     const hasCachedPools = cachedPoolAddresses.size > 0
     const hasCachedBlock = cachedLastBlock !== null
-    
+
     let fromBlock: bigint
     let isInitialQuery = false
-    
+
     if (hasCachedPools && hasCachedBlock && cachedLastBlock! < currentBlock) {
       // Incremental query: only get new pools since last query
       // This is the fastest - only queries new pools created since last query
@@ -355,7 +366,7 @@ export async function queryFactoryPools(
     const allPoolAddresses = isInitialQuery
       ? newPoolAddresses // First query: only use pools from events
       : Array.from(new Set([...cachedPoolAddresses, ...newPoolAddresses])) // Incremental: merge with cached
-    
+
     // Update cache with all pool addresses
     if (allPoolAddresses.length > 0) {
       setCachedPoolAddresses(chainId, factoryAddress, allPoolAddresses)
@@ -390,7 +401,9 @@ export async function queryFactoryPools(
       return BigInt(b.liquidity) > BigInt(a.liquidity) ? 1 : -1
     })
   } catch (error) {
-    console.error('Error querying factory pools:', error)
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error querying factory pools:', error)
+    }
     return []
   }
 }
@@ -491,7 +504,9 @@ async function fetchPoolData(
       volume24hUSD: 0, // TODO: Calculate from Swap events or use subgraph
     }
   } catch (error) {
-    console.error(`Error fetching pool data for ${poolAddress}:`, error)
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(`Error fetching pool data for ${poolAddress}:`, error)
+    }
     return null
   }
 }
@@ -528,7 +543,9 @@ async function fetchTokenMetadata(
       decimals: Number(decimals),
     }
   } catch (error) {
-    console.error(`Error fetching token metadata for ${tokenAddress}:`, error)
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(`Error fetching token metadata for ${tokenAddress}:`, error)
+    }
     return null
   }
 }
@@ -536,10 +553,10 @@ async function fetchTokenMetadata(
 /**
  * Query pools from Goldsky subgraph
  * TODO: Implement Goldsky subgraph integration
- * 
+ *
  * This function signature matches OnChainPoolData so the rest of the code doesn't need to change
  * when switching from on-chain to subgraph queries.
- * 
+ *
  * Example subgraph query structure:
  * ```graphql
  * query TopPools($chainId: BigInt!, $first: Int!) {

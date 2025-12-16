@@ -11,7 +11,7 @@ import type {
 } from '@universe/api'
 import { TradingApi } from '@universe/api'
 import type { providers } from 'ethers/lib/ethers'
-import { useMemo, useRef } from 'react'
+import { useRef } from 'react'
 import { getTradeSettingsDeadline } from 'uniswap/src/data/apiClients/tradingApi/utils/getTradeSettingsDeadline'
 import { getChainLabel } from 'uniswap/src/features/chains/utils'
 import { convertGasFeeToDisplayValue, useActiveGasStrategy } from 'uniswap/src/features/gas/hooks'
@@ -377,7 +377,7 @@ export function createApprovalFields({
           maxPerWindow: 2,
           windowMs: 5000,
           includeKeys: ['chainId', 'approvalAction', 'hasTokenApprovalTxRequest', 'txTo', 'dataLen'],
-        }
+        },
       )
     }
   }
@@ -425,7 +425,7 @@ export function getClassicSwapTxAndGasInfo({
       // Spender is at offset 36-75 (32 bytes, padded)
       const spenderFromCalldata = `0x${approvalData.slice(34, 74)}`
 
-      if (spenderFromCalldata.toLowerCase() !== swapTxTo?.toLowerCase()) {
+      if (spenderFromCalldata.toLowerCase() !== swapTxTo.toLowerCase()) {
         logger.warn('getClassicSwapTxAndGasInfo', 'getClassicSwapTxAndGasInfo', 'Spender mismatch detected', {
           chainId: trade.inputAmount.currency.chainId,
           approvalSpender: spenderFromCalldata,
@@ -436,7 +436,7 @@ export function getClassicSwapTxAndGasInfo({
       } else {
         const chainId = trade.inputAmount.currency.chainId
         const spender = spenderFromCalldata.toLowerCase()
-        const swapTxToLower = swapTxTo?.toLowerCase()
+        const swapTxToLower = swapTxTo.toLowerCase()
         logger.debugDeduped(
           'getClassicSwapTxAndGasInfo',
           'getClassicSwapTxAndGasInfo',
@@ -452,7 +452,7 @@ export function getClassicSwapTxAndGasInfo({
             maxPerWindow: 2,
             windowMs: 5000,
             includeKeys: ['chainId', 'spender', 'swapTxTo'],
-          }
+          },
         )
       }
     }
@@ -514,7 +514,7 @@ export function usePermitTxInfo({
         ttlMs: 15000,
         minIntervalMs: 3000,
         keyParts: ['PERMIT-H01', chainId, !!quote],
-      }
+      },
     )
   }
 
@@ -532,7 +532,9 @@ export function usePermitTxInfo({
   if (process.env.NODE_ENV !== 'production') {
     // Use deduped logging for HookProbe
     // Extract chainId from classicQuote if available, otherwise from quote
-    const chainId = classicQuote?.quote.chainId ?? (quote && isClassic(quote) ? (quote as ClassicQuoteResponse).quote.chainId : undefined)
+    const chainId =
+      classicQuote?.quote.chainId ??
+      (quote && isClassic(quote) ? (quote as ClassicQuoteResponse).quote.chainId : undefined)
     logger.debugDeduped(
       'usePermitTxInfo',
       'usePermitTxInfo',
@@ -545,7 +547,7 @@ export function usePermitTxInfo({
         ttlMs: 15000,
         minIntervalMs: 3000,
         keyParts: ['PERMIT-H02', chainId, !!classicQuote],
-      }
+      },
     )
   }
 

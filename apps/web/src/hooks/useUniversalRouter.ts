@@ -21,10 +21,10 @@ import i18n from 'uniswap/src/i18n'
 import { logger } from 'utilities/src/logger/logger'
 import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
 import { calculateGasMargin } from 'utils/calculateGasMargin'
-import { getUniversalRouterAddress } from 'utils/universalRouterAddress'
 import { UserRejectedRequestError, WrongChainError } from 'utils/errors'
 import isZero from 'utils/isZero'
 import { didUserReject, swapErrorToUserReadableMessage } from 'utils/swapErrorToUserReadableMessage'
+import { getUniversalRouterAddress } from 'utils/universalRouterAddress'
 
 /** Thrown when gas estimation fails. This class of error usually requires an emulator to determine the root cause. */
 class GasEstimationError extends Error {
@@ -120,8 +120,8 @@ export function useUniversalRouterSwapCallback({
         chainId,
         from: tx.from,
         to: tx.to,
-        dataLen: tx.data?.length,
-        value: value?.toString(),
+        dataLen: tx.data.length,
+        value: value.toString(),
         slippageBps: options.slippageTolerance.numerator.toString(),
         deadline: deadline?.toString(),
       })

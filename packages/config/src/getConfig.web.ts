@@ -1,5 +1,4 @@
 import type { Config } from '@universe/config/src/config-types'
-import { isNonTestDev } from 'utilities/src/environment/constants'
 
 // Module-level flag to ensure config is only logged once per page load
 let hasLoggedAppConfig = false

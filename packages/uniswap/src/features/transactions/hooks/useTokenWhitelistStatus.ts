@@ -1,20 +1,20 @@
 /**
  * Hook to check if a token is restricted and if the wallet is allowed to interact with it.
- * 
+ *
  * Supports multiple restriction interfaces:
  * - isUserAllowed(address) - returns bool
  * - getRestriction(address) - returns uint8 (0 = allowed, non-zero = restricted)
- * 
+ *
  * Falls back gracefully if token doesn't implement restriction interface.
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
-import { Address, PublicClient } from 'viem'
 import { Currency } from '@uniswap/sdk-core'
+import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { logger } from 'utilities/src/logger/logger'
+import { Address, PublicClient } from 'viem'
 
 /**
  * ABI for checking token restrictions
@@ -97,7 +97,7 @@ async function checkTokenWhitelistStatus(
       // isUserAllowed returns true if user is allowed, false if not
       const result = {
         isRestricted: true,
-        isAllowed: isAllowed,
+        isAllowed,
       }
       if (process.env.NODE_ENV !== 'production') {
         console.log('[useTokenWhitelistStatus] Token HAS restriction interface (isUserAllowed)', {
@@ -108,13 +108,18 @@ async function checkTokenWhitelistStatus(
           isRestricted: result.isRestricted,
           willShowWarning: !result.isAllowed,
         })
-        logger.debug('useTokenWhitelistStatus', 'checkTokenWhitelistStatus', 'Token restriction check via isUserAllowed', {
-          tokenAddress,
-          walletAddress,
-          chainId,
-          isRestricted: result.isRestricted,
-          isAllowed: result.isAllowed,
-        })
+        logger.debug(
+          'useTokenWhitelistStatus',
+          'checkTokenWhitelistStatus',
+          'Token restriction check via isUserAllowed',
+          {
+            tokenAddress,
+            walletAddress,
+            chainId,
+            isRestricted: result.isRestricted,
+            isAllowed: result.isAllowed,
+          },
+        )
       }
       return result
     } catch (error) {
@@ -141,14 +146,19 @@ async function checkTokenWhitelistStatus(
             isAllowed: result.isAllowed,
             isRestricted: result.isRestricted,
           })
-          logger.debug('useTokenWhitelistStatus', 'checkTokenWhitelistStatus', 'Token restriction check via getRestriction', {
-            tokenAddress,
-            walletAddress,
-            chainId,
-            restrictionValue: Number(restriction),
-            isRestricted: result.isRestricted,
-            isAllowed: result.isAllowed,
-          })
+          logger.debug(
+            'useTokenWhitelistStatus',
+            'checkTokenWhitelistStatus',
+            'Token restriction check via getRestriction',
+            {
+              tokenAddress,
+              walletAddress,
+              chainId,
+              restrictionValue: Number(restriction),
+              isRestricted: result.isRestricted,
+              isAllowed: result.isAllowed,
+            },
+          )
         }
         return result
       } catch (error2) {
@@ -198,7 +208,7 @@ async function checkTokenWhitelistStatus(
           console.log('[useTokenWhitelistStatus] Token does NOT have any known restriction interface', {
             tokenAddress,
             walletAddress,
-            triedPatterns: ['isUserAllowed', 'getRestriction', ...additionalPatterns.map(p => p.name)],
+            triedPatterns: ['isUserAllowed', 'getRestriction', ...additionalPatterns.map((p) => p.name)],
           })
         }
         return {
@@ -340,4 +350,3 @@ export function useTokensWhitelistStatus({
     isLoading,
   }
 }
-

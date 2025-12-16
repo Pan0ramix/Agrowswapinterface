@@ -1,16 +1,16 @@
+import { useQuery } from '@tanstack/react-query'
+import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
 import { TradingApi } from '@universe/api'
 import { DynamicConfigs, SwapConfigKey, useDynamicConfigValue } from '@universe/gating'
-import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
 import { providers } from 'ethers/lib/ethers'
-import { useEffect, useMemo, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import JSBI from 'jsbi'
-import { useEvent } from 'utilities/src/react/hooks'
+import { useEffect, useMemo, useRef } from 'react'
 import { useUniswapContextSelector } from 'uniswap/src/contexts/UniswapContext'
 import { useTradingApiSwapQuery } from 'uniswap/src/data/apiClients/tradingApi/useTradingApiSwapQuery'
-import { useActiveGasStrategy } from 'uniswap/src/features/gas/hooks'
-import { isOnChainOnlyChain, isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { isTradingApiEnabled } from 'uniswap/src/features/transactions/swap/utils/isTradingApiEnabled'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { convertGasFeeToDisplayValue, useActiveGasStrategy } from 'uniswap/src/features/gas/hooks'
+import type { GasFeeResult } from 'uniswap/src/features/gas/types'
+import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { useAllTransactionSettings } from 'uniswap/src/features/transactions/components/settings/stores/transactionSettingsStore/useTransactionSettingsStore'
 import { FALLBACK_SWAP_REQUEST_POLL_INTERVAL_MS } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/constants'
 import { processUniswapXResponse } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/uniswapx/utils'
@@ -21,22 +21,27 @@ import {
   createProcessSwapResponse,
   getShouldSkipSwapRequest,
 } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/utils'
+import {
+  buildSwapTx,
+  getDeadlineSecondsFromNow,
+} from 'uniswap/src/features/transactions/swap/services/onchainRouter/buildSwapTx'
+import {
+  isOnChainOnlyChain,
+  isOnChainRouterEnabled,
+} from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { usePermit2SignatureWithData } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/hooks/usePermit2Signature'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import type { TokenApprovalInfo } from 'uniswap/src/features/transactions/swap/types/trade'
 import { ApprovalAction } from 'uniswap/src/features/transactions/swap/types/trade'
+import { isTradingApiEnabled } from 'uniswap/src/features/transactions/swap/utils/isTradingApiEnabled'
 import { isBridge, isClassic, isUniswapX, isWrap } from 'uniswap/src/features/transactions/swap/utils/routing'
-import { isWebApp } from 'utilities/src/platform'
-import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
-import { ONE_SECOND_MS } from 'utilities/src/time/time'
-import { logger } from 'utilities/src/logger/logger'
-import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import type { GasFeeResult } from 'uniswap/src/features/gas/types'
-import { convertGasFeeToDisplayValue } from 'uniswap/src/features/gas/hooks'
-import { buildSwapTx, getDeadlineSecondsFromNow } from 'uniswap/src/features/transactions/swap/services/onchainRouter/buildSwapTx'
 import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 import { CurrencyField } from 'uniswap/src/types/currency'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { logger } from 'utilities/src/logger/logger'
+import { isWebApp } from 'utilities/src/platform'
+import { useEvent } from 'utilities/src/react/hooks'
+import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
+import { ONE_SECOND_MS } from 'utilities/src/time/time'
 
 function useSwapTransactionRequestInfo({
   derivedSwapInfo,
@@ -52,7 +57,7 @@ function useSwapTransactionRequestInfo({
   const { evmAccount } = useWallet()
   const recipient = evmAccount?.address
 
-  const permitData = derivedSwapInfo.trade?.trade?.quote?.permitData
+  const permitData = derivedSwapInfo.trade.trade?.quote.permitData
   // On interface, we do not fetch signature until after swap is clicked, as it requires user interaction.
   const { data: signature } = usePermit2SignatureWithData({
     permitData,
@@ -66,8 +71,7 @@ function useSwapTransactionRequestInfo({
 
   // Check if on-chain router is enabled for this chain - if so, skip Trading API swap request
   // Force on-chain path for Base Sepolia; skip Trading API entirely
-  const isOnChainEnabled =
-    derivedSwapInfo.chainId === 84532 ? true : isOnChainRouterEnabled(derivedSwapInfo.chainId)
+  const isOnChainEnabled = derivedSwapInfo.chainId === 84532 ? true : isOnChainRouterEnabled(derivedSwapInfo.chainId)
 
   const tradingApiSwapRequestMs = useDynamicConfigValue({
     config: DynamicConfigs.Swap,
@@ -106,11 +110,11 @@ function useSwapTransactionRequestInfo({
         maxPerWindow: 2,
         windowMs: 5000,
         includeKeys: ['chainId', 'hasOnChainQuote', 'hasTxPayload', 'txTo', 'dataLen'],
-      }
+      },
     )
   }
 
-  const quote = derivedSwapInfo.trade?.trade?.quote
+  const quote = derivedSwapInfo.trade.trade?.quote
   const swapQuoteResponse = quote && (isClassic(quote) || isBridge(quote) || isWrap(quote)) ? quote : undefined
   const swapQuote = swapQuoteResponse?.quote
 
@@ -143,18 +147,15 @@ function useSwapTransactionRequestInfo({
   if (process.env.NODE_ENV !== 'production' && isOnChainEnabled && swapRequestParams) {
     const chainId = derivedSwapInfo.chainId
     if (lastWarnedChainIdRef.current !== chainId) {
-      // eslint-disable-next-line no-console
-      console.debug(
-        '[useTransactionRequestInfo] Trading API swap request blocked for on-chain enabled chain:',
-        chainId,
-      )
+       
+      console.debug('[useTransactionRequestInfo] Trading API swap request blocked for on-chain enabled chain:', chainId)
       lastWarnedChainIdRef.current = chainId
     }
   }
 
   // Gate Trading API swap query for on-chain-only chains
   const isTradingApiEnabledForChain = isTradingApiEnabled(derivedSwapInfo.chainId)
-  
+
   const {
     data,
     error,
@@ -162,7 +163,7 @@ function useSwapTransactionRequestInfo({
   } = useTradingApiSwapQuery(
     {
       // Skip Trading API swap request if on-chain router is enabled OR Trading API is disabled for this chain
-      params: (isOnChainEnabled || !isTradingApiEnabledForChain || shouldSkipSwapRequest) ? undefined : swapRequestParams,
+      params: isOnChainEnabled || !isTradingApiEnabledForChain || shouldSkipSwapRequest ? undefined : swapRequestParams,
       enabled: isTradingApiEnabledForChain && !isOnChainEnabled && !shouldSkipSwapRequest,
       refetchInterval: tradingApiSwapRequestMs,
       staleTime: tradingApiSwapRequestMs,
@@ -238,7 +239,7 @@ function useSwapTransactionRequestInfo({
         maxPerWindow: 2,
         windowMs: 5000,
         includeKeys: ['chainId', 'hasOnChainQuote', 'hasTxPayload', 'txTo', 'txValue', 'dataLen'],
-      }
+      },
     )
   }
 
@@ -264,11 +265,7 @@ function useSwapTransactionRequestInfo({
     // Normalize value to hex string - handle both bigint and string/undefined
     const valueRaw: bigint | string | undefined = onChainTxPayload.value as bigint | string | undefined
     const normalizedValue =
-      typeof valueRaw === 'bigint'
-        ? `0x${valueRaw.toString(16)}`
-        : typeof valueRaw === 'string'
-          ? valueRaw
-          : '0x0'
+      typeof valueRaw === 'bigint' ? `0x${valueRaw.toString(16)}` : typeof valueRaw === 'string' ? valueRaw : '0x0'
 
     const txRequest = {
       to: onChainTxPayload.to,
@@ -276,7 +273,7 @@ function useSwapTransactionRequestInfo({
       value: normalizedValue,
       chainId: derivedSwapInfo.chainId,
     } as providers.TransactionRequest | null
-    
+
     // Debug logging for Base Sepolia
     if (derivedSwapInfo.chainId === 84532) {
       console.log('[TX-REQUEST-DATA] onChainTxRequestData created', {
@@ -285,11 +282,11 @@ function useSwapTransactionRequestInfo({
         txTo: txRequest?.to,
         txDataLen: (txRequest?.data as string | undefined)?.length,
         txValue: txRequest?.value,
-        hasQuoteAmountOut: !!onChainQuote?.quoteAmountOut,
-        hasQuoteAmountIn: !!onChainQuote?.quoteAmountIn,
+        hasQuoteAmountOut: !!onChainQuote.quoteAmountOut,
+        hasQuoteAmountIn: !!onChainQuote.quoteAmountIn,
       })
     }
-    
+
     return txRequest
   }, [onChainTxPayload, onChainQuote?.quoteAmountOut, onChainQuote?.quoteAmountIn, derivedSwapInfo.chainId])
 
@@ -309,20 +306,20 @@ function useSwapTransactionRequestInfo({
   const isSTFError = (error: unknown): boolean => {
     const errorMessage = error instanceof Error ? error.message : String(error)
     return (
-      errorMessage.includes('STF') ||
-      errorMessage.includes('revert') ||
-      errorMessage.includes('execution reverted')
+      errorMessage.includes('STF') || errorMessage.includes('revert') || errorMessage.includes('execution reverted')
     )
   }
 
   // Helper to rebuild tx payload with fresh deadline
   const rebuildTxPayloadWithFreshDeadline = (): providers.TransactionRequest | null => {
-    if (!onChainQuote?.route || !onChainQuote?.amountOutMinimum || !derivedSwapInfo.chainId || !recipient) {
+    if (!onChainQuote?.route || !onChainQuote.amountOutMinimum || !derivedSwapInfo.chainId || !recipient) {
       return null
     }
 
     // Get amountIn from derivedSwapInfo
-    const amountIn = (derivedSwapInfo.currencyAmounts as any)?.[CurrencyField.INPUT] as CurrencyAmount<Currency> | undefined
+    const amountIn = (derivedSwapInfo.currencyAmounts as any)?.[CurrencyField.INPUT] as
+      | CurrencyAmount<Currency>
+      | undefined
     if (!amountIn) {
       return null
     }
@@ -330,14 +327,19 @@ function useSwapTransactionRequestInfo({
     // Rebuild with fresh deadline (computed at rebuild time)
     const freshDeadline = getDeadlineSecondsFromNow(1200) // 20 minutes TTL
     const nowSeconds = Math.floor(Date.now() / 1000)
-    
+
     if (process.env.NODE_ENV !== 'production' && derivedSwapInfo.chainId === 84532) {
-      logger.debug('useTransactionRequestInfo', 'rebuildTxPayloadWithFreshDeadline', '[DEADLINE-REBUILD] reason=Transaction too old, rebuilding calldata', {
-        chainId: derivedSwapInfo.chainId,
-        nowSeconds,
-        newDeadline: Number(freshDeadline),
-        deadlineAgeSeconds: Number(freshDeadline) - nowSeconds,
-      })
+      logger.debug(
+        'useTransactionRequestInfo',
+        'rebuildTxPayloadWithFreshDeadline',
+        '[DEADLINE-REBUILD] reason=Transaction too old, rebuilding calldata',
+        {
+          chainId: derivedSwapInfo.chainId,
+          nowSeconds,
+          newDeadline: Number(freshDeadline),
+          deadlineAgeSeconds: Number(freshDeadline) - nowSeconds,
+        },
+      )
     }
 
     const rebuiltPayload = buildSwapTx({
@@ -351,9 +353,7 @@ function useSwapTransactionRequestInfo({
 
     const valueRaw = rebuiltPayload.value
     const normalizedValue =
-      typeof valueRaw === 'string' && valueRaw.startsWith('0x')
-        ? valueRaw
-        : `0x${BigInt(valueRaw || '0').toString(16)}`
+      typeof valueRaw === 'string' && valueRaw.startsWith('0x') ? valueRaw : `0x${BigInt(valueRaw || '0').toString(16)}`
 
     return {
       to: rebuiltPayload.to,
@@ -378,7 +378,7 @@ function useSwapTransactionRequestInfo({
       onChainTxRequestData?.value ?? null,
     ],
     queryFn: async () => {
-      if (!publicClient || !onChainTxRequestData?.to || !onChainTxRequestData?.data) {
+      if (!publicClient || !onChainTxRequestData?.to || !onChainTxRequestData.data) {
         return null
       }
 
@@ -413,13 +413,13 @@ function useSwapTransactionRequestInfo({
               hasAccount: !!recipient,
               account: recipient,
               to: txRequestToEstimate.to,
-              dataLen: (txRequestToEstimate.data as string)?.length ?? 0,
+              dataLen: (txRequestToEstimate.data as string).length ?? 0,
             },
             {
               ttlMs: 5000,
               minIntervalMs: 5000,
               keyParts: ['ESTIMATE-GAS-params', derivedSwapInfo.chainId, txRequestToEstimate.to],
-            }
+            },
           )
         }
 
@@ -442,10 +442,15 @@ function useSwapTransactionRequestInfo({
             txRequestToEstimate = rebuilt
 
             if (process.env.NODE_ENV !== 'production' && derivedSwapInfo.chainId === 84532) {
-              logger.debug('useTransactionRequestInfo', 'gas-estimate-retry', '[DEADLINE-REBUILD] retrying with fresh deadline', {
-                chainId: derivedSwapInfo.chainId,
-                newDeadline: 'fresh',
-              })
+              logger.debug(
+                'useTransactionRequestInfo',
+                'gas-estimate-retry',
+                '[DEADLINE-REBUILD] retrying with fresh deadline',
+                {
+                  chainId: derivedSwapInfo.chainId,
+                  newDeadline: 'fresh',
+                },
+              )
             }
 
             try {
@@ -483,17 +488,22 @@ function useSwapTransactionRequestInfo({
         }
 
         const errorMessage = error instanceof Error ? error.message : String(error)
-        
+
         // Map STF errors to user-meaningful reasons
         if (isSTFError(error)) {
           if (process.env.NODE_ENV !== 'production' && derivedSwapInfo.chainId === 84532) {
-            logger.debug('useTransactionRequestInfo', 'gas-estimate-stf', '[ESTIMATE-GAS] STF detected - likely allowance/balance issue', {
-              chainId: derivedSwapInfo.chainId,
-              error: errorMessage,
-              hasAccount: !!recipient,
-              account: recipient,
-              to: txRequestToEstimate.to,
-            })
+            logger.debug(
+              'useTransactionRequestInfo',
+              'gas-estimate-stf',
+              '[ESTIMATE-GAS] STF detected - likely allowance/balance issue',
+              {
+                chainId: derivedSwapInfo.chainId,
+                error: errorMessage,
+                hasAccount: !!recipient,
+                account: recipient,
+                to: txRequestToEstimate.to,
+              },
+            )
           }
           // STF indicates transfer failed - likely insufficient allowance or balance
           // Return null to allow fallback, but the error will be handled by validation
@@ -511,7 +521,7 @@ function useSwapTransactionRequestInfo({
     // GATE: Only estimate swap gas if approval is not needed AND balance is sufficient
     // This prevents STF spam when allowance is insufficient
     enabled: (() => {
-      if (!publicClient || !onChainTxRequestData?.to || !onChainTxRequestData?.data || !derivedSwapInfo.chainId) {
+      if (!publicClient || !onChainTxRequestData?.to || !onChainTxRequestData.data || !derivedSwapInfo.chainId) {
         return false
       }
 
@@ -522,10 +532,15 @@ function useSwapTransactionRequestInfo({
         // Approval gas estimation happens separately
         if (tokenApprovalInfo.action !== ApprovalAction.None) {
           if (process.env.NODE_ENV !== 'production' && derivedSwapInfo.chainId === 84532) {
-            logger.debug('useTransactionRequestInfo', 'gas-estimate-gated', '[ESTIMATE-GAS] Gated: approval required, skipping swap estimate', {
-              chainId: derivedSwapInfo.chainId,
-              approvalAction: tokenApprovalInfo.action,
-            })
+            logger.debug(
+              'useTransactionRequestInfo',
+              'gas-estimate-gated',
+              '[ESTIMATE-GAS] Gated: approval required, skipping swap estimate',
+              {
+                chainId: derivedSwapInfo.chainId,
+                approvalAction: tokenApprovalInfo.action,
+              },
+            )
           }
           return false
         }
@@ -656,14 +671,7 @@ function useSwapTransactionRequestInfo({
         previousRequestIdRef.current = swapQuoteResponse.requestId
       }
     }
-  }, [
-    logSwapRequestErrors,
-    result,
-    derivedSwapInfo,
-    transactionSettings,
-    swapQuoteResponse ?? null,
-    shouldEarlyReturn,
-  ])
+  }, [logSwapRequestErrors, result, derivedSwapInfo, transactionSettings, swapQuoteResponse ?? null, shouldEarlyReturn])
 
   // NOW we can do early returns (after ALL hooks have been called)
   if (shouldEarlyReturn) {
@@ -704,15 +712,15 @@ function useSwapTransactionRequestInfo({
         chainId: derivedSwapInfo.chainId,
         hasOnChainTxRequestData: !!onChainTxRequestData,
         hasOnChainQuoteAmount,
-        txTo: onChainTxRequestData?.to,
-        txDataLen: (onChainTxRequestData?.data as string | undefined)?.length,
+        txTo: onChainTxRequestData.to,
+        txDataLen: (onChainTxRequestData.data as string | undefined)?.length,
       })
     }
     if (process.env.NODE_ENV !== 'production' && derivedSwapInfo.chainId === 84532) {
       // Safe conversion for logging - guard against undefined quotient
       const quoteAmountOut = onChainQuote.quoteAmountOut
       const quoteOutRaw =
-        typeof quoteAmountOut?.quotient?.toString === 'function'
+        typeof quoteAmountOut?.quotient.toString === 'function'
           ? quoteAmountOut.quotient.toString()
           : quoteAmountOut?.quotient != null
             ? String(quoteAmountOut.quotient)
@@ -739,7 +747,7 @@ function useSwapTransactionRequestInfo({
           maxPerWindow: 2,
           windowMs: 5000,
           includeKeys: ['chainId', 'txTo', 'dataLen'],
-        }
+        },
       )
     }
 
@@ -802,7 +810,7 @@ export function useTransactionRequestInfo({
   tokenApprovalInfo: TokenApprovalInfo | undefined
 }): TransactionRequestInfo {
   // Derived swap info may temporarily lack nested trade data; guard access
-  const permitData = derivedSwapInfo.trade?.trade?.quote?.permitData
+  const permitData = derivedSwapInfo.trade.trade?.quote.permitData
   const uniswapXTransactionRequestInfo = useUniswapXTransactionRequestInfo(permitData)
   const swapTransactionRequestInfo = useSwapTransactionRequestInfo({ derivedSwapInfo, tokenApprovalInfo })
 

@@ -1,16 +1,16 @@
 /**
  * V3 Swap Transaction Builder
- * 
+ *
  * Builds swap transaction payloads (calldata) for SwapRouter contract calls.
  * This replaces Trading API swap endpoints for building transaction calldata.
  */
 
-import { Currency, CurrencyAmount, Percent, Token } from '@uniswap/sdk-core'
+import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
 import { Interface } from 'ethers/lib/utils'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { getSwapRouterAddress } from 'uniswap/src/constants/v3Addresses'
 import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
+import { getSwapRouterAddress } from 'uniswap/src/constants/v3Addresses'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 
 /**
  * Transaction payload for swap
@@ -87,24 +87,12 @@ const SWAP_ROUTER_ABI = [
 
 /**
  * Builds exact input single swap transaction payload
- * 
+ *
  * @param params - Swap parameters
  * @returns Transaction payload with to, data, and value
  */
-export function buildExactInputSingleSwapTx(
-  params: BuildExactInputSingleSwapParams,
-): SwapTransactionPayload {
-  const {
-    tokenIn,
-    tokenOut,
-    fee,
-    amountIn,
-    amountOutMinimum,
-    recipient,
-    deadline,
-    sqrtPriceLimitX96,
-    chainId,
-  } = params
+export function buildExactInputSingleSwapTx(params: BuildExactInputSingleSwapParams): SwapTransactionPayload {
+  const { tokenIn, tokenOut, fee, amountIn, amountOutMinimum, recipient, deadline, sqrtPriceLimitX96, chainId } = params
 
   const routerAddress = getSwapRouterContractAddress(chainId)
   const routerInterface = new Interface(SWAP_ROUTER_ABI)
@@ -120,9 +108,9 @@ export function buildExactInputSingleSwapTx(
     {
       tokenIn: tokenInAddress,
       tokenOut: tokenOutAddress,
-      fee: fee,
-      recipient: recipient,
-      deadline: deadline,
+      fee,
+      recipient,
+      deadline,
       amountIn: amountInRaw,
       amountOutMinimum: amountOutMinimumRaw,
       sqrtPriceLimitX96: priceLimit,
@@ -157,4 +145,3 @@ export function calculateAmountOutMinimum(
 export function getDeadline(minutesFromNow: number = 20): number {
   return Math.floor(Date.now() / 1000) + minutesFromNow * 60
 }
-

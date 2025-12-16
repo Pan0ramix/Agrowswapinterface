@@ -41,18 +41,13 @@ export function createNotificationsApiClient(ctx: NotificationsClientContext): N
         return GetNotificationsResponseMessage.fromJson(response)
       } catch (decodeError) {
         // Handle decode errors (e.g., unknown platformType for unsupported chains)
-        const errorMessage =
-          decodeError instanceof Error
-            ? decodeError.message
-            : String(decodeError)
-        
+        const errorMessage = decodeError instanceof Error ? decodeError.message : String(decodeError)
+
         // Check if this is a decode error related to unsupported chains
         // (decode errors with platformType or unknown fields typically indicate unsupported chain)
         const isUnsupportedChainError =
-          errorMessage.includes('decode') ||
-          errorMessage.includes('platformType') ||
-          errorMessage.includes('unknown')
-        
+          errorMessage.includes('decode') || errorMessage.includes('platformType') || errorMessage.includes('unknown')
+
         if (isUnsupportedChainError) {
           // Return empty response for unsupported chains instead of throwing
           // This prevents crashes when notifications service encounters unsupported chains
@@ -64,7 +59,7 @@ export function createNotificationsApiClient(ctx: NotificationsClientContext): N
             return new GetNotificationsResponseMessage()
           }
         }
-        
+
         // Re-throw other decode errors as they indicate real issues on supported chains
         throw decodeError
       }

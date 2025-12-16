@@ -44,18 +44,12 @@ function isSwapDebugEnabled(): boolean {
 }
 
 export function isSwapDebug(chainId?: number): boolean {
-  return (
-    typeof __DEV__ !== 'undefined' &&
-    __DEV__ &&
-    (isSwapDebugEnabled() || chainId === 84532)
-  )
+  return typeof __DEV__ !== 'undefined' && __DEV__ && (isSwapDebugEnabled() || chainId === 84532)
 }
 
 export function shouldLog(chainId?: number): boolean {
   return (
-    typeof __DEV__ !== 'undefined' &&
-    __DEV__ &&
-    (isSwapDebugEnabled() || chainId === 84532 || chainId === undefined)
+    typeof __DEV__ !== 'undefined' && __DEV__ && (isSwapDebugEnabled() || chainId === 84532 || chainId === undefined)
   )
 }
 
@@ -63,11 +57,7 @@ export function shouldLog(chainId?: number): boolean {
  * Debug logger wrapper for swap execution flow
  * Always includes message string and structured context
  */
-export function swapDebug(
-  chainId: number | undefined,
-  message: string,
-  context?: Record<string, any>,
-): void {
+export function swapDebug(chainId: number | undefined, message: string, context?: Record<string, any>): void {
   if (!shouldLog(chainId)) {
     return
   }
@@ -89,18 +79,14 @@ export function swapDebug(
  * Error logger wrapper for swap execution flow
  * Never throws - pure logging function
  */
-export function swapError(
-  chainId: number | undefined,
-  message: string,
-  context?: Record<string, any>,
-): void {
+export function swapError(chainId: number | undefined, message: string, context?: Record<string, any>): void {
   if (!shouldLog(chainId)) {
     return
   }
 
   try {
     const debugEnabled = isSwapDebug(chainId)
-    
+
     // Extract error from context if present
     const error = context?.error as unknown
     const restContext = { ...context }
@@ -132,7 +118,7 @@ export function swapError(
     })
   } catch {
     // If swapError itself fails, silently fail (never throw from error logging)
-    // eslint-disable-next-line no-console
+     
     console.error('[swapError] Failed to log error', { chainId, message })
   }
 }
@@ -349,4 +335,3 @@ export function summarizeTrade(trade: any): {
 
   return result
 }
-

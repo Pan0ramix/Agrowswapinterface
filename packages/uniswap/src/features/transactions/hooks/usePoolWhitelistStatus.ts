@@ -1,6 +1,6 @@
 /**
  * Hook to check whitelist status for pool address and position manager
- * 
+ *
  * For restricted tokens, we need to verify:
  * 1. The computed pool address is whitelisted (even if not deployed yet)
  * 2. The position manager/router is whitelisted
@@ -8,17 +8,19 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
-import { Address, PublicClient } from 'viem'
+import { PERMIT2_ADDRESS } from '@uniswap/permit2-sdk'
 import { Currency, Token } from '@uniswap/sdk-core'
 import { computePoolAddress, FeeAmount } from '@uniswap/v3-sdk'
+import { useMemo } from 'react'
+import {
+  AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES,
+  AGROSWAP_V3_CORE_FACTORY_ADDRESSES,
+  getAgroswapSwapRouterAddress,
+} from 'uniswap/src/constants/agroswapAddresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
-import { AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES, getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
-import { PERMIT2_ADDRESS } from '@uniswap/permit2-sdk'
-import { logger } from 'utilities/src/logger/logger'
-import { useTokenWhitelistStatus } from './useTokenWhitelistStatus'
+import { Address, PublicClient } from 'viem'
+import { useTokenWhitelistStatus } from 'uniswap/src/features/transactions/hooks/useTokenWhitelistStatus'
 
 // ABI for checking token restrictions (same as in useTokenWhitelistStatus)
 const RESTRICTION_ABI = [
@@ -120,10 +122,14 @@ async function checkAddressWhitelistStatus(
           error: errorMessage,
         })
       }
-      
+
       // If the error indicates the function doesn't exist, try getRestriction
       // Common errors: "Function not found", "execution reverted", etc.
-      if (errorMessage.includes('Function') || errorMessage.includes('not found') || errorMessage.includes('execution reverted')) {
+      if (
+        errorMessage.includes('Function') ||
+        errorMessage.includes('not found') ||
+        errorMessage.includes('execution reverted')
+      ) {
         try {
           const restriction = await publicClient.readContract({
             address: tokenAddress,
@@ -180,7 +186,8 @@ async function checkAddressWhitelistStatus(
               tokenAddress,
               addressToCheck,
               isUserAllowedError: errorMessage,
-              getRestrictionError: getRestrictionError instanceof Error ? getRestrictionError.message : String(getRestrictionError),
+              getRestrictionError:
+                getRestrictionError instanceof Error ? getRestrictionError.message : String(getRestrictionError),
             })
           }
           return undefined
@@ -212,10 +219,7 @@ async function checkAddressWhitelistStatus(
 /**
  * Check if a contract address exists (has code)
  */
-async function checkContractExists(
-  address: Address,
-  publicClient: PublicClient,
-): Promise<boolean> {
+async function checkContractExists(address: Address, publicClient: PublicClient): Promise<boolean> {
   try {
     const code = await publicClient.getBytecode({ address })
     return code !== undefined && code !== '0x' && code.length > 2
@@ -311,7 +315,9 @@ export function usePoolWhitelistStatus({
       // Use wrapped tokens for sorting and computation
       const token0Wrapped = token0.wrapped as Token
       const token1Wrapped = token1.wrapped as Token
-      const [tokenA, tokenB] = token0Wrapped.sortsBefore(token1Wrapped) ? [token0Wrapped, token1Wrapped] : [token1Wrapped, token0Wrapped]
+      const [tokenA, tokenB] = token0Wrapped.sortsBefore(token1Wrapped)
+        ? [token0Wrapped, token1Wrapped]
+        : [token1Wrapped, token0Wrapped]
 
       const computedAddress = computePoolAddress({
         factoryAddress,
@@ -357,7 +363,6 @@ export function usePoolWhitelistStatus({
   const permit2Address = useMemo(() => {
     return PERMIT2_ADDRESS as Address
   }, [])
-
 
   // Check if pool exists first (we need this to determine if we should check whitelist)
   const { data: poolExists, isLoading: poolExistsLoading } = useQuery({
@@ -413,9 +418,14 @@ export function usePoolWhitelistStatus({
       if (!positionManagerAddress || !restrictedTokenAddress || !publicClient || !chainId) {
         return undefined
       }
-      
+
       // Call isUserAllowed on the RWA token to check if position manager is whitelisted
-      const result = await checkAddressWhitelistStatus(restrictedTokenAddress, positionManagerAddress, chainId, publicClient)
+      const result = await checkAddressWhitelistStatus(
+        restrictedTokenAddress,
+        positionManagerAddress,
+        chainId,
+        publicClient,
+      )
       if (process.env.NODE_ENV !== 'production') {
         console.log('[usePoolWhitelistStatus] Position Manager whitelist check (on RWA token)', {
           rwaTokenAddress: restrictedTokenAddress,
@@ -462,7 +472,7 @@ export function usePoolWhitelistStatus({
       if (!permit2Address || !restrictedTokenAddress || !publicClient || !chainId) {
         return undefined
       }
-      
+
       // Call isUserAllowed on the RWA token to check if Permit2 is whitelisted
       const result = await checkAddressWhitelistStatus(restrictedTokenAddress, permit2Address, chainId, publicClient)
       if (process.env.NODE_ENV !== 'production') {
@@ -494,19 +504,21 @@ export function usePoolWhitelistStatus({
       } else if (poolIsWhitelisted === undefined && poolExists === true) {
         warningList.push(`Cannot determine if pool address ${poolAddress} is whitelisted - transaction may fail`)
       }
-      
+
       if (positionManagerIsWhitelisted === false && positionManagerAddress) {
         warningList.push(`Position manager ${positionManagerAddress} is not whitelisted`)
       } else if (positionManagerIsWhitelisted === undefined && positionManagerAddress) {
-        warningList.push(`Cannot determine if position manager ${positionManagerAddress} is whitelisted - transaction may fail`)
+        warningList.push(
+          `Cannot determine if position manager ${positionManagerAddress} is whitelisted - transaction may fail`,
+        )
       }
-      
+
       if (swapRouterIsWhitelisted === false && swapRouterAddress) {
         warningList.push(`Swap router ${swapRouterAddress} is not whitelisted`)
       } else if (swapRouterIsWhitelisted === undefined && swapRouterAddress) {
         warningList.push(`Cannot determine if swap router ${swapRouterAddress} is whitelisted - transaction may fail`)
       }
-      
+
       if (permit2IsWhitelisted === false) {
         warningList.push(`Permit2 ${permit2Address} is not whitelisted`)
       } else if (permit2IsWhitelisted === undefined) {
@@ -515,7 +527,17 @@ export function usePoolWhitelistStatus({
     }
 
     return warningList
-  }, [poolAddress, poolExists, poolIsWhitelisted, positionManagerIsWhitelisted, positionManagerAddress, swapRouterIsWhitelisted, swapRouterAddress, permit2IsWhitelisted, permit2Address])
+  }, [
+    poolAddress,
+    poolExists,
+    poolIsWhitelisted,
+    positionManagerIsWhitelisted,
+    positionManagerAddress,
+    swapRouterIsWhitelisted,
+    swapRouterAddress,
+    permit2IsWhitelisted,
+    permit2Address,
+  ])
 
   const isLoading =
     poolExistsLoading ||
@@ -563,4 +585,3 @@ export function usePoolWhitelistStatus({
     warnings,
   }
 }
-

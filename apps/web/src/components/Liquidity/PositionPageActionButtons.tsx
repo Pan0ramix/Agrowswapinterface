@@ -94,11 +94,9 @@ export function PositionPageActionButtons({
     return (
       <MobileBottomBar backgroundColor="$surface1" hide={isTouchDevice && scrollDirection === ScrollDirection.DOWN}>
         <MWebActionButtons
-          actionItems={[
-            collectFeesOption,
-            addLiquidityOption,
-            removeLiquidityOption,
-          ].filter((o): o is MenuOptionItem => o !== undefined)}
+          actionItems={[collectFeesOption, addLiquidityOption, removeLiquidityOption].filter(
+            (o): o is MenuOptionItem => o !== undefined,
+          )}
         />
       </MobileBottomBar>
     )

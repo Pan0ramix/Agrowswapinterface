@@ -160,7 +160,7 @@ export function validateParsedInput(input: ParsedTradeInput): ValidatedTradeInpu
   // Use dynamic import to avoid circular dependencies
   if (input.tokenInChainId) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       const { isOnChainRouterEnabled } = require('uniswap/src/features/transactions/swap/services/onchainRouter/config')
       if (isOnChainRouterEnabled(input.tokenInChainId)) {
         // Development debug only; deduped per chainId to avoid spam.

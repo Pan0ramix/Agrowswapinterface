@@ -2,10 +2,10 @@ import { useTranslation } from 'react-i18next'
 import { Flex, Text, UniswapXText } from 'ui/src'
 import { AnimatedUniswapX } from 'ui/src/components/icons/UniswapX'
 import { AcrossLogo } from 'ui/src/components/logos/AcrossLogo'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { Trade } from 'uniswap/src/features/transactions/swap/types/trade'
 import { isBridge, isUniswapX } from 'uniswap/src/features/transactions/swap/utils/routing'
 import { useRoutingProvider } from 'uniswap/src/utils/routingDiagram/routingRegistry'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 
 export function RoutingLabel({ trade }: { trade: Trade }): JSX.Element {
   const { t } = useTranslation()
@@ -33,7 +33,7 @@ export function RoutingLabel({ trade }: { trade: Trade }): JSX.Element {
   }
 
   // Check if this is an on-chain-only swap (e.g., Base Sepolia)
-  const chainId = trade.inputAmount?.currency?.chainId
+  const chainId = trade.inputAmount.currency.chainId
   const isOnChainOnly = chainId ? isOnChainOnlyChain(chainId) : false
 
   // For on-chain-only swaps, show "On-chain" instead of "Uniswap API"
@@ -45,7 +45,7 @@ export function RoutingLabel({ trade }: { trade: Trade }): JSX.Element {
     <Flex row gap="$spacing6" alignItems="center">
       {routingProvider?.icon && <routingProvider.icon size="$icon.16" color={routingProvider.iconColor} />}
       <Text adjustsFontSizeToFit color="$neutral1" variant="body3">
-        {isOnChainQuote ? t('swap.routing.onChain') || 'On-chain' : routingProvider?.name ?? ''}
+        {isOnChainQuote ? t('swap.routing.onChain') || 'On-chain' : (routingProvider?.name ?? '')}
       </Text>
     </Flex>
   )

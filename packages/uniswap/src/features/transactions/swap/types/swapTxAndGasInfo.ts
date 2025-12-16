@@ -22,9 +22,9 @@ import {
   PopulatedTransactionRequestArray,
   ValidatedTransactionRequest,
 } from 'uniswap/src/features/transactions/types/transactionRequests'
+import { logger } from 'utilities/src/logger/logger'
 import { isWebApp } from 'utilities/src/platform'
 import { Prettify } from 'viem'
-import { logger } from 'utilities/src/logger/logger'
 
 export type SwapTxAndGasInfo =
   | ClassicSwapTxAndGasInfo
@@ -71,9 +71,9 @@ function logInvalidSwapTxContext(validation: SwapTxContextValidation) {
 
   // Use debug level to avoid console spam
   // Log the first reason for quick diagnosis
-  // eslint-disable-next-line no-console
+   
   console.debug('[SWAP-TX-CONTEXT] INVALID', {
-    reason0: validation.reasons?.[0], // First reason for quick diagnosis
+    reason0: validation.reasons[0], // First reason for quick diagnosis
     reasons: validation.reasons,
     snapshot: validation.snapshot,
   })
@@ -265,9 +265,9 @@ export function validateSwapTxContextWithReasons(swapTxContext: SwapTxAndGasInfo
   const firstTxRequest = txRequests?.[0]
   const quote = (trade as any)?.quote
   const swapQuoteResponse = (swapTxContext as any)?.swapQuoteResponse
-  
+
   // Extract chainId early for use throughout validation
-  const chainId = trade?.inputAmount?.currency?.chainId
+  const chainId = trade?.inputAmount.currency.chainId
 
   // Build snapshot (safe, shallow fields only)
   const requestIdRaw =
@@ -335,11 +335,11 @@ export function validateSwapTxContextWithReasons(swapTxContext: SwapTxAndGasInfo
       // Add gas snapshot for debugging
       const gasSnapshot: Record<string, unknown> = {
         hasGasFee: !!swapTxContext.gasFee,
-        gasFeeValue: swapTxContext.gasFee?.value,
-        gasFeeError: swapTxContext.gasFee?.error ? String(swapTxContext.gasFee.error) : null,
-        gasFeeIsLoading: swapTxContext.gasFee?.isLoading,
-        gasFeeDisplayValue: swapTxContext.gasFee?.displayValue,
-        gasFeeParams: swapTxContext.gasFee?.params,
+        gasFeeValue: swapTxContext.gasFee.value,
+        gasFeeError: swapTxContext.gasFee.error ? String(swapTxContext.gasFee.error) : null,
+        gasFeeIsLoading: swapTxContext.gasFee.isLoading,
+        gasFeeDisplayValue: swapTxContext.gasFee.displayValue,
+        gasFeeParams: swapTxContext.gasFee.params,
         // Check first txRequest for gas fields
         firstTxRequestGasLimit: firstTxRequest?.gasLimit,
         firstTxRequestGasPrice: firstTxRequest?.gasPrice,
@@ -359,7 +359,7 @@ export function validateSwapTxContextWithReasons(swapTxContext: SwapTxAndGasInfo
 
   // For on-chain-only chains, relax validation requirements
   const isOnChainOnly = chainId === 84532
-  
+
   // Route-specific validation
   if (isClassic(swapTxContext)) {
     const { unsigned, permit, txRequests } = swapTxContext
@@ -392,18 +392,23 @@ export function validateSwapTxContextWithReasons(swapTxContext: SwapTxAndGasInfo
           snapshot.missingFields = missingFields
           snapshot.isOnChainOnly = true
           if (process.env.NODE_ENV !== 'production') {
-            logger.debug('validateSwapTxContextWithReasons', 'validateSwapTxContextWithReasons', '[VALIDATION] Missing fields for on-chain swap', {
-              chainId,
-              missingFields,
-              hasTrade: !!swapTxContext.trade,
-              hasTxRequests: !!txRequests,
-              txRequestsLength: txRequests?.length ?? 0,
-              hasGasFee: !!gasFee,
-              hasApproveTxRequest: !!approveTxRequest,
-              // Add onChainQuote info if available in swapTxContext
-              hasOnChainQuote: !!(swapTxContext as any).onChainQuote,
-              onChainQuoteHasTxPayload: !!(swapTxContext as any).onChainQuote?.txPayload,
-            })
+            logger.debug(
+              'validateSwapTxContextWithReasons',
+              'validateSwapTxContextWithReasons',
+              '[VALIDATION] Missing fields for on-chain swap',
+              {
+                chainId,
+                missingFields,
+                hasTrade: !!swapTxContext.trade,
+                hasTxRequests: !!txRequests,
+                txRequestsLength: txRequests?.length ?? 0,
+                hasGasFee: !!gasFee,
+                hasApproveTxRequest: !!approveTxRequest,
+                // Add onChainQuote info if available in swapTxContext
+                hasOnChainQuote: !!(swapTxContext as any).onChainQuote,
+                onChainQuoteHasTxPayload: !!(swapTxContext as any).onChainQuote?.txPayload,
+              },
+            )
           }
         }
         return { ok: false, reasons, snapshot }

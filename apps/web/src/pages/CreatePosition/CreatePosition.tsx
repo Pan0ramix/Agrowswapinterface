@@ -243,16 +243,20 @@ function CreatePositionContent({
   // Log currencyInputs changes
   useEffect(() => {
     console.log('[CreatePosition] currencyInputs state changed', {
-      tokenA: currencyInputs.tokenA ? {
-        address: currencyInputs.tokenA.isToken ? currencyInputs.tokenA.address : 'native',
-        symbol: currencyInputs.tokenA.symbol,
-        chainId: currencyInputs.tokenA.chainId,
-      } : undefined,
-      tokenB: currencyInputs.tokenB ? {
-        address: currencyInputs.tokenB.isToken ? currencyInputs.tokenB.address : 'native',
-        symbol: currencyInputs.tokenB.symbol,
-        chainId: currencyInputs.tokenB.chainId,
-      } : undefined,
+      tokenA: currencyInputs.tokenA
+        ? {
+            address: currencyInputs.tokenA.isToken ? currencyInputs.tokenA.address : 'native',
+            symbol: currencyInputs.tokenA.symbol,
+            chainId: currencyInputs.tokenA.chainId,
+          }
+        : undefined,
+      tokenB: currencyInputs.tokenB
+        ? {
+            address: currencyInputs.tokenB.isToken ? currencyInputs.tokenB.address : 'native',
+            symbol: currencyInputs.tokenB.symbol,
+            chainId: currencyInputs.tokenB.chainId,
+          }
+        : undefined,
     })
   }, [currencyInputs])
 
@@ -336,13 +340,14 @@ function CreatePositionMain() {
     protocolVersion: string
   }>()
   const navigate = useNavigate()
-  
+
   // Agroswap only supports V3 - redirect v2/v4 to v3
   const parsedVersion = parseRestProtocolVersion(protocolVersion)
-  const paramsProtocolVersion = parsedVersion === ProtocolVersion.V2 || parsedVersion === ProtocolVersion.V4 
-    ? ProtocolVersion.V3 
-    : (parsedVersion ?? ProtocolVersion.V3)
-  
+  const paramsProtocolVersion =
+    parsedVersion === ProtocolVersion.V2 || parsedVersion === ProtocolVersion.V4
+      ? ProtocolVersion.V3
+      : (parsedVersion ?? ProtocolVersion.V3)
+
   // Redirect URL if v2 or v4 is in the path
   useEffect(() => {
     if (parsedVersion === ProtocolVersion.V2 || parsedVersion === ProtocolVersion.V4) {

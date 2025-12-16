@@ -178,7 +178,7 @@ export function TokenSelectorContent({
 
       const allowCrossChainPair =
         isChainedActionsEnabled || section.sectionKey === OnchainItemSectionName.BridgingTokens
-      
+
       try {
         onSelectCurrency({
           currency: currencyInfo.currency,

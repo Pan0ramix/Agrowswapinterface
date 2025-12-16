@@ -1,15 +1,15 @@
 /**
  * Carbon Registry Counterpart Token Detection
- * 
+ *
  * Queries the Carbon Registry contract to get the counterpart token for a Carbon token.
  * This is used for routing Carbon tokens through their counterpart pairs.
  */
 
 import { Token } from '@uniswap/sdk-core'
-import { PublicClient } from 'viem'
 import { Interface } from 'ethers/lib/utils'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { logger } from 'utilities/src/logger/logger'
+import { PublicClient } from 'viem'
 
 /**
  * Carbon Registry ABI - counterpartOf function
@@ -111,7 +111,9 @@ async function isCarbonToken(
     const registryInterface = new Interface(CARBON_REGISTRY_ABI)
 
     // Try to get counterpart - if it returns a non-zero address, it's a Carbon token
-    const callData = registryInterface.encodeFunctionData('counterpartOf', [tokenAddress as `0x${string}`]) as `0x${string}`
+    const callData = registryInterface.encodeFunctionData('counterpartOf', [
+      tokenAddress as `0x${string}`,
+    ]) as `0x${string}`
 
     const result = await publicClient.call({
       to: registryAddress,
@@ -186,7 +188,7 @@ async function fetchTokenMetadata(
 
 /**
  * Get the counterpart token for a Carbon token from the Carbon Registry
- * 
+ *
  * @param carbonToken - The Carbon token to get counterpart for
  * @param chainId - Chain ID
  * @param publicClient - Viem public client for on-chain calls
@@ -198,7 +200,7 @@ export async function getCarbonCounterpartToken(
   publicClient: PublicClient,
 ): Promise<Token | null> {
   const cacheKey = `${chainId}:${carbonToken.address.toLowerCase()}`
-  
+
   // Check cache first
   if (counterpartTokenCache.has(cacheKey)) {
     return counterpartTokenCache.get(cacheKey) ?? null
@@ -246,13 +248,7 @@ export async function getCarbonCounterpartToken(
     }
 
     // Create Token instance
-    const counterpartToken = new Token(
-      chainId,
-      counterpartAddress,
-      metadata.decimals,
-      metadata.symbol,
-      metadata.name,
-    )
+    const counterpartToken = new Token(chainId, counterpartAddress, metadata.decimals, metadata.symbol, metadata.name)
 
     // Cache result
     counterpartTokenCache.set(cacheKey, counterpartToken)
@@ -281,6 +277,3 @@ export async function getCarbonCounterpartToken(
 export function clearCounterpartTokenCache(): void {
   counterpartTokenCache.clear()
 }
-
-
-

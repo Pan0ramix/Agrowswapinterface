@@ -22,7 +22,7 @@ function getAppProvider(chainId: UniverseChainId): AppJsonRpcProvider | null {
   // Prefer interface RPCs, but fall back to default/public/fallback if interface is not configured
   const urls = [
     ...(info.rpcUrls.interface.http ?? []),
-    ...(info.rpcUrls[RPCType.Default]?.http ?? []),
+    ...(info.rpcUrls[RPCType.Default].http ?? []),
     ...(info.rpcUrls[RPCType.Public]?.http ?? []),
     ...(info.rpcUrls[RPCType.Fallback]?.http ?? []),
   ]

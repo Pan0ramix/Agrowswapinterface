@@ -302,11 +302,11 @@ export function doesGetPortfolioQueryMatchAddress({
   // We've seen unexpected shapes: array length 1, Symbol(), etc.
   if (!Array.isArray(queryKey)) {
     if (process.env.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
+       
       console.debug('[getPortfolio] doesGetPortfolioQueryMatchAddress: queryKey is not an array', {
         queryKeyType: typeof queryKey,
         queryKeyValue: queryKey,
-        queryKeyConstructor: queryKey?.constructor?.name,
+        queryKeyConstructor: queryKey.constructor.name,
       })
     }
     return false
@@ -315,10 +315,10 @@ export function doesGetPortfolioQueryMatchAddress({
   // Must have at least 2 elements: [key, accountAddressesByPlatform]
   if (queryKey.length < 2) {
     if (process.env.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
+       
       console.debug('[getPortfolio] doesGetPortfolioQueryMatchAddress: queryKey array too short', {
         queryKeyLength: queryKey.length,
-        queryKey: queryKey,
+        queryKey,
       })
     }
     return false
@@ -337,7 +337,7 @@ export function doesGetPortfolioQueryMatchAddress({
   if (!accountAddressesByPlatform || !isAccountAddressesByPlatform(accountAddressesByPlatform)) {
     // Invalid shape for second element, return false (no match)
     if (process.env.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
+       
       console.debug('[getPortfolio] doesGetPortfolioQueryMatchAddress: invalid accountAddressesByPlatform shape', {
         accountAddressesByPlatformType: typeof accountAddressesByPlatform,
         accountAddressesByPlatformValue: accountAddressesByPlatform,

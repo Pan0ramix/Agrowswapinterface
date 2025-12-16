@@ -1,17 +1,16 @@
 /**
  * V3 Pool On-Chain State Service
- * 
+ *
  * Fetches V3 pool state directly from on-chain contracts without relying on Trading API.
  * Used for single-pool swaps and LP position calculations.
  */
 
-import { Currency, Token } from '@uniswap/sdk-core'
-import { FeeAmount, Pool, computePoolAddress } from '@uniswap/v3-sdk'
+import { Currency, Token, V3_CORE_FACTORY_ADDRESSES } from '@uniswap/sdk-core'
+import { computePoolAddress, FeeAmount, Pool } from '@uniswap/v3-sdk'
 import { Interface } from 'ethers/lib/utils'
-import { PublicClient } from 'viem'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
-import { V3_CORE_FACTORY_ADDRESSES } from '@uniswap/sdk-core'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { PublicClient } from 'viem'
 
 /**
  * V3 Pool state fetched from on-chain
@@ -45,8 +44,7 @@ export interface FetchV3PoolStateParams {
  * Get the V3 Factory address for the given chain
  */
 function getV3FactoryAddress(chainId: EVMUniverseChainId): string {
-  const factoryAddresses =
-    chainId === 84532 ? AGROSWAP_V3_CORE_FACTORY_ADDRESSES : V3_CORE_FACTORY_ADDRESSES
+  const factoryAddresses = chainId === 84532 ? AGROSWAP_V3_CORE_FACTORY_ADDRESSES : V3_CORE_FACTORY_ADDRESSES
   const address = factoryAddresses[chainId as keyof typeof factoryAddresses] as string | undefined
   if (!address) {
     throw new Error(`V3 Factory address not found for chain ${chainId}`)
@@ -112,13 +110,11 @@ const V3_POOL_ABI = [
 
 /**
  * Fetches V3 pool state from on-chain
- * 
+ *
  * @param params - Parameters including tokens, fee, chainId, and provider
  * @returns Pool state including Pool instance, address, and raw values
  */
-export async function fetchV3PoolState(
-  params: FetchV3PoolStateParams,
-): Promise<V3PoolOnChainState | null> {
+export async function fetchV3PoolState(params: FetchV3PoolStateParams): Promise<V3PoolOnChainState | null> {
   const { tokenIn, tokenOut, fee, chainId, publicClient } = params
 
   const tokenA = tokenIn.wrapped
@@ -154,10 +150,12 @@ export async function fetchV3PoolState(
         to: poolAddress,
         data: poolInterface.encodeFunctionData('liquidity') as `0x${string}`,
       }),
-      publicClient.call({
-        to: poolAddress,
-        data: poolInterface.encodeFunctionData('tickSpacing') as `0x${string}`,
-      }).catch(() => ({ data: null })), // tickSpacing is optional for audit
+      publicClient
+        .call({
+          to: poolAddress,
+          data: poolInterface.encodeFunctionData('tickSpacing') as `0x${string}`,
+        })
+        .catch(() => ({ data: null })), // tickSpacing is optional for audit
     ])
 
     // Decode results
@@ -167,7 +165,7 @@ export async function fetchV3PoolState(
 
     const slot0 = poolInterface.decodeFunctionResult('slot0', slot0Data.data)
     const liquidity = poolInterface.decodeFunctionResult('liquidity', liquidityData.data)[0]
-    const tickSpacing = tickSpacingData.data 
+    const tickSpacing = tickSpacingData.data
       ? Number(poolInterface.decodeFunctionResult('tickSpacing', tickSpacingData.data)[0])
       : undefined
 
@@ -193,7 +191,9 @@ export async function fetchV3PoolState(
       fee,
       // Additional fields for audit
       observationCardinality: slot0.observationCardinality ? Number(slot0.observationCardinality) : undefined,
-      observationCardinalityNext: slot0.observationCardinalityNext ? Number(slot0.observationCardinalityNext) : undefined,
+      observationCardinalityNext: slot0.observationCardinalityNext
+        ? Number(slot0.observationCardinalityNext)
+        : undefined,
       tickSpacing,
     }
   } catch (error) {
@@ -211,9 +211,7 @@ export interface FetchV3PoolStateByAddressParams {
   publicClient: PublicClient
 }
 
-export async function fetchV3PoolStateByAddress(
-  params: FetchV3PoolStateByAddressParams,
-): Promise<{
+export async function fetchV3PoolStateByAddress(params: FetchV3PoolStateByAddressParams): Promise<{
   sqrtPriceX96: string
   tick: number
   liquidity: string
@@ -278,4 +276,3 @@ export async function fetchV3PoolStateByAddress(
     return null
   }
 }
-

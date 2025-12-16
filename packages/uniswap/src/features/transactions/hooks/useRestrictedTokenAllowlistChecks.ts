@@ -1,6 +1,6 @@
 /**
  * Core hook for checking restricted token allowlist status
- * 
+ *
  * This hook consolidates all allowlist checks for RWA tokens (ERC20Restricted) across
  * swap and liquidity flows. It checks:
  * - Wallet address (always checked for each restricted token)
@@ -8,22 +8,25 @@
  * - Swap Router address (for swaps)
  * - Position Manager address (for liquidity)
  * - Pool address(es) (computed deterministically)
- * 
+ *
  * Returns blocking and non-blocking warnings, plus debug information.
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
-import { Address, PublicClient } from 'viem'
+import { PERMIT2_ADDRESS } from '@uniswap/permit2-sdk'
 import { Currency, Token } from '@uniswap/sdk-core'
 import { computePoolAddress, FeeAmount } from '@uniswap/v3-sdk'
+import { useMemo } from 'react'
+import {
+  AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES,
+  AGROSWAP_V3_CORE_FACTORY_ADDRESSES,
+  getAgroswapSwapRouterAddress,
+} from 'uniswap/src/constants/agroswapAddresses'
+import { getQuoterV2Address } from 'uniswap/src/constants/v3Addresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
-import { AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES, getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
-import { getQuoterV2Address } from 'uniswap/src/constants/v3Addresses'
-import { PERMIT2_ADDRESS } from '@uniswap/permit2-sdk'
-import { useTokenWhitelistStatus } from './useTokenWhitelistStatus'
+import { Address, PublicClient } from 'viem'
+import { useTokenWhitelistStatus } from 'uniswap/src/features/transactions/hooks/useTokenWhitelistStatus'
 
 // ABI for checking token restrictions (ERC20Restricted from OpenZeppelin)
 const RESTRICTION_ABI = [
@@ -283,10 +286,17 @@ export function useRestrictedTokenAllowlistChecks({
       restrictedTokenKey: key,
       restrictedTokenMap: tokenMap,
     }
-  }, [tokenAStatus.isRestricted, tokenAStatus.isLoading, tokenA, tokenBStatus.isRestricted, tokenBStatus.isLoading, tokenB])
+  }, [
+    tokenAStatus.isRestricted,
+    tokenAStatus.isLoading,
+    tokenA,
+    tokenBStatus.isRestricted,
+    tokenBStatus.isLoading,
+    tokenB,
+  ])
 
   // Compute stable primitives for query keys
-  const accountKey = useMemo(() => (account?.toLowerCase() ?? ''), [account])
+  const accountKey = useMemo(() => account?.toLowerCase() ?? '', [account])
   const chainKey = useMemo(() => String(chainId ?? ''), [chainId])
 
   // Enablement conditions - minimal and explicit
@@ -339,7 +349,7 @@ export function useRestrictedTokenAllowlistChecks({
       } catch {
         // Router address not available
       }
-      
+
       // For swaps: check QuoterV2 (needed for quote simulation)
       try {
         const quoterAddress = getQuoterV2Address(chainId)
@@ -362,7 +372,7 @@ export function useRestrictedTokenAllowlistChecks({
         addresses.push({ address: positionManagerAddress, label: 'Position Manager' })
         subjectMap.set(pmAddr, { address: positionManagerAddress, label: 'Position Manager' })
       }
-      
+
       // For liquidity: also check QuoterV2 (needed for quote simulation when calculating position value)
       try {
         const quoterAddress = getQuoterV2Address(chainId)
@@ -399,12 +409,7 @@ export function useRestrictedTokenAllowlistChecks({
       pools = poolAddresses
     } else if (tokenA?.isToken && tokenB?.isToken && feeAmount && chainId) {
       // Compute pool address for liquidity flow or single-pool swap
-      const poolAddress = computePoolAddressDeterministic(
-        tokenA as Token,
-        tokenB as Token,
-        feeAmount,
-        chainId,
-      )
+      const poolAddress = computePoolAddressDeterministic(tokenA as Token, tokenB as Token, feeAmount, chainId)
       if (poolAddress) {
         pools = [poolAddress]
       }
@@ -412,7 +417,7 @@ export function useRestrictedTokenAllowlistChecks({
 
     // Combine addressesToCheck with pool addresses
     const allSubjects = new Map<string, { address: Address; label: string }>()
-    
+
     // Add non-pool subjects
     for (const { address, label } of subjectAddresses) {
       const addrLower = address.toLowerCase()
@@ -646,7 +651,16 @@ export function useRestrictedTokenAllowlistChecks({
     }
 
     return combined
-  }, [walletChecks.data, addressChecks.data, walletChecksEnabled, addressChecksEnabled, walletChecks.isLoading, walletChecks.isFetching, addressChecks.isLoading, addressChecks.isFetching])
+  }, [
+    walletChecks.data,
+    addressChecks.data,
+    walletChecksEnabled,
+    addressChecksEnabled,
+    walletChecks.isLoading,
+    walletChecks.isFetching,
+    addressChecks.isLoading,
+    addressChecks.isFetching,
+  ])
 
   // Check if pool exists (for debug info)
   const poolExistsChecks = useQuery({
@@ -721,22 +735,27 @@ export function useRestrictedTokenAllowlistChecks({
   }, [allChecks, poolExistsChecks.data, computedPoolAddresses])
 
   const isBlocked = blockingWarnings.length > 0
-  const isLoading = walletChecks.isLoading || walletChecks.isFetching || addressChecks.isLoading || addressChecks.isFetching || poolExistsChecks.isLoading
+  const isLoading =
+    walletChecks.isLoading ||
+    walletChecks.isFetching ||
+    addressChecks.isLoading ||
+    addressChecks.isFetching ||
+    poolExistsChecks.isLoading
 
   // Compute quoterAllowed status and notAllowedSubjects
   const { quoterAllowed, notAllowedSubjects } = useMemo(() => {
     const quoterChecks = allChecks.filter((c) => c.subjectLabel === 'Quoter')
     const subjects: RestrictedTokenAllowlistChecks['notAllowedSubjects'] = []
-    
+
     // Check quoter status
-    let quoterAllowedValue: boolean | undefined = undefined
+    let quoterAllowedValue: boolean | undefined
     if (quoterChecks.length > 0) {
       // If any quoter check is false, quoter is not allowed
       const anyNotAllowed = quoterChecks.some((c) => c.isAllowed === false)
       const allAllowed = quoterChecks.every((c) => c.isAllowed === true)
-      quoterAllowedValue = anyNotAllowed ? false : (allAllowed ? true : undefined)
+      quoterAllowedValue = anyNotAllowed ? false : allAllowed ? true : undefined
     }
-    
+
     // Build notAllowedSubjects array
     for (const check of allChecks) {
       if (check.isAllowed === false) {
@@ -756,7 +775,7 @@ export function useRestrictedTokenAllowlistChecks({
         } else {
           continue // Skip unknown subjects
         }
-        
+
         subjects.push({
           type,
           address: check.subjectAddress,
@@ -765,7 +784,7 @@ export function useRestrictedTokenAllowlistChecks({
         })
       }
     }
-    
+
     return { quoterAllowed: quoterAllowedValue, notAllowedSubjects: subjects }
   }, [allChecks])
 
@@ -820,4 +839,3 @@ export function useRestrictedTokenAllowlistChecks({
     },
   }
 }
-

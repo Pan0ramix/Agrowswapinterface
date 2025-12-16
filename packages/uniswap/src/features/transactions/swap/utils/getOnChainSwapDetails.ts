@@ -1,21 +1,25 @@
 /**
  * On-Chain Swap Details Computation
- * 
+ *
  * Computes swap review details (Rate, Price Impact, Network Cost, Routing) using only on-chain data.
  * No Trading API dependencies.
  */
 
-import { Currency, CurrencyAmount, Percent, Price } from '@uniswap/sdk-core'
+import { Currency, CurrencyAmount, Price } from '@uniswap/sdk-core'
 import { Pool, TickMath } from '@uniswap/v3-sdk'
 import JSBI from 'jsbi'
-import { Address, PublicClient } from 'viem'
+import ERC20_ABI from 'uniswap/src/abis/erc20.json'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { simulateTransaction } from 'uniswap/src/features/transactions/liquidity/utils/decodeRevertReason'
 import { fetchV3PoolState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
 import { estimateGasFee } from 'uniswap/src/features/transactions/swap/utils/estimateGasFee'
-import { isOnChainDebug, makeOnChainDebugId, debugOnChainMathAudit } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
+import {
+  debugOnChainMathAudit,
+  isOnChainDebug,
+  makeOnChainDebugId,
+} from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
 import { logger } from 'utilities/src/logger/logger'
-import ERC20_ABI from 'uniswap/src/abis/erc20.json'
-import { simulateTransaction } from 'uniswap/src/features/transactions/liquidity/utils/decodeRevertReason'
+import { Address, PublicClient } from 'viem'
 
 /**
  * Network cost information for the next executable step
@@ -85,20 +89,22 @@ export interface GetOnChainSwapDetailsParams {
   slippageToleranceBps?: number | undefined
   amountOutQuotedRaw?: string | undefined
   amountOutMinimumRaw?: string | undefined
-  swapTxPayload?: {
-    to?: string
-    data?: string
-    value?: string
-    gasLimit?: string
-    deadline?: number
-    amountOutMinimumRaw?: string
-  } | undefined
+  swapTxPayload?:
+    | {
+        to?: string
+        data?: string
+        value?: string
+        gasLimit?: string
+        deadline?: number
+        amountOutMinimumRaw?: string
+      }
+    | undefined
   debugBundle?: Partial<Record<string, unknown>> | undefined
 }
 
 /**
  * Compute execution price from amounts
- * 
+ *
  * Uses raw quotient values to avoid double-decimal scaling.
  * Example: amountInRaw=1000 (0.001 USDC, 6 decimals), amountOutRaw=763 (0.000763 EURC, 6 decimals)
  * Execution price = 763/1000 = 0.763 EURC per USDC (not 0.000000763)
@@ -132,21 +138,16 @@ function computeExecutionPrice(
     // Use SDK Price constructor with raw quotients to avoid double-decimal scaling
     // Price(baseCurrency, quoteCurrency, baseAmount.quotient, quoteAmount.quotient)
     // This correctly handles decimals internally
-    const executionPrice = new Price(
-      amountIn.currency,
-      amountOut.currency,
-      amountInQuotient,
-      amountOutQuotient,
-    )
+    const executionPrice = new Price(amountIn.currency, amountOut.currency, amountInQuotient, amountOutQuotient)
 
     return executionPrice
   } catch (error) {
     logger.debug('getOnChainSwapDetails', 'computeExecutionPrice', 'Failed to compute execution price', {
       error: error instanceof Error ? error.message : String(error),
-      amountInQuotient: amountIn?.quotient?.toString(),
-      amountOutQuotient: amountOut?.quotient?.toString(),
-      amountInCurrency: amountIn?.currency?.symbol,
-      amountOutCurrency: amountOut?.currency?.symbol,
+      amountInQuotient: amountIn.quotient.toString(),
+      amountOutQuotient: amountOut.quotient.toString(),
+      amountInCurrency: amountIn.currency.symbol,
+      amountOutCurrency: amountOut.currency.symbol,
     })
     return null
   }
@@ -154,15 +155,11 @@ function computeExecutionPrice(
 
 /**
  * Get mid price in correct direction (tokenOut per tokenIn)
- * 
+ *
  * Centralized helper to ensure price direction is always correct.
  * Uses pool.priceOf(tokenIn) which automatically returns tokenOut per tokenIn.
  */
-function getMidPriceTokenOutPerTokenIn(
-  pool: Pool,
-  tokenIn: Currency,
-  tokenOut: Currency,
-): Price<Currency, Currency> {
+function getMidPriceTokenOutPerTokenIn(pool: Pool, tokenIn: Currency, tokenOut: Currency): Price<Currency, Currency> {
   // pool.priceOf(tokenIn) returns price of tokenOut per tokenIn
   // This matches executionPrice direction (tokenOut per tokenIn)
   return pool.priceOf(tokenIn.wrapped)
@@ -170,7 +167,7 @@ function getMidPriceTokenOutPerTokenIn(
 
 /**
  * Assert price direction consistency - detects "same value both sides" bug
- * 
+ *
  * Checks:
  * 1. mid_outPerIn * mid_inPerOut ≈ 1 (within tolerance)
  * 2. If mid_outPerIn equals mid_inPerOut (within tolerance) => bug (unless price ~1)
@@ -188,7 +185,7 @@ function assertPriceDirectionConsistency(
   warnings: string[]
 } {
   const warnings: string[] = []
-  let decimalsConsistent = true
+  const decimalsConsistent = true
   let directionConsistent = true
   let midMatchesInverse = true
   let execMatchesInverse = true
@@ -202,9 +199,11 @@ function assertPriceDirectionConsistency(
   const midInPerOut = parseFloat(midPrice.invert().toSignificant(18))
   const midProduct = midOutPerIn * midInPerOut
   const midProductDiff = Math.abs(midProduct - 1)
-  
+
   if (midProductDiff > tolerance) {
-    warnings.push(`mid_outPerIn * mid_inPerOut = ${midProduct.toFixed(10)} (expected ~1, diff: ${midProductDiff.toFixed(10)})`)
+    warnings.push(
+      `mid_outPerIn * mid_inPerOut = ${midProduct.toFixed(10)} (expected ~1, diff: ${midProductDiff.toFixed(10)})`,
+    )
     midMatchesInverse = false
   }
 
@@ -220,9 +219,11 @@ function assertPriceDirectionConsistency(
   const execInPerOut = parseFloat(executionPrice.invert().toSignificant(18))
   const execProduct = execOutPerIn * execInPerOut
   const execProductDiff = Math.abs(execProduct - 1)
-  
+
   if (execProductDiff > tolerance) {
-    warnings.push(`exec_outPerIn * exec_inPerOut = ${execProduct.toFixed(10)} (expected ~1, diff: ${execProductDiff.toFixed(10)})`)
+    warnings.push(
+      `exec_outPerIn * exec_inPerOut = ${execProduct.toFixed(10)} (expected ~1, diff: ${execProductDiff.toFixed(10)})`,
+    )
     execMatchesInverse = false
   }
 
@@ -237,9 +238,11 @@ function assertPriceDirectionConsistency(
   const midQuote = midPrice.quoteCurrency
   const execBase = executionPrice.baseCurrency
   const execQuote = executionPrice.quoteCurrency
-  
+
   if (!midBase.equals(execBase) || !midQuote.equals(execQuote)) {
-    warnings.push(`Direction mismatch: mid (${midQuote.symbol}/${midBase.symbol}) vs exec (${execQuote.symbol}/${execBase.symbol})`)
+    warnings.push(
+      `Direction mismatch: mid (${midQuote.symbol}/${midBase.symbol}) vs exec (${execQuote.symbol}/${execBase.symbol})`,
+    )
     directionConsistent = false
   }
 
@@ -254,7 +257,7 @@ function assertPriceDirectionConsistency(
 
 /**
  * Compute mid price from pool state
- * 
+ *
  * CRITICAL: Uses pool.priceOf(tokenIn) to get price in direction tokenOut per tokenIn,
  * matching executionPrice direction. This ensures price impact calculation is consistent.
  */
@@ -265,10 +268,13 @@ async function computeMidPrice(
   publicClient: PublicClient,
   route?: GetOnChainSwapDetailsParams['onChainRoute'],
   debugLog?: (log: Record<string, unknown>) => void,
-): Promise<{ price: Price<Currency, Currency> | null; poolState: Awaited<ReturnType<typeof fetchV3PoolState>> | null }> {
+): Promise<{
+  price: Price<Currency, Currency> | null
+  poolState: Awaited<ReturnType<typeof fetchV3PoolState>> | null
+}> {
   try {
     let poolState: Awaited<ReturnType<typeof fetchV3PoolState>> | null = null
-    
+
     // For single-hop routes, use the pool from the route
     const firstHop = route?.route?.hops?.[0]
     if (firstHop) {
@@ -284,12 +290,12 @@ async function computeMidPrice(
         const pool = poolState.pool as Pool
         // Use centralized helper to ensure correct direction
         const midPrice = getMidPriceTokenOutPerTokenIn(pool, tokenIn, tokenOut)
-        
+
         if (debugLog) {
           const isTokenInToken0 = tokenIn.wrapped.sortsBefore(tokenOut.wrapped)
           const token0Price = pool.token0Price
           const token1Price = pool.token1Price
-          
+
           debugLog({
             poolState: {
               poolAddress: poolState.poolAddress,
@@ -323,7 +329,7 @@ async function computeMidPrice(
               return {
                 sqrtPriceX96: poolState.sqrtPriceX96,
                 priceToken1PerToken0_raw: priceToken1PerToken0.toString(),
-                priceToken1PerToken0_adjusted: isTokenInToken0 
+                priceToken1PerToken0_adjusted: isTokenInToken0
                   ? priceToken1PerToken0.toString()
                   : (1 / priceToken1PerToken0).toString(),
               }
@@ -338,14 +344,14 @@ async function computeMidPrice(
                 tick: poolState.tick,
                 sqrtPriceFromTick: sqrtPriceFromTick.toString(),
                 priceToken1PerToken0_raw: priceToken1PerToken0.toString(),
-                priceToken1PerToken0_adjusted: isTokenInToken0 
+                priceToken1PerToken0_adjusted: isTokenInToken0
                   ? priceToken1PerToken0.toString()
                   : (1 / priceToken1PerToken0).toString(),
               }
             })(),
           })
         }
-        
+
         return { price: midPrice, poolState }
       }
     }
@@ -366,7 +372,7 @@ async function computeMidPrice(
         const pool = poolState.pool as Pool
         // Use pool.priceOf(tokenIn) to get price in direction tokenOut per tokenIn
         const midPrice = pool.priceOf(tokenIn.wrapped)
-        
+
         if (debugLog) {
           const isTokenInToken0 = tokenIn.wrapped.sortsBefore(tokenOut.wrapped)
           debugLog({
@@ -381,7 +387,7 @@ async function computeMidPrice(
             },
           })
         }
-        
+
         return { price: midPrice, poolState }
       }
     }
@@ -402,16 +408,16 @@ async function computeMidPrice(
 
 /**
  * Compute price impact in basis points (excluding LP fee)
- * 
+ *
  * Uniswap definition: Price impact excludes LP fee and only measures slippage from curve movement.
- * 
+ *
  * For exact-in swaps:
  * - amountInAfterFee = amountIn * (1 - feeFraction)
  * - executionPriceNoFee = amountOut / amountInAfterFee
  * - priceImpact = (midPrice - executionPriceNoFee) / midPrice
- * 
+ *
  * Both prices must be in the same direction: tokenOut per tokenIn
- * 
+ *
  * If executionPriceNoFee < midPrice, we're getting less output (negative impact, shown as positive in UI)
  * If executionPriceNoFee > midPrice, we're getting more output (positive impact, shown as 0 in UI)
  */
@@ -431,11 +437,11 @@ function computePriceImpactBps(
     // Ensure both prices are in the same direction (tokenOut per tokenIn)
     // executionPrice is already tokenOut per tokenIn (from Price constructor)
     // midPrice should also be tokenOut per tokenIn (from pool.priceOf(tokenIn))
-    
+
     // For exact-in swaps, compute executionPriceNoFee from amounts (excluding fee)
     let executionPriceNoFee = executionPrice
     let amountInAfterFee: CurrencyAmount<Currency> | null = null
-    
+
     if (feeTier !== null && feeTier !== undefined && feeTier > 0 && feeTier < 1_000_000) {
       // Convert fee tier to fraction (e.g., 10000 = 1% = 0.01)
       // Compute amountInAfterFee = amountIn * (1 - feeFraction)
@@ -444,13 +450,16 @@ function computePriceImpactBps(
       if (oneMinusFeeScaled > 0) {
         const amountInAfterFeeRaw = JSBI.divide(
           JSBI.multiply(amountIn.quotient, JSBI.BigInt(oneMinusFeeScaled)),
-          JSBI.BigInt(1_000_000)
+          JSBI.BigInt(1_000_000),
         )
-        
+
         // Only proceed if amountInAfterFee is positive and less than amountIn
-        if (JSBI.greaterThan(amountInAfterFeeRaw, JSBI.BigInt(0)) && JSBI.lessThan(amountInAfterFeeRaw, amountIn.quotient)) {
+        if (
+          JSBI.greaterThan(amountInAfterFeeRaw, JSBI.BigInt(0)) &&
+          JSBI.lessThan(amountInAfterFeeRaw, amountIn.quotient)
+        ) {
           amountInAfterFee = CurrencyAmount.fromRawAmount(amountIn.currency, amountInAfterFeeRaw)
-          
+
           // Compute executionPriceNoFee = amountOut / amountInAfterFee
           // This excludes the fee from the price calculation
           executionPriceNoFee = new Price(
@@ -462,20 +471,20 @@ function computePriceImpactBps(
         }
       }
     }
-    
+
     // Price impact = (midPrice - executionPriceNoFee) / midPrice
     // This gives us the percentage difference excluding fee
     const priceDiff = midPrice.subtract(executionPriceNoFee)
     const impactFraction = priceDiff.divide(midPrice)
-    
+
     // Convert to basis points
     const impactBps = Math.round(
-      Number(impactFraction.asFraction.numerator) / Number(impactFraction.asFraction.denominator) * 10000
+      (Number(impactFraction.asFraction.numerator) / Number(impactFraction.asFraction.denominator)) * 10000,
     )
-    
+
     // Clamp to >= 0 (negative impact means better execution than mid price, show as 0)
     const clampedBps = Math.max(0, impactBps)
-    
+
     if (debugLog) {
       // Sanity check: compute impact using inverse prices (using executionPriceNoFee)
       const execNoFeeInverse = executionPriceNoFee.invert()
@@ -483,17 +492,16 @@ function computePriceImpactBps(
       const priceDiffInverse = midInverse.subtract(execNoFeeInverse)
       const impactFractionInverse = priceDiffInverse.divide(midInverse)
       const impactBpsInverse = Math.round(
-        Number(impactFractionInverse.asFraction.numerator) / Number(impactFractionInverse.asFraction.denominator) * 10000
+        (Number(impactFractionInverse.asFraction.numerator) / Number(impactFractionInverse.asFraction.denominator)) *
+          10000,
       )
       const clampedBpsInverse = Math.max(0, impactBpsInverse)
-      
+
       // Compute LP fee amount for exact-in
-      const lpFeeAmount = amountInAfterFee && amountIn
-        ? amountIn.subtract(amountInAfterFee)
-        : null
-      
+      const lpFeeAmount = amountInAfterFee && amountIn ? amountIn.subtract(amountInAfterFee) : null
+
       const feeTierBps = feeTier ? Math.round(feeTier / 100) : null // Convert to bps (10000 -> 100 bps)
-      
+
       debugLog({
         priceImpact: {
           midPrice_numeric: midPrice.toSignificant(18),
@@ -513,7 +521,10 @@ function computePriceImpactBps(
           impactBps_clamped: clampedBps,
           impactPercent: (clampedBps / 100).toFixed(2) + '%',
           signConvention: 'positive = worse execution (less output), negative = better execution (more output)',
-          note: feeTier !== null ? 'Price impact excludes LP fee (Uniswap definition)' : 'Price impact includes fee (multi-hop or unknown fee)',
+          note:
+            feeTier !== null
+              ? 'Price impact excludes LP fee (Uniswap definition)'
+              : 'Price impact includes fee (multi-hop or unknown fee)',
           // Sanity check with inverse
           sanityCheck_inverse: {
             impactBps_inverse: impactBpsInverse,
@@ -523,7 +534,7 @@ function computePriceImpactBps(
         },
       })
     }
-    
+
     return clampedBps
   } catch (error) {
     if (debugLog) {
@@ -536,8 +547,8 @@ function computePriceImpactBps(
       error: error instanceof Error ? error.message : String(error),
       executionPrice: executionPrice ? executionPrice.toSignificant(6) : null,
       midPrice: midPrice ? midPrice.toSignificant(6) : null,
-      amountIn: amountIn?.toExact() ?? null,
-      amountOut: amountOut?.toExact() ?? null,
+      amountIn: amountIn.toExact() ?? null,
+      amountOut: amountOut.toExact() ?? null,
       feeTier,
     })
     return null
@@ -653,7 +664,7 @@ async function estimateNetworkCost(
   } catch (error) {
     // Don't throw - return error in result
     const errorObj = error instanceof Error ? error : new Error(String(error))
-    
+
     // Log STF errors at debug level only (expected pre-approval)
     if (errorObj.message.includes('STF') || errorObj.message.includes('revert')) {
       if (process.env.NODE_ENV !== 'production') {
@@ -679,9 +690,7 @@ async function estimateNetworkCost(
 /**
  * Main function to compute on-chain swap details
  */
-export async function getOnChainSwapDetails(
-  params: GetOnChainSwapDetailsParams,
-): Promise<OnChainSwapDetails> {
+export async function getOnChainSwapDetails(params: GetOnChainSwapDetailsParams): Promise<OnChainSwapDetails> {
   const {
     tokenIn,
     tokenOut,
@@ -702,14 +711,14 @@ export async function getOnChainSwapDetails(
   const isDebug = isOnChainDebug(chainId)
   // Use provided debug bundle or create new one
   const debugBundle: Record<string, unknown> = params.debugBundle || {}
-  
+
   // Helper to add debug logs (only if debug enabled)
   const debugLog = (section: string, data: Record<string, unknown>) => {
     if (isDebug) {
       debugBundle[section] = data
     }
   }
-  
+
   // Add tx payload section if available
   if (isDebug && params.swapTxPayload) {
     debugLog('txPayload', {
@@ -746,7 +755,7 @@ export async function getOnChainSwapDetails(
 
   // 2. Compute execution price
   const executionPrice = computeExecutionPrice(amountIn, amountOut)
-  
+
   // Compute execution price from raw ratio (cross-check)
   const executionPriceFromRaw = (() => {
     if (!amountIn.quotient || !amountOut.quotient || amountIn.quotient === 0n) {
@@ -756,16 +765,16 @@ export async function getOnChainSwapDetails(
     const rawRatio = Number(amountOut.quotient) / Number(amountIn.quotient)
     // Adjusted for decimals: (amountOutRaw / 10^decimalsOut) / (amountInRaw / 10^decimalsIn)
     // Note: SDK Price constructor handles this automatically, this is just for cross-check
-    const adjustedRatio = rawRatio * (10 ** tokenIn.decimals) / (10 ** tokenOut.decimals)
+    const adjustedRatio = (rawRatio * 10 ** tokenIn.decimals) / 10 ** tokenOut.decimals
     return adjustedRatio.toString()
   })()
-  
+
   // Assertion: execution price must be in direction tokenOut per tokenIn
   if (isDebug && executionPrice) {
     const execBase = executionPrice.baseCurrency
     const execQuote = executionPrice.quoteCurrency
     const directionCorrect = execBase.equals(tokenIn) && execQuote.equals(tokenOut)
-    
+
     if (!directionCorrect) {
       debugLog('executionPrice_direction_warning', {
         warning: 'Execution price direction mismatch!',
@@ -774,14 +783,14 @@ export async function getOnChainSwapDetails(
         note: 'This should never happen - Price constructor should match input order',
       })
     }
-    
+
     // Check for "same value both sides" symptom: if execution price equals its inverse (within rounding),
     // this suggests a direction bug when tokens are flipped
     const execInverse = executionPrice.invert()
     const execValue = executionPrice.toSignificant(18)
     const execInverseValue = execInverse.toSignificant(18)
     const valuesMatch = Math.abs(parseFloat(execValue) - parseFloat(execInverseValue)) < 0.000001
-    
+
     if (valuesMatch) {
       debugLog('direction_suspicion_warning', {
         warning: 'Execution price and its inverse are identical within rounding!',
@@ -793,29 +802,29 @@ export async function getOnChainSwapDetails(
       })
     }
   }
-  
+
   debugLog('executionPrice', {
     executionPrice: executionPrice ? executionPrice.toSignificant(6) : null,
-    executionPriceRaw: executionPrice 
+    executionPriceRaw: executionPrice
       ? `${executionPrice.numerator.toString()}/${executionPrice.denominator.toString()}`
       : null,
     executionPrice_fromRawRatio: executionPriceFromRaw,
     executionPrice_inverse: executionPrice ? executionPrice.invert().toSignificant(6) : null,
     direction: executionPrice ? `${tokenOut.symbol} per ${tokenIn.symbol}` : null,
   })
-  
+
   // 3. Compute mid price from pool (with comprehensive logging)
   let midPrice: Price<Currency, Currency> | null = null
   let poolState: Awaited<ReturnType<typeof fetchV3PoolState>> | null = null
   try {
     const midPriceResult = await computeMidPrice(
-    tokenIn,
-    tokenOut,
-    chainId,
-    publicClient,
-    onChainRoute,
-    isDebug ? (log) => debugLog('midPrice', log) : undefined,
-  )
+      tokenIn,
+      tokenOut,
+      chainId,
+      publicClient,
+      onChainRoute,
+      isDebug ? (log) => debugLog('midPrice', log) : undefined,
+    )
     midPrice = midPriceResult.price
     poolState = midPriceResult.poolState
   } catch (error) {
@@ -828,35 +837,39 @@ export async function getOnChainSwapDetails(
     midPrice = null
     poolState = null
   }
-  
+
   // Add to prices section (after midPrice is computed)
   debugLog('prices', {
     midPrice_sdk: midPrice ? midPrice.toSignificant(18) : null,
-    midPrice_fromSqrtPriceX96: poolState ? (() => {
-      // Extract from midPrice debug log if available
-      const midPriceLog = (debugBundle as any).midPrice as any
-      return midPriceLog?.sqrtPriceX96_calculation?.priceToken1PerToken0_adjusted ?? null
-    })() : null,
+    midPrice_fromSqrtPriceX96: poolState
+      ? (() => {
+          // Extract from midPrice debug log if available
+          const midPriceLog = (debugBundle as any).midPrice as any
+          return midPriceLog?.sqrtPriceX96_calculation?.priceToken1PerToken0_adjusted ?? null
+        })()
+      : null,
     executionPrice: executionPrice ? executionPrice.toSignificant(18) : null,
-    executionPriceRaw: executionPrice 
+    executionPriceRaw: executionPrice
       ? `${executionPrice.numerator.toString()}/${executionPrice.denominator.toString()}`
       : null,
     executionPrice_inverse: executionPrice ? executionPrice.invert().toSignificant(18) : null,
     midPrice_inverse: midPrice ? midPrice.invert().toSignificant(18) : null,
     direction: executionPrice ? `${tokenOut.symbol} per ${tokenIn.symbol}` : null,
   })
-  
+
   // Add comprehensive pool data to debug bundle
   if (isDebug && poolState && midPrice) {
     // Extract slot0 details if available (from pool state)
-    const slot0Details = poolState.pool ? {
-      sqrtPriceX96: poolState.sqrtPriceX96,
-      tick: poolState.tick,
-      // Note: observationCardinality not available from fetchV3PoolState, would need additional call
-    } : null
-    
+    const slot0Details = poolState.pool
+      ? {
+          sqrtPriceX96: poolState.sqrtPriceX96,
+          tick: poolState.tick,
+          // Note: observationCardinality not available from fetchV3PoolState, would need additional call
+        }
+      : null
+
     const tokenInIsToken0 = tokenIn.wrapped.sortsBefore(tokenOut.wrapped)
-    
+
     debugLog('pool', {
       poolAddress: poolState.poolAddress,
       fee: poolState.fee,
@@ -875,28 +888,30 @@ export async function getOnChainSwapDetails(
       liquidity: poolState.liquidity,
       // tickSpacing would need additional call to pool contract
     })
-    
+
     // Assertion: mid price direction must match execution price direction
     if (executionPrice && midPrice) {
-      const directionMatches = executionPrice.baseCurrency.equals(midPrice.baseCurrency) && executionPrice.quoteCurrency.equals(midPrice.quoteCurrency)
-    
+      const directionMatches =
+        executionPrice.baseCurrency.equals(midPrice.baseCurrency) &&
+        executionPrice.quoteCurrency.equals(midPrice.quoteCurrency)
+
       if (isDebug && !directionMatches) {
-      debugLog('price_direction_mismatch_warning', {
-        warning: 'Mid price and execution price directions do not match!',
-        executionPrice_direction: `${executionPrice.quoteCurrency.symbol} per ${executionPrice.baseCurrency.symbol}`,
-        midPrice_direction: `${midPrice.quoteCurrency.symbol} per ${midPrice.baseCurrency.symbol}`,
-        note: 'This will cause incorrect price impact calculation',
-      })
-    }
-    
+        debugLog('price_direction_mismatch_warning', {
+          warning: 'Mid price and execution price directions do not match!',
+          executionPrice_direction: `${executionPrice.quoteCurrency.symbol} per ${executionPrice.baseCurrency.symbol}`,
+          midPrice_direction: `${midPrice.quoteCurrency.symbol} per ${midPrice.baseCurrency.symbol}`,
+          note: 'This will cause incorrect price impact calculation',
+        })
+      }
+
       if (isDebug) {
-    debugLog('midPrice_summary', {
+        debugLog('midPrice_summary', {
           midPrice: midPrice.toSignificant(6),
           midPrice_inverse: midPrice.invert().toSignificant(6),
           direction: `${tokenOut.symbol} per ${tokenIn.symbol}`,
-      matches_execution_direction: directionMatches,
-    })
-  }
+          matches_execution_direction: directionMatches,
+        })
+      }
     }
   }
 
@@ -924,35 +939,46 @@ export async function getOnChainSwapDetails(
     amountIn,
     amountOut,
     feeTier,
-    isDebug ? (log) => {
-      // Extract numeric values for structured logging
-      const impactData = log.priceImpact as any
-      if (impactData) {
-        debugLog('priceImpact', {
-          priceImpactFloat: impactData.impactBps_raw !== undefined 
-            ? (impactData.impactBps_raw / 10000).toFixed(6)
-            : null,
-          priceImpactBpsRounded: impactData.impactBps_clamped ?? null,
-          priceImpactSign: impactData.impactBps_raw !== undefined
-            ? (impactData.impactBps_raw > 0 ? 'positive' : impactData.impactBps_raw < 0 ? 'negative' : 'zero')
-            : null,
-          crossCheck: impactData.sanityCheck_inverse ? {
-            impactBps_inverse: impactData.sanityCheck_inverse.impactBps_inverse_clamped,
-            differenceBps: Math.abs((impactData.impactBps_clamped ?? 0) - (impactData.sanityCheck_inverse.impactBps_inverse_clamped ?? 0)),
-            crossCheckPassed: impactData.sanityCheck_inverse.matches,
-          } : null,
-          // Include full details for debugging
-          ...impactData,
-        })
-      } else {
-        debugLog('priceImpact', log)
-      }
-    } : undefined,
+    isDebug
+      ? (log) => {
+          // Extract numeric values for structured logging
+          const impactData = log.priceImpact as any
+          if (impactData) {
+            debugLog('priceImpact', {
+              priceImpactFloat:
+                impactData.impactBps_raw !== undefined ? (impactData.impactBps_raw / 10000).toFixed(6) : null,
+              priceImpactBpsRounded: impactData.impactBps_clamped ?? null,
+              priceImpactSign:
+                impactData.impactBps_raw !== undefined
+                  ? impactData.impactBps_raw > 0
+                    ? 'positive'
+                    : impactData.impactBps_raw < 0
+                      ? 'negative'
+                      : 'zero'
+                  : null,
+              crossCheck: impactData.sanityCheck_inverse
+                ? {
+                    impactBps_inverse: impactData.sanityCheck_inverse.impactBps_inverse_clamped,
+                    differenceBps: Math.abs(
+                      (impactData.impactBps_clamped ?? 0) -
+                        (impactData.sanityCheck_inverse.impactBps_inverse_clamped ?? 0),
+                    ),
+                    crossCheckPassed: impactData.sanityCheck_inverse.matches,
+                  }
+                : null,
+              // Include full details for debugging
+              ...impactData,
+            })
+          } else {
+            debugLog('priceImpact', log)
+          }
+        }
+      : undefined,
   )
 
   // 5. Format rate
   const rate = formatRate(executionPrice, tokenIn, tokenOut)
-  
+
   // Add quote outputs section (if not already added in quote hook)
   if (isDebug && !debugBundle.quoteOutputs) {
     debugLog('quoteOutputs', {
@@ -961,7 +987,7 @@ export async function getOnChainSwapDetails(
       amountInExact: amountIn.toExact(),
       amountOutExact: amountOut.toExact(),
       quotedRoute: onChainRoute?.route?.description ?? null,
-      routerAddress: routerAddress,
+      routerAddress,
     })
   }
 
@@ -970,10 +996,8 @@ export async function getOnChainSwapDetails(
     const quoted = BigInt(amountOutQuotedRaw)
     const minimum = BigInt(amountOutMinimumRaw)
     const slippageBuffer = quoted - minimum
-    const slippageBufferPercent = quoted > 0n 
-      ? (Number(slippageBuffer) / Number(quoted) * 100).toFixed(4)
-      : '0'
-    
+    const slippageBufferPercent = quoted > 0n ? ((Number(slippageBuffer) / Number(quoted)) * 100).toFixed(4) : '0'
+
     // Format minimum amount out
     const minAmountOutExact = (() => {
       try {
@@ -983,15 +1007,15 @@ export async function getOnChainSwapDetails(
         return null
       }
     })()
-    
+
     debugLog('slippage', {
       minAmountOutRaw: amountOutMinimumRaw,
-      minAmountOutExact: minAmountOutExact,
+      minAmountOutExact,
       bufferRaw: slippageBuffer.toString(),
       wouldRevertIfActualOutBelowMin: `Swap would revert if actualOut < ${amountOutMinimumRaw}. Price impact does NOT imply revert; only minOut does.`,
     })
   }
-  
+
   // 7. Simulation / Ground truth cross-check
   if (isDebug && onChainRoute?.route?.hops?.[0] && publicClient) {
     try {
@@ -1000,7 +1024,7 @@ export async function getOnChainSwapDetails(
       const { AGROSWAP_QUOTER_ADDRESSES } = await import('uniswap/src/constants/agroswapAddresses')
       const { QUOTER_ADDRESSES } = await import('@uniswap/sdk-core')
       const { Interface } = await import('ethers/lib/utils')
-      
+
       const getQuoterAddress = (chainId: number): string => {
         if (chainId === 84532) {
           const agroswapAddress = AGROSWAP_QUOTER_ADDRESSES[chainId as keyof typeof AGROSWAP_QUOTER_ADDRESSES]
@@ -1011,21 +1035,23 @@ export async function getOnChainSwapDetails(
         const sdkAddress = QUOTER_ADDRESSES[chainId as keyof typeof QUOTER_ADDRESSES]
         return sdkAddress || ''
       }
-      
+
       const QUOTER_V2_ABI = [
         {
-          inputs: [{
-            components: [
-              { internalType: 'address', name: 'tokenIn', type: 'address' },
-              { internalType: 'address', name: 'tokenOut', type: 'address' },
-              { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
-              { internalType: 'uint24', name: 'fee', type: 'uint24' },
-              { internalType: 'uint160', name: 'sqrtPriceLimitX96', type: 'uint160' },
-            ],
-            internalType: 'struct IQuoterV2.QuoteExactInputSingleParams',
-            name: 'params',
-            type: 'tuple',
-          }],
+          inputs: [
+            {
+              components: [
+                { internalType: 'address', name: 'tokenIn', type: 'address' },
+                { internalType: 'address', name: 'tokenOut', type: 'address' },
+                { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
+                { internalType: 'uint24', name: 'fee', type: 'uint24' },
+                { internalType: 'uint160', name: 'sqrtPriceLimitX96', type: 'uint160' },
+              ],
+              internalType: 'struct IQuoterV2.QuoteExactInputSingleParams',
+              name: 'params',
+              type: 'tuple',
+            },
+          ],
           name: 'quoteExactInputSingle',
           outputs: [
             { internalType: 'uint256', name: 'amountOut', type: 'uint256' },
@@ -1037,7 +1063,7 @@ export async function getOnChainSwapDetails(
           type: 'function',
         },
       ] as const
-      
+
       const quoterAddress = getQuoterAddress(chainId) as `0x${string}`
       if (quoterAddress) {
         const quoterInterface = new Interface(QUOTER_V2_ABI)
@@ -1045,26 +1071,31 @@ export async function getOnChainSwapDetails(
           address: quoterAddress,
           abi: QUOTER_V2_ABI as any,
           functionName: 'quoteExactInputSingle',
-          args: [{
-            tokenIn: (tokenIn.isToken ? tokenIn.address : tokenIn.wrapped.address) as `0x${string}`,
-            tokenOut: (tokenOut.isToken ? tokenOut.address : tokenOut.wrapped.address) as `0x${string}`,
-            amountIn: amountIn.quotient,
-            fee: BigInt(firstHop.fee),
-            sqrtPriceLimitX96: 0n,
-          }],
+          args: [
+            {
+              tokenIn: (tokenIn.isToken ? tokenIn.address : tokenIn.wrapped.address) as `0x${string}`,
+              tokenOut: (tokenOut.isToken ? tokenOut.address : tokenOut.wrapped.address) as `0x${string}`,
+              amountIn: amountIn.quotient,
+              fee: BigInt(firstHop.fee),
+              sqrtPriceLimitX96: 0n,
+            },
+          ],
         })
-        
+
         const [simulatedAmountOut] = result as any
         const simulatedAmountOutRaw = simulatedAmountOut?.toString() ?? null
         const computedAmountOutRaw = amountOut.quotient.toString()
-        const diff = simulatedAmountOutRaw && computedAmountOutRaw
-          ? (BigInt(simulatedAmountOutRaw) - BigInt(computedAmountOutRaw)).toString()
-          : null
-        
+        const diff =
+          simulatedAmountOutRaw && computedAmountOutRaw
+            ? (BigInt(simulatedAmountOutRaw) - BigInt(computedAmountOutRaw)).toString()
+            : null
+
         debugLog('simulation', {
           simulatedAmountOutRaw,
           diffVsComputedQuote: diff,
-          note: diff ? `Quoter simulation differs from computed quote by ${diff} raw units` : 'Quoter simulation matches computed quote',
+          note: diff
+            ? `Quoter simulation differs from computed quote by ${diff} raw units`
+            : 'Quoter simulation matches computed quote',
         })
       }
     } catch (error) {
@@ -1078,7 +1109,7 @@ export async function getOnChainSwapDetails(
 
   // 8. Determine network cost (approval vs swap)
   let networkCost: OnChainNetworkCost | null = null
-  
+
   // Check if approval is needed and balance is sufficient
   const { needsApprove, hasBalance } = await checkApprovalAndBalance(
     tokenIn,
@@ -1091,7 +1122,13 @@ export async function getOnChainSwapDetails(
   // Estimate approval gas if needed
   let approvalCost: OnChainNetworkCost | null = null
   if (needsApprove && tokenApprovalInfo?.approveTxRequest) {
-    approvalCost = await estimateNetworkCost('approve', tokenApprovalInfo.approveTxRequest, chainId, publicClient, account)
+    approvalCost = await estimateNetworkCost(
+      'approve',
+      tokenApprovalInfo.approveTxRequest,
+      chainId,
+      publicClient,
+      account,
+    )
     debugLog('networkCost_approval', {
       step: 'approve',
       gasLimit: approvalCost.gasLimit?.toString(),
@@ -1133,62 +1170,64 @@ export async function getOnChainSwapDetails(
     const networkCostDebug: any = {
       networkCostDisplayed: networkCost?.step ?? 'none',
     }
-    
+
     if (approvalCost) {
       networkCostDebug.approvalTx = {
         estimateGas: approvalCost.gasLimit?.toString() ?? null,
-        feeData: approvalCost.maxFeePerGas || approvalCost.maxPriorityFeePerGas || approvalCost.gasLimit
-          ? {
-              maxFeePerGas: approvalCost.maxFeePerGas?.toString(),
-              maxPriorityFeePerGas: approvalCost.maxPriorityFeePerGas?.toString(),
-              gasPrice: approvalCost.gasLimit && !approvalCost.maxFeePerGas ? 'legacy' : undefined,
-            }
-          : null,
+        feeData:
+          approvalCost.maxFeePerGas || approvalCost.maxPriorityFeePerGas || approvalCost.gasLimit
+            ? {
+                maxFeePerGas: approvalCost.maxFeePerGas?.toString(),
+                maxPriorityFeePerGas: approvalCost.maxPriorityFeePerGas?.toString(),
+                gasPrice: approvalCost.gasLimit && !approvalCost.maxFeePerGas ? 'legacy' : undefined,
+              }
+            : null,
         costWei: approvalCost.gasFeeWei?.toString() ?? null,
       }
     }
-    
+
     if (swapCost) {
       networkCostDebug.swapTx = {
         estimateGas: swapCost.gasLimit?.toString() ?? null,
-        feeData: swapCost.maxFeePerGas || swapCost.maxPriorityFeePerGas || swapCost.gasLimit
-          ? {
-              maxFeePerGas: swapCost.maxFeePerGas?.toString(),
-              maxPriorityFeePerGas: swapCost.maxPriorityFeePerGas?.toString(),
-              gasPrice: swapCost.gasLimit && !swapCost.maxFeePerGas ? 'legacy' : undefined,
-            }
-          : null,
+        feeData:
+          swapCost.maxFeePerGas || swapCost.maxPriorityFeePerGas || swapCost.gasLimit
+            ? {
+                maxFeePerGas: swapCost.maxFeePerGas?.toString(),
+                maxPriorityFeePerGas: swapCost.maxPriorityFeePerGas?.toString(),
+                gasPrice: swapCost.gasLimit && !swapCost.maxFeePerGas ? 'legacy' : undefined,
+              }
+            : null,
         costWei: swapCost.gasFeeWei?.toString() ?? null,
       }
     }
-    
+
     debugLog('networkCost', networkCostDebug)
   }
 
   // Build comprehensive math audit bundle (single JSON per quote cycle)
   if (isDebug) {
     const auditId = makeOnChainDebugId('OCAUDIT')
-    
+
     // Run invariant checks
     const invariants = assertPriceDirectionConsistency(midPrice, executionPrice)
-    
+
     // Extract pool selection details from route
     const firstHop = onChainRoute?.route?.hops?.[0]
     const feeTier = firstHop?.fee ?? null
-    const feeTierBps = feeTier ? (feeTier / 100) : null // Convert Uniswap fee (10000) to bps (100)
+    const feeTierBps = feeTier ? feeTier / 100 : null // Convert Uniswap fee (10000) to bps (100)
     const expectedFeeTier = 10000 // 1% pool (1% = 10000 in Uniswap V3 fee units)
     const poolSelectionCorrect = feeTier === expectedFeeTier
-    
+
     // Extract pool selection info (which fee tiers were checked, which was selected)
     const poolSelection = {
       feeTiersChecked: [500, 3000, 10000], // Default fee tiers (would need to pass from findRoute)
       firstFoundPool: poolState?.poolAddress ?? null,
       finalSelectedPool: poolState?.poolAddress ?? null,
       finalSelectedFeeTier: feeTier,
-      expectedFeeTier: expectedFeeTier,
+      expectedFeeTier,
       poolSelectionCorrect,
     }
-    
+
     // Build prices with both directions explicitly
     const prices: Record<string, unknown> = {}
     if (midPrice) {
@@ -1202,7 +1241,7 @@ export async function getOnChainSwapDetails(
         exact: midPrice.invert().toSignificant(18),
         derivedBy: 'inverse(mid_outPerIn)',
       }
-      
+
       // Alternative derivations for sanity checks
       if (poolState) {
         const midPriceLog = (debugBundle as any).midPrice as any
@@ -1213,7 +1252,7 @@ export async function getOnChainSwapDetails(
           const midSdkNum = parseFloat(midSdk)
           const midSqrtDiff = Math.abs(midFromSqrtNum - midSdkNum)
           const midSqrtTolerance = 0.000001 // 1e-6
-          
+
           prices.mid_from_sqrtPriceX96 = {
             priceToken1PerToken0_raw: midPriceLog.sqrtPriceX96_calculation.priceToken1PerToken0_raw,
             priceToken1PerToken0_adjusted: midFromSqrt,
@@ -1229,7 +1268,7 @@ export async function getOnChainSwapDetails(
           const midSdkNum = parseFloat(midSdk)
           const midTickDiff = Math.abs(midFromTickNum - midSdkNum)
           const midTickTolerance = 0.000001 // 1e-6
-          
+
           prices.mid_from_tick = {
             priceToken1PerToken0_raw: midPriceLog.tick_calculation.priceToken1PerToken0_raw,
             priceToken1PerToken0_adjusted: midFromTick,
@@ -1240,7 +1279,7 @@ export async function getOnChainSwapDetails(
         }
       }
     }
-    
+
     if (executionPrice) {
       // Raw-first: execution price from raw amounts
       const amountInRaw = amountIn.quotient.toString()
@@ -1250,7 +1289,7 @@ export async function getOnChainSwapDetails(
         denominator: amountInRaw,
         scale: 10 ** (tokenIn.decimals - tokenOut.decimals), // Decimal adjustment factor
       }
-      
+
       prices.exec_outPerIn = {
         rawFraction: `${executionPrice.numerator.toString()}/${executionPrice.denominator.toString()}`,
         rawFraction_fromAmounts: `${quoteOutRaw}/${amountInRaw}`,
@@ -1265,34 +1304,36 @@ export async function getOnChainSwapDetails(
         derivedBy: 'inverse(exec_outPerIn)',
       }
     }
-    
+
     // Build impact section
     const impactData = (debugBundle as any).priceImpact as any
     const impact: Record<string, unknown> = {
       formula: '(mid_outPerIn - exec_outPerIn) / mid_outPerIn',
       priceImpactBps: priceImpactBps ?? null,
     }
-    
+
     if (impactData?.sanityCheck_inverse) {
       impact.crossCheckBpsUsingInverse = impactData.sanityCheck_inverse.impactBps_inverse_clamped
-      impact.crossCheckDeltaBps = Math.abs((impactData.impactBps_clamped ?? 0) - (impactData.sanityCheck_inverse.impactBps_inverse_clamped ?? 0))
+      impact.crossCheckDeltaBps = Math.abs(
+        (impactData.impactBps_clamped ?? 0) - (impactData.sanityCheck_inverse.impactBps_inverse_clamped ?? 0),
+      )
     }
-    
+
     // Build fee model section
     const feeModel = {
-      feeTierBps: feeTierBps,
+      feeTierBps,
       feeTierUniswap: feeTier,
       notes: 'Mid price should be from pool state; exec price includes fee+slippage from quote.',
-      poolSelection: poolSelection,
+      poolSelection,
     }
-    
+
     // Build slippage section
     const slippage: Record<string, unknown> = {}
     if (amountOutQuotedRaw && amountOutMinimumRaw) {
       const quoted = BigInt(amountOutQuotedRaw)
       const minimum = BigInt(amountOutMinimumRaw)
       const bufferRaw = quoted - minimum
-      
+
       slippage.toleranceBps = slippageToleranceBps ?? null
       slippage.amountOutMinimumRaw = amountOutMinimumRaw
       slippage.amountOutMinimumExact = (() => {
@@ -1305,7 +1346,7 @@ export async function getOnChainSwapDetails(
       slippage.bufferRaw = bufferRaw.toString()
       slippage.wouldRevertIfOutLtMin = true
     }
-    
+
     // Build quoter cross-check section
     const quoter: Record<string, unknown> = {}
     const simulationData = (debugBundle as any).simulation as any
@@ -1322,7 +1363,7 @@ export async function getOnChainSwapDetails(
         })(),
         error: null,
       }
-      
+
       // Compare with displayed quote
       const displayedOutRaw = amountOut.quotient.toString()
       const quoterOutRaw = simulationData.simulatedAmountOutRaw
@@ -1339,7 +1380,7 @@ export async function getOnChainSwapDetails(
         error: simulationData.error,
       }
     }
-    
+
     // Build simulation section (swap callStatic)
     const simulate: Record<string, unknown> = {}
     if (swapTxRequest && account && publicClient) {
@@ -1348,9 +1389,9 @@ export async function getOnChainSwapDetails(
           to: swapTxRequest.to,
           data: swapTxRequest.data,
           value: swapTxRequest.value || 0n,
-          account: account,
+          account,
         })
-        
+
         if (simResult.success) {
           simulate.swapCallStatic = {
             success: true,
@@ -1372,7 +1413,7 @@ export async function getOnChainSwapDetails(
         }
       }
     }
-    
+
     // Build tx section
     const tx: Record<string, unknown> = {}
     if (params.swapTxPayload) {
@@ -1390,37 +1431,33 @@ export async function getOnChainSwapDetails(
       tx.recipient = null // Would need to decode from tx data
       tx.amountOutMinimum = amountOutMinimumRaw ?? null
     }
-    
+
     // Build network cost section
     const networkCostAudit: Record<string, unknown> = {
       approvalRequired: needsApprove,
       displayed: networkCost?.step ?? 'none',
     }
-    
+
     if (approvalCost) {
       networkCostAudit.approvalTx = {
         gasLimit: approvalCost.gasLimit?.toString() ?? null,
         maxFeePerGas: approvalCost.maxFeePerGas?.toString() ?? null,
         maxPriorityFeePerGas: approvalCost.maxPriorityFeePerGas?.toString() ?? null,
         estimatedWei: approvalCost.gasFeeWei?.toString() ?? null,
-        estimatedEth: approvalCost.gasFeeWei 
-          ? (Number(approvalCost.gasFeeWei) / 1e18).toFixed(12)
-          : null,
+        estimatedEth: approvalCost.gasFeeWei ? (Number(approvalCost.gasFeeWei) / 1e18).toFixed(12) : null,
       }
     }
-    
+
     if (swapCost) {
       networkCostAudit.swapTx = {
         gasLimit: swapCost.gasLimit?.toString() ?? null,
         maxFeePerGas: swapCost.maxFeePerGas?.toString() ?? null,
         maxPriorityFeePerGas: swapCost.maxPriorityFeePerGas?.toString() ?? null,
         estimatedWei: swapCost.gasFeeWei?.toString() ?? null,
-        estimatedEth: swapCost.gasFeeWei 
-          ? (Number(swapCost.gasFeeWei) / 1e18).toFixed(12)
-          : null,
+        estimatedEth: swapCost.gasFeeWei ? (Number(swapCost.gasFeeWei) / 1e18).toFixed(12) : null,
       }
     }
-    
+
     // Build pool section with full slot0 details
     const poolAudit: Record<string, unknown> = {}
     if (poolState) {
@@ -1447,10 +1484,10 @@ export async function getOnChainSwapDetails(
       poolAudit.poolAddress = poolState.poolAddress
       poolAudit.fee = poolState.fee
     }
-    
+
     // Add pool selection details
     poolAudit.poolSelection = poolSelection
-    
+
     // Build amounts section (raw-first)
     const amounts = {
       amountInRaw: amountIn.quotient.toString(),
@@ -1458,7 +1495,7 @@ export async function getOnChainSwapDetails(
       quoteOutRaw: amountOut.quotient.toString(),
       quoteOutExact: amountOut.toExact(),
     }
-    
+
     // Build tokens section
     const tokens = {
       tokenIn: {
@@ -1480,17 +1517,17 @@ export async function getOnChainSwapDetails(
         tokenOut: tokenOut.isToken ? tokenOut.address : tokenOut.wrapped.address,
       },
     }
-    
+
     // Build meta section
     const meta = {
       chainId,
       auditId,
       timestamp: Date.now(),
       isExactIn: true,
-      feeTier: feeTier,
+      feeTier,
       poolAddress: poolState?.poolAddress ?? null,
     }
-    
+
     // Check mid price alternative derivations tolerance
     let midMatchesAltDerivations = true
     if (prices.mid_from_sqrtPriceX96 && (prices.mid_from_sqrtPriceX96 as any).matchesSDK === false) {
@@ -1499,7 +1536,7 @@ export async function getOnChainSwapDetails(
     if (prices.mid_from_tick && (prices.mid_from_tick as any).matchesSDK === false) {
       midMatchesAltDerivations = false
     }
-    
+
     // Build invariants section
     const invariantsAudit = {
       decimalsConsistent: invariants.decimalsConsistent,
@@ -1509,7 +1546,7 @@ export async function getOnChainSwapDetails(
       warnings: invariants.warnings,
       poolSelectionCorrect,
     }
-    
+
     // Emit comprehensive math audit bundle
     const auditBundle = {
       meta,
@@ -1526,7 +1563,7 @@ export async function getOnChainSwapDetails(
       networkCost: networkCostAudit,
       invariants: invariantsAudit,
     }
-    
+
     debugOnChainMathAudit(chainId, auditId, auditBundle)
   }
 
@@ -1539,9 +1576,12 @@ export async function getOnChainSwapDetails(
     if (oneMinusFeeScaled > 0) {
       const amountInAfterFeeRaw = JSBI.divide(
         JSBI.multiply(amountIn.quotient, JSBI.BigInt(oneMinusFeeScaled)),
-        JSBI.BigInt(1_000_000)
+        JSBI.BigInt(1_000_000),
       )
-      if (JSBI.greaterThan(amountInAfterFeeRaw, JSBI.BigInt(0)) && JSBI.lessThan(amountInAfterFeeRaw, amountIn.quotient)) {
+      if (
+        JSBI.greaterThan(amountInAfterFeeRaw, JSBI.BigInt(0)) &&
+        JSBI.lessThan(amountInAfterFeeRaw, amountIn.quotient)
+      ) {
         const amountInAfterFee = CurrencyAmount.fromRawAmount(amountIn.currency, amountInAfterFeeRaw)
         return amountIn.subtract(amountInAfterFee)
       }

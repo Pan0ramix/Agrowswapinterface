@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { memo } from 'react'
+import { memo, useEffect } from 'react'
 import { Flex } from 'ui/src'
 import { ProgressIndicator } from 'uniswap/src/components/ConfirmSwapModal/ProgressIndicator'
 import { TransactionModalInnerContainer } from 'uniswap/src/features/transactions/components/TransactionModal/TransactionModal'
@@ -38,9 +38,8 @@ import {
 } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import { useSwapTxStore } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/useSwapTxStore'
 import { isChained } from 'uniswap/src/features/transactions/swap/utils/routing'
-import { useEffect } from 'react'
-import { isWebPlatform } from 'utilities/src/platform'
 import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
+import { isWebPlatform } from 'utilities/src/platform'
 
 interface SwapReviewScreenProps {
   hideContent: boolean
@@ -62,9 +61,9 @@ export function SwapReviewScreenProviders({ hideContent, onSubmitSwap }: SwapRev
         tags: { file: 'SwapReviewScreen', function: 'SwapReviewScreenProviders' },
         extra: { chainId, hideContent },
       },
-      chainId
+      chainId,
     )
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- only log on mount
+  }, [])  
   const { onClose, authTrigger, setScreen } = useTransactionModalContext()
   const isSubmitting = useSwapFormStore((s) => s.isSubmitting)
   const { derivedSwapInfo, getExecuteSwapService } = useSwapDependenciesStore((s) => ({

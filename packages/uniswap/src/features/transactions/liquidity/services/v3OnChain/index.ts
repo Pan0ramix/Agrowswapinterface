@@ -1,23 +1,19 @@
 /**
  * V3 LP On-Chain Services
- * 
+ *
  * Services for V3 concentrated liquidity position math and transaction building.
  */
 
 export {
-  buildMintPositionTx,
-  buildIncreaseLiquidityTx,
-  buildDecreaseLiquidityTx,
+  type BuildCollectFeesParams,
+  type BuildDecreaseLiquidityParams,
+  type BuildIncreaseLiquidityParams,
+  type BuildMintPositionParams,
   buildCollectFeesTx,
+  buildDecreaseLiquidityTx,
+  buildIncreaseLiquidityTx,
+  buildMintPositionTx,
   calculatePositionAmounts,
   getNearestUsableTicks,
   type LpTransactionPayload,
-  type BuildMintPositionParams,
-  type BuildIncreaseLiquidityParams,
-  type BuildDecreaseLiquidityParams,
-  type BuildCollectFeesParams,
 } from './v3LpOnChain'
-
-
-
-

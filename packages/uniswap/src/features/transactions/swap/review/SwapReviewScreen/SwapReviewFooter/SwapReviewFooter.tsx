@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import { Flex, IconButton, useIsShortMobileDevice } from 'ui/src'
 import { BackArrow } from 'ui/src/components/icons/BackArrow'
 import type { Warning } from 'uniswap/src/components/modals/WarningModal/types'
+import { useActiveAddress, useActiveWallet } from 'uniswap/src/features/accounts/store/hooks'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { TransactionModalFooterContainer } from 'uniswap/src/features/transactions/components/TransactionModal/TransactionModal'
 import { useSwapOnPrevious } from 'uniswap/src/features/transactions/swap/review/hooks/useSwapOnPrevious'
@@ -10,26 +11,20 @@ import { useSwapReviewCallbacksStore } from 'uniswap/src/features/transactions/s
 import { useShowInterfaceReviewSteps } from 'uniswap/src/features/transactions/swap/review/stores/swapReviewStore/useSwapReviewStore'
 import { useSwapReviewTransactionStore } from 'uniswap/src/features/transactions/swap/review/stores/swapReviewTransactionStore/useSwapReviewTransactionStore'
 import { useSwapReviewWarningStore } from 'uniswap/src/features/transactions/swap/review/stores/swapReviewWarningStore/useSwapReviewWarningStore'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { useSwapFormStore } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import { isValidSwapTxContext } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
 import { isChained, isClassic } from 'uniswap/src/features/transactions/swap/utils/routing'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { UnichainPoweredMessage } from 'uniswap/src/features/transactions/TransactionDetails/UnichainPoweredMessage'
 import { getShouldDisplayTokenWarningCard } from 'uniswap/src/features/transactions/TransactionDetails/utils/getShouldDisplayTokenWarningCard'
-import { isWebPlatform } from 'utilities/src/platform'
-import {
-  swapDebug,
-  summarizeGasFee,
-  summarizeTxRequest,
-  summarizeTrade,
-} from 'uniswap/src/utils/swapDebug'
-import { useActiveAddress, useActiveWallet } from 'uniswap/src/features/accounts/store/hooks'
 import { boundaryLogDeduped } from 'uniswap/src/utils/boundaryLog'
+import { summarizeGasFee, summarizeTrade, summarizeTxRequest } from 'uniswap/src/utils/swapDebug'
+import { isWebPlatform } from 'utilities/src/platform'
 
 export const SwapReviewFooter = memo(function SwapReviewFooter(): JSX.Element | null {
   // Heartbeat log - must be at the top before any conditional returns
   const swapTxContext = useSwapReviewTransactionStore((s) => s.swapTxContext)
-  const chainId = swapTxContext?.trade?.inputAmount?.currency?.chainId
+  const chainId = swapTxContext.trade?.inputAmount.currency.chainId
   const accountAddress = useActiveAddress(chainId)
   const activeWallet = useActiveWallet(chainId)
   const connector = (activeWallet as any)?.connector
@@ -50,7 +45,7 @@ export const SwapReviewFooter = memo(function SwapReviewFooter(): JSX.Element | 
     {
       ttlMs: 5000,
       includeKeys: ['chainId', 'accountAddress', 'connectorName'],
-    }
+    },
   )
 
   const showInterfaceReviewSteps = useShowInterfaceReviewSteps()
@@ -124,7 +119,7 @@ function useSwapSubmitButton(): {
   })
 
   // Get account info for logging (hooks must be outside useMemo)
-  const chainId = swapTxContext?.trade?.inputAmount?.currency?.chainId
+  const chainId = swapTxContext.trade?.inputAmount.currency.chainId
   const accountAddress = useActiveAddress(chainId)
   const activeWallet = useActiveWallet(chainId)
   const connector = (activeWallet as any)?.connector
@@ -134,16 +129,13 @@ function useSwapSubmitButton(): {
     const isOnChainOnly = chainId ? isOnChainOnlyChain(chainId) : false
 
     // Check for on-chain-only tx readiness
-    const hasOnChainOnlyTx =
-      isOnChainOnly &&
-      isClassic(swapTxContext) &&
-      !!(swapTxContext as any).txRequests?.length
+    const hasOnChainOnlyTx = isOnChainOnly && isClassic(swapTxContext) && !!(swapTxContext as any).txRequests?.length
 
     // Classic validation (requires gasFee + txRequests or permit)
     const validSwap = isValidSwapTxContext(swapTxContext)
 
     // Fine-grained gate logging
-    if (!swapTxContext?.trade) {
+    if (!swapTxContext.trade) {
       boundaryLogDeduped(
         '[SWAP-REVIEW] disable-gate',
         {
@@ -158,7 +150,7 @@ function useSwapSubmitButton(): {
         {
           ttlMs: 5000,
           includeKeys: ['chainId', 'gate'],
-        }
+        },
       )
     }
 
@@ -176,14 +168,14 @@ function useSwapSubmitButton(): {
               validSwap,
               hasOnChainOnlyTx,
               hasTxRequests: !!(swapTxContext as any)?.txRequests?.length,
-              gasFeeSummary: summarizeGasFee(swapTxContext?.gasFee),
+              gasFeeSummary: summarizeGasFee(swapTxContext.gasFee),
             },
           },
           chainId,
           {
             ttlMs: 5000,
             includeKeys: ['chainId', 'gate'],
-          }
+          },
         )
       }
     }
@@ -206,7 +198,7 @@ function useSwapSubmitButton(): {
         {
           ttlMs: 5000,
           includeKeys: ['chainId', 'gate'],
-        }
+        },
       )
     }
 
@@ -226,7 +218,7 @@ function useSwapSubmitButton(): {
         {
           ttlMs: 5000,
           includeKeys: ['chainId', 'gate'],
-        }
+        },
       )
     }
 
@@ -245,7 +237,7 @@ function useSwapSubmitButton(): {
         {
           ttlMs: 5000,
           includeKeys: ['chainId', 'gate'],
-        }
+        },
       )
     }
 
@@ -264,14 +256,14 @@ function useSwapSubmitButton(): {
         {
           ttlMs: 5000,
           includeKeys: ['chainId', 'gate'],
-        }
+        },
       )
     }
 
     const isDisabled = reasons.length > 0
 
     // Comprehensive summary log before computing final disabled state
-    const trade = swapTxContext?.trade
+    const trade = swapTxContext.trade
     const txRequests = (swapTxContext as any)?.txRequests
     const firstTxRequest = txRequests?.[0]
     const reasonsTextJoined = reasons.map(String).join('|')
@@ -291,12 +283,12 @@ function useSwapSubmitButton(): {
           routing: trade?.routing ? String(trade.routing) : undefined,
           isWrap,
           hasSwapTxContext: !!swapTxContext,
-          swapTxContextRouting: swapTxContext?.routing ? String(swapTxContext.routing) : undefined,
+          swapTxContextRouting: swapTxContext.routing ? String(swapTxContext.routing) : undefined,
           txRequestsLength: txRequests?.length ?? 0,
           hasOnChainOnlyTx,
           validSwapTxContext: validSwap,
           reasonsString,
-          gasFeeSummary: summarizeGasFee(swapTxContext?.gasFee),
+          gasFeeSummary: summarizeGasFee(swapTxContext.gasFee),
           finalSubmitButtonDisabled: isDisabled,
           tradeSummary: summarizeTrade(trade),
           firstTxRequestSummary: summarizeTxRequest(firstTxRequest),
@@ -306,7 +298,7 @@ function useSwapSubmitButton(): {
       {
         ttlMs: 3000,
         includeKeys: ['chainId', 'isOnChainOnly', 'reasonsString', 'blockingWarning'],
-      }
+      },
     )
 
     return isDisabled

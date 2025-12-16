@@ -72,7 +72,7 @@ export function getDependentAmountFromV3Position({
         token0: pool.token0.address,
         token1: pool.token1.address,
         fee: pool.fee,
-        sqrtPriceX96: pool.sqrtRatioX96?.toString(),
+        sqrtPriceX96: pool.sqrtRatioX96.toString(),
         tickCurrent: pool.tickCurrent,
         liquidity: pool.liquidity.toString(),
       },
@@ -85,7 +85,7 @@ export function getDependentAmountFromV3Position({
 
   let position: V3Position
   let dependentAmount: CurrencyAmount<Currency>
-  
+
   if (independentTokenIsFirstToken) {
     position = V3Position.fromAmount0({
       pool,

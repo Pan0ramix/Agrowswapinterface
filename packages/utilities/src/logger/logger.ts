@@ -2,7 +2,7 @@
 import { datadogEnabledBuild, localDevDatadogEnabled } from 'utilities/src/environment/constants'
 import { isDevEnv, isTestEnv } from 'utilities/src/environment/env'
 import { logErrorToDatadog, logToDatadog, logWarningToDatadog } from 'utilities/src/logger/datadog/Datadog'
-import { dedupeLog, type DedupeOptions } from 'utilities/src/logger/dedupeLog'
+import { type DedupeOptions, dedupeLog } from 'utilities/src/logger/dedupeLog'
 import { LoggerErrorContext, LogLevel } from 'utilities/src/logger/types'
 import { isMobileApp, isWebApp, isWebPlatform } from 'utilities/src/platform'
 
@@ -35,8 +35,7 @@ let datadogEnabled = false
  * @param args Additional values to log
  */
 // Check if deduplication is enabled (default on in dev)
-const isDedupEnabled =
-  typeof process !== 'undefined' && process.env.REACT_APP_DEDUP_LOGS !== '0'
+const isDedupEnabled = typeof process !== 'undefined' && process.env.REACT_APP_DEDUP_LOGS !== '0'
 
 export const logger = {
   debug: (fileName: string, functionName: string, message: string, ...args: unknown[]): void =>
@@ -54,7 +53,7 @@ export const logger = {
     functionName: string,
     message: string,
     payload?: unknown,
-    options?: DedupeOptions
+    options?: DedupeOptions,
   ): void => {
     if (!isDedupEnabled) {
       logger.debug(fileName, functionName, message, payload)
@@ -72,7 +71,7 @@ export const logger = {
       {
         level: 'debug',
         ...options,
-      }
+      },
     )
   },
   infoDeduped: (
@@ -80,7 +79,7 @@ export const logger = {
     functionName: string,
     message: string,
     payload?: unknown,
-    options?: DedupeOptions
+    options?: DedupeOptions,
   ): void => {
     if (!isDedupEnabled) {
       logger.info(fileName, functionName, message, payload)
@@ -98,7 +97,7 @@ export const logger = {
       {
         level: 'info',
         ...options,
-      }
+      },
     )
   },
 }

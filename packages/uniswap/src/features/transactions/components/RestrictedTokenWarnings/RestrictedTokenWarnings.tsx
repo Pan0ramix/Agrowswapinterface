@@ -1,18 +1,17 @@
 /**
  * Cross-platform component for displaying restricted token warnings
- * 
+ *
  * This component renders warnings about restricted tokens and allowlist status.
  * It uses platform-agnostic UI primitives and can be wrapped with platform-specific
  * layout components if needed.
  */
 
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Flex, Text, TouchableArea } from 'ui/src'
 import { AlertTriangleFilled } from 'ui/src/components/icons/AlertTriangleFilled'
-import { useTranslation } from 'react-i18next'
-import { useMemo, useState, useEffect } from 'react'
-import type { RestrictedTokenWarnings as RestrictedTokenWarningsType } from '../../hooks/useRestrictedTokenWarnings'
 import { setClipboard } from 'uniswap/src/utils/clipboard'
-import { shortenAddress } from 'utilities/src/addresses'
+import type { RestrictedTokenWarnings as RestrictedTokenWarningsType } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenWarnings'
 
 interface RestrictedTokenWarningsProps {
   warnings: RestrictedTokenWarningsType
@@ -59,13 +58,13 @@ export function RestrictedTokenWarnings({
   const hasAnyWarnings = warnings.warnings.length > 0
   const walletBlocked = warnings.walletStatus === 'blocked'
   const walletAllowed = warnings.walletStatus === 'allowed'
-  
+
   // Don't show anything during loading (prevents flash)
   // Only show warnings after checks complete and there are actual issues
   if (warnings.isLoading) {
     return null
   }
-  
+
   // After loading, only show if there are warnings or wallet is blocked
   // Show wallet "allowed" status only if there are other warnings
   if (!hasAnyWarnings && !walletBlocked) {
@@ -79,13 +78,10 @@ export function RestrictedTokenWarnings({
         <>
           {warnings.walletStatus === 'allowed' && (
             <Flex row gap="$spacing12" backgroundColor="$surface2" borderRadius="$rounded16" p="$padding12">
-              <Flex
-                backgroundColor="$statusSuccess2"
-                p="$padding12"
-                borderRadius="$rounded12"
-                alignSelf="flex-start"
-              >
-                <Text color="$statusSuccess" fontSize={20}>✓</Text>
+              <Flex backgroundColor="$statusSuccess2" p="$padding12" borderRadius="$rounded12" alignSelf="flex-start">
+                <Text color="$statusSuccess" fontSize={20}>
+                  ✓
+                </Text>
               </Flex>
               <Flex alignItems="flex-start" flexWrap="wrap" flexShrink={1} gap="$gap4">
                 <Text color="$statusSuccess" variant="body3" fontWeight="600">
@@ -97,12 +93,7 @@ export function RestrictedTokenWarnings({
 
           {warnings.walletStatus === 'blocked' && (
             <Flex row gap="$spacing12" backgroundColor="$surface2" borderRadius="$rounded16" p="$padding12">
-              <Flex
-                backgroundColor="$statusCritical2"
-                p="$padding12"
-                borderRadius="$rounded12"
-                alignSelf="flex-start"
-              >
+              <Flex backgroundColor="$statusCritical2" p="$padding12" borderRadius="$rounded12" alignSelf="flex-start">
                 <AlertTriangleFilled color="$statusCritical" size="$icon.20" />
               </Flex>
               <Flex alignItems="flex-start" flexWrap="wrap" flexShrink={1} gap="$gap4">
@@ -148,11 +139,7 @@ export function RestrictedTokenWarnings({
                       </Text>
                       <Flex gap="$gap2" mt="$spacing4">
                         {blockingWarnings.map((warning, idx) => (
-                          <ClickableAddress
-                            key={idx}
-                            label={warning.subjectLabel}
-                            address={warning.address}
-                          />
+                          <ClickableAddress key={idx} label={warning.subjectLabel} address={warning.address} />
                         ))}
                       </Flex>
                       <Text variant="body3" color="$neutral2" mt="$spacing4">
@@ -189,7 +176,6 @@ export function RestrictedTokenWarnings({
           })}
         </Flex>
       )}
-
     </Flex>
   )
 }
@@ -237,4 +223,3 @@ function ClickableAddress({ label, address }: { label: string; address: string }
     </Flex>
   )
 }
-

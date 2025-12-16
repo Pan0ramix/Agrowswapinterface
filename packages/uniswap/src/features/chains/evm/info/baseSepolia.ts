@@ -95,7 +95,9 @@ export const BASE_SEPOLIA_CHAIN_INFO = {
         [RPCType.Public]: { http: ['https://sepolia.base.org'] },
         [RPCType.Default]: { http: ['https://sepolia.base.org'] },
         [RPCType.Fallback]: { http: ['https://sepolia.base.org'] },
-        [RPCType.PublicAlt]: { http: [`https://${config.quicknodeEndpointName}.base-sepolia.quiknode.pro/${config.quicknodeEndpointToken}`] },
+        [RPCType.PublicAlt]: {
+          http: [`https://${config.quicknodeEndpointName}.base-sepolia.quiknode.pro/${config.quicknodeEndpointToken}`],
+        },
         [RPCType.Interface]: { http: [`https://base-sepolia.infura.io/v3/${config.infuraKey}`] },
       },
   tokens: testnetTokens,

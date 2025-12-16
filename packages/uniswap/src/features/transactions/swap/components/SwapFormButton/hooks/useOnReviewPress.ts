@@ -2,10 +2,10 @@ import { useEffect } from 'react'
 import { useSwapFormWarningStoreActions } from 'uniswap/src/features/transactions/swap/form/stores/swapFormWarningStore/useSwapFormWarningStore'
 import { usePrepareSwap } from 'uniswap/src/features/transactions/swap/services/hooks/usePrepareSwap'
 import { useWarningService } from 'uniswap/src/features/transactions/swap/services/hooks/useWarningService'
-import { useEvent } from 'utilities/src/react/hooks'
-import { useSwapFormStoreDerivedSwapInfo } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { useSwapFormStoreDerivedSwapInfo } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
+import { useEvent } from 'utilities/src/react/hooks'
 
 type CallbackArgs = Record<
   'skipBridgingWarning' | 'skipTokenProtectionWarning' | 'skipMaxTransferWarning' | 'skipBridgedAssetWarning',
@@ -46,9 +46,9 @@ export const useOnReviewPress: UseOnReviewPress = (source?: string) => {
         tags: { file: 'useOnReviewPress', function: 'useOnReviewPress' },
         extra: { chainId, source: source ?? 'unknown' },
       },
-      chainId
+      chainId,
     )
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- only log on mount
+  }, [])  
 
   const { handleHideTokenWarningModal, handleHideMaxNativeTransferModal, handleHideBridgedAssetModal } =
     useSwapFormWarningStoreActions()
@@ -81,7 +81,7 @@ export const useOnReviewPress: UseOnReviewPress = (source?: string) => {
           source: source ?? 'unknown',
         },
       },
-      chainId
+      chainId,
     )
     onReviewPress({
       skipBridgingWarning: false,

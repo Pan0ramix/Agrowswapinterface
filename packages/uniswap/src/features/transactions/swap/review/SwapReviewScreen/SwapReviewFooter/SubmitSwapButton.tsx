@@ -11,6 +11,7 @@ import { FlashblocksConfirmButton } from 'uniswap/src/features/transactions/swap
 import { useIsUnichainFlashblocksEnabled } from 'uniswap/src/features/transactions/swap/hooks/useIsUnichainFlashblocksEnabled'
 import { DelayedSubmissionText } from 'uniswap/src/features/transactions/swap/review/SwapReviewScreen/SwapReviewFooter/DelayedSubmissionText'
 import { PendingSwapButton } from 'uniswap/src/features/transactions/swap/review/SwapReviewScreen/SwapReviewFooter/PendingSwapButton'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import {
   useSwapFormStore,
   useSwapFormStoreDerivedSwapInfo,
@@ -21,11 +22,10 @@ import { PermitMethod } from 'uniswap/src/features/transactions/swap/types/swapT
 import { isChained, isClassic } from 'uniswap/src/features/transactions/swap/utils/routing'
 import { WrapType } from 'uniswap/src/features/transactions/types/wrap'
 import { TestID } from 'uniswap/src/test/fixtures/testIDs'
-import { isWebApp } from 'utilities/src/platform'
-import { swapDebug } from 'uniswap/src/utils/swapDebug'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { useEvent } from 'utilities/src/react/hooks'
 import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
+import { swapDebug } from 'uniswap/src/utils/swapDebug'
+import { isWebApp } from 'utilities/src/platform'
+import { useEvent } from 'utilities/src/react/hooks'
 
 interface SubmitSwapButtonProps {
   disabled: boolean
@@ -58,9 +58,9 @@ export function SubmitSwapButton({ disabled, onSubmit, showPendingUI, warning }:
           hasWarning: !!warning,
         },
       },
-      chainId
+      chainId,
     )
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- only log on mount
+  }, [])  
 
   // Boundary log 0: Actual Swap button click (Base Sepolia only)
   const handleSubmit = useEvent(() => {
@@ -74,11 +74,11 @@ export function SubmitSwapButton({ disabled, onSubmit, showPendingUI, warning }:
           disabled,
           hasTrade: !!trade,
           hasOnChainQuote: !!(trade as any)?.quote,
-          hasTxRequests: !!swapTxContext?.txRequests,
-          txRequestsLength: swapTxContext?.txRequests?.length ?? 0,
+          hasTxRequests: !!swapTxContext.txRequests,
+          txRequestsLength: swapTxContext.txRequests?.length ?? 0,
         },
       },
-      chainId
+      chainId,
     )
     onSubmit()
   })
@@ -172,7 +172,7 @@ export function SubmitSwapButton({ disabled, onSubmit, showPendingUI, warning }:
                       tags: { file: 'SubmitSwapButton', function: 'onPressIn' },
                       extra: { chainId, disabled },
                     },
-                    chainId
+                    chainId,
                   )
                 }
               : undefined
@@ -202,7 +202,7 @@ export function SubmitSwapButton({ disabled, onSubmit, showPendingUI, warning }:
                       tags: { file: 'SubmitSwapButton', function: 'onPressIn' },
                       extra: { chainId, disabled },
                     },
-                    chainId
+                    chainId,
                   )
                 }
               : undefined

@@ -1,7 +1,13 @@
-import { AppsOverview } from 'pages/Landing/sections/AppsOverview'
+import { Certification } from 'pages/Landing/sections/Certification'
+import { Compliance } from 'pages/Landing/sections/Compliance'
+import { FinalCTA } from 'pages/Landing/sections/FinalCTA'
 import { Footer } from 'pages/Landing/sections/Footer'
-import { NewsletterEtc } from 'pages/Landing/sections/NewsletterEtc'
-import { Stats } from 'pages/Landing/sections/Stats'
+import { ForCarbonProjects } from 'pages/Landing/sections/ForCarbonProjects'
+import { GlobalParticipation } from 'pages/Landing/sections/GlobalParticipation'
+import { HowItWorks } from 'pages/Landing/sections/HowItWorks'
+import { WhatIsAgroswap } from 'pages/Landing/sections/WhatIsAgroswap'
+import { WhoUsesAgroswap } from 'pages/Landing/sections/WhoUsesAgroswap'
+import { WhyCarbonMarkets } from 'pages/Landing/sections/WhyCarbonMarkets'
 import { forwardRef } from 'react'
 import { Flex } from 'ui/src'
 
@@ -17,9 +23,15 @@ const Fold = forwardRef<HTMLDivElement>(function Fold(_props, scrollAnchor) {
       maxWidth="100vw"
       ref={scrollAnchor}
     >
-      <Stats />
-      <AppsOverview />
-      <NewsletterEtc />
+      <WhatIsAgroswap />
+      <WhyCarbonMarkets />
+      <HowItWorks />
+      <Compliance />
+      <Certification />
+      <GlobalParticipation />
+      <WhoUsesAgroswap />
+      <ForCarbonProjects />
+      <FinalCTA />
       <Footer />
     </Flex>
   )

@@ -75,7 +75,7 @@ export default function AddressClaimModal({ isOpen, closeModal }: ModalState) {
   const amount = unclaimedAmount?.toFixed(0, { groupSeparator: ',' })
   const unclaimedUni = unclaimedAmount?.toFixed(0, { groupSeparator: ',' })
 
-  // Avoiding translating because the structure for "Claiming UNI for address" is wrong but this modal is rarely used
+  // Avoiding translating because the structure for "Claiming AGX for address" is wrong but this modal is rarely used
   // and ran into difficulties with testing it
   return (
     <Modal name={ModalName.AddressClaim} isModalOpen={isOpen} onClose={wrappedOnDismiss} padding={0}>
@@ -94,19 +94,19 @@ export default function AddressClaimModal({ isOpen, closeModal }: ModalState) {
             <CardSection gap="md">
               <Flex row justifyContent="space-between" alignItems="center">
                 <Text color="$white" fontWeight="$medium">
-                  Claim UNI token
+                  Claim AGX token
                 </Text>
                 <CloseIconWithHover onClose={wrappedOnDismiss} />
               </Flex>
               <Text color="$white" fontWeight="$medium" fontSize={36}>
-                {amount} UNI
+                {amount} AGX
               </Text>
             </CardSection>
             <Break />
           </Flex>
           <AutoColumn gap="md" style={{ padding: '1rem', paddingTop: '0' }} justify="center">
             <Text variant="subheading1" color="$white">
-              Enter an address to trigger a UNI claim. If the address has any claimable UNI it will be sent to them on
+              Enter an address to trigger a AGX claim. If the address has any claimable AGX it will be sent to them on
               submission.
             </Text>
             <AddressInputPanel value={typed} onChange={handleRecipientType} />
@@ -120,7 +120,7 @@ export default function AddressClaimModal({ isOpen, closeModal }: ModalState) {
                 mt="$spacing16"
                 onPress={onClaim}
               >
-                Claim UNI
+                Claim AGX
               </Button>
             </Flex>
           </AutoColumn>
@@ -146,7 +146,7 @@ export default function AddressClaimModal({ isOpen, closeModal }: ModalState) {
             {!claimConfirmed ? (
               <CustomLightSpinner src={Circle} alt="loader" size="90px" />
             ) : (
-              <UniTokenAnimated width="72px" src={tokenLogo} alt="UNI logo" />
+              <UniTokenAnimated width="72px" src={tokenLogo} alt="AGX logo" />
             )}
           </Flex>
           <Flex gap={100} justifyContent="center">
@@ -156,7 +156,7 @@ export default function AddressClaimModal({ isOpen, closeModal }: ModalState) {
               </Text>
               {!claimConfirmed && (
                 <Text fontSize={36} color="#ff007a" fontWeight="$medium">
-                  {unclaimedUni} UNI
+                  {unclaimedUni} AGX
                 </Text>
               )}
               {parsedAddress && (

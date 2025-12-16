@@ -1,21 +1,25 @@
 /**
  * On-Chain Swap Quote Hook
- * 
+ *
  * Fetches swap quotes using the on-chain router system.
  * Matches the shape of Uniswap's existing hooks so UI remains unchanged.
  */
 
+import { skipToken, useQuery } from '@tanstack/react-query'
 import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
 import JSBI from 'jsbi'
-import { skipToken, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { findRoute, buildSwapTx, calculateAmountOutMinimum, getDeadline, getDeadlineSecondsFromNow } from '../services/onchainRouter'
-import { validateDecimalsSafetyMultiple } from '../../utils/validateDecimalsSafety'
-import { isOnChainRouterEnabled } from '../services/onchainRouter/config'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
+import {
+  debugOnChain,
+  isOnChainDebug,
+  makeOnChainDebugId,
+} from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
 import { logger } from 'utilities/src/logger/logger'
-import { isOnChainDebug, makeOnChainDebugId, debugOnChain } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
+import { validateDecimalsSafetyMultiple } from 'uniswap/src/features/transactions/utils/validateDecimalsSafety'
+import { buildSwapTx, calculateAmountOutMinimum, findRoute, getDeadlineSecondsFromNow } from 'uniswap/src/features/transactions/swap/services/onchainRouter'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 
 /**
  * Hook parameters
@@ -67,24 +71,13 @@ const ON_CHAIN_SWAP_QUOTE_CACHE_KEY = 'OnChainSwapQuote'
 
 /**
  * On-chain swap quote hook
- * 
+ *
  * @param params - Quote parameters
  * @returns Quote result with transaction payload
  */
-export function useOnChainSwapQuote(
-  params: UseOnChainSwapQuoteParams,
-): UseOnChainSwapQuoteReturn {
-  const {
-    tokenIn,
-    tokenOut,
-    amountIn,
-    amountOut,
-    slippageTolerance,
-    chainId,
-    recipient,
-    enabled = true,
-  } = params
-  
+export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnChainSwapQuoteReturn {
+  const { tokenIn, tokenOut, amountIn, amountOut, slippageTolerance, chainId, recipient, enabled = true } = params
+
   const isExactOut = !!amountOut && !amountIn
   const amount = amountIn || amountOut
 
@@ -123,15 +116,7 @@ export function useOnChainSwapQuote(
 
   // Query function
   const queryFn = useMemo(() => {
-    if (
-      !tokenIn ||
-      !tokenOut ||
-      !amount ||
-      !chainId ||
-      !publicClient ||
-      !routerEnabled ||
-      !recipient
-    ) {
+    if (!tokenIn || !tokenOut || !amount || !chainId || !publicClient || !routerEnabled || !recipient) {
       return skipToken
     }
 
@@ -154,15 +139,17 @@ export function useOnChainSwapQuote(
       // Create debug bundle for this quote cycle
       const isDebug = isOnChainDebug(chainId)
       const debugId = isDebug ? makeOnChainDebugId('quote') : undefined
-      const debugBundle: Record<string, unknown> = isDebug ? {
-        header: {
-          debugId,
-          chainId,
-          mode: 'onchain-only',
-          timestamp: Date.now(),
-        },
-      } : {}
-      
+      const debugBundle: Record<string, unknown> = isDebug
+        ? {
+            header: {
+              debugId,
+              chainId,
+              mode: 'onchain-only',
+              timestamp: Date.now(),
+            },
+          }
+        : {}
+
       try {
         if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
           logger.debug('useOnChainSwapQuote', 'useOnChainSwapQuote', 'Executing on-chain quote', {
@@ -177,14 +164,7 @@ export function useOnChainSwapQuote(
         }
 
         // Step 1: Find best route
-        const routeResult = await findRoute(
-          tokenIn,
-          tokenOut,
-          amountIn,
-          amountOut,
-          chainId,
-          publicClient,
-        )
+        const routeResult = await findRoute(tokenIn, tokenOut, amountIn, amountOut, chainId, publicClient)
 
         if (!routeResult) {
           throw new Error('No route found for swap')
@@ -196,12 +176,12 @@ export function useOnChainSwapQuote(
             tokenIn: tokenIn.symbol,
             tokenOut: tokenOut.symbol,
             isExactOut,
-            amountInRaw: routeResult.amountIn?.quotient?.toString(),
-            amountInExact: routeResult.amountIn?.toExact?.(),
-            amountOutRaw: routeResult.amountOut?.quotient?.toString(),
-            amountOutExact: routeResult.amountOut?.toExact?.(),
-            routeDescription: routeResult.route?.description,
-            hops: (routeResult.route?.hops ?? []).map((h) => ({
+            amountInRaw: routeResult.amountIn.quotient.toString(),
+            amountInExact: routeResult.amountIn.toExact(),
+            amountOutRaw: routeResult.amountOut.quotient.toString(),
+            amountOutExact: routeResult.amountOut.toExact(),
+            routeDescription: routeResult.route.description,
+            hops: (routeResult.route.hops ?? []).map((h) => ({
               tokenIn: h.tokenIn.symbol,
               tokenOut: h.tokenOut.symbol,
               fee: h.fee,
@@ -212,7 +192,7 @@ export function useOnChainSwapQuote(
         // Step 2: Calculate slippage-adjusted amounts
         let amountOutMinimum: CurrencyAmount<Currency> | undefined
         let amountInMaximum: CurrencyAmount<Currency> | undefined
-        
+
         if (isExactOut) {
           // For exact output: calculate maximum input with slippage
           // We need to add slippage to amountIn (not subtract) for exact output
@@ -229,21 +209,15 @@ export function useOnChainSwapQuote(
           const multiplier = JSBI.add(slippageDenominator, slippageNumerator) // 1 + slippage
           const maxAmountInRaw = JSBI.divide(
             JSBI.multiply(routeResult.amountIn.quotient, multiplier),
-            slippageDenominator
+            slippageDenominator,
           )
-          amountInMaximum = CurrencyAmount.fromRawAmount(
-            routeResult.amountIn.currency,
-            maxAmountInRaw
-          )
+          amountInMaximum = CurrencyAmount.fromRawAmount(routeResult.amountIn.currency, maxAmountInRaw)
         } else {
           // For exact input: calculate minimum output with slippage
           if (!routeResult.amountOut) {
             throw new Error('Route result missing amountOut for exact input')
           }
-          amountOutMinimum = calculateAmountOutMinimum(
-            routeResult.amountOut,
-            slippageTolerance,
-          )
+          amountOutMinimum = calculateAmountOutMinimum(routeResult.amountOut, slippageTolerance)
         }
 
         // Step 3: Validate decimals safety (on-chain-only chains)
@@ -272,20 +246,24 @@ export function useOnChainSwapQuote(
             isExactOut,
           })
         }
-        if (!routeResult.amountIn || (!isExactOut && !routeResult.amountOut) || (isExactOut && !routeResult.amountOut)) {
+        if (
+          !routeResult.amountIn ||
+          (!isExactOut && !routeResult.amountOut) ||
+          (isExactOut && !routeResult.amountOut)
+        ) {
           if (chainId === 84532) {
             console.error('[ONCHAIN-QUOTE] Route result missing required amounts', {
               chainId,
               isExactOut,
               hasAmountIn: !!routeResult.amountIn,
               hasAmountOut: !!routeResult.amountOut,
-              amountInRaw: routeResult.amountIn?.quotient?.toString(),
-              amountOutRaw: routeResult.amountOut?.quotient?.toString(),
+              amountInRaw: routeResult.amountIn.quotient.toString(),
+              amountOutRaw: routeResult.amountOut.quotient.toString(),
             })
           }
           throw new Error('Route result missing required amounts')
         }
-        
+
         const txPayload = buildSwapTx({
           route: routeResult.route,
           amountIn: routeResult.amountIn,
@@ -303,43 +281,43 @@ export function useOnChainSwapQuote(
             isExactOut,
             to: txPayload.to,
             value: txPayload.value,
-            dataLen: txPayload.data?.length,
+            dataLen: txPayload.data.length,
             gasLimit: txPayload.gasLimit,
             hasMinAmountOut: !!amountOutMinimum,
             hasMaxAmountIn: !!amountInMaximum,
-            amountOutMinimumRaw: amountOutMinimum?.quotient?.toString(),
-            amountInMaximumRaw: amountInMaximum?.quotient?.toString(),
+            amountOutMinimumRaw: amountOutMinimum?.quotient.toString(),
+            amountInMaximumRaw: amountInMaximum?.quotient.toString(),
           })
           logger.debug('useOnChainSwapQuote', 'useOnChainSwapQuote', 'Built on-chain tx payload', {
             chainId,
             to: txPayload.to,
             value: txPayload.value,
-            dataLen: txPayload.data?.length,
+            dataLen: txPayload.data.length,
             gasLimit: txPayload.gasLimit,
             isExactOut,
-            amountOutMinimumRaw: amountOutMinimum?.quotient?.toString(),
-            amountOutMinimumExact: amountOutMinimum?.toExact?.(),
-            amountInMaximumRaw: amountInMaximum?.quotient?.toString(),
-            amountInMaximumExact: amountInMaximum?.toExact?.(),
+            amountOutMinimumRaw: amountOutMinimum?.quotient.toString(),
+            amountOutMinimumExact: amountOutMinimum?.toExact(),
+            amountInMaximumRaw: amountInMaximum?.quotient.toString(),
+            amountInMaximumExact: amountInMaximum?.toExact(),
           })
         }
 
         // Emit debug bundle if enabled (quote-level data)
         if (isDebug) {
           debugBundle.quoteOutputs = {
-            amountInRaw: routeResult.amountIn?.quotient?.toString(),
-            amountOutRaw: routeResult.amountOut?.quotient?.toString(),
-            amountInExact: routeResult.amountIn?.toExact?.(),
-            amountOutExact: routeResult.amountOut?.toExact?.(),
+            amountInRaw: routeResult.amountIn.quotient.toString(),
+            amountOutRaw: routeResult.amountOut.quotient.toString(),
+            amountInExact: routeResult.amountIn.toExact(),
+            amountOutExact: routeResult.amountOut.toExact(),
             isExactOut,
-            quotedRoute: routeResult.route?.description ?? null,
+            quotedRoute: routeResult.route.description ?? null,
             routerAddress: txPayload.to, // Router address from tx payload
           }
-          
+
           // Emit quote-level bundle (details will be added later in getOnChainSwapDetails)
           debugOnChain(chainId, debugBundle)
         }
-        
+
         return {
           quoteAmountIn: isExactOut ? routeResult.amountIn : undefined,
           quoteAmountOut: isExactOut ? undefined : routeResult.amountOut,
@@ -386,13 +364,7 @@ export function useOnChainSwapQuote(
   ])
 
   // Execute query
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey,
     queryFn,
     enabled:
@@ -416,4 +388,3 @@ export function useOnChainSwapQuote(
     refetch,
   }
 }
-

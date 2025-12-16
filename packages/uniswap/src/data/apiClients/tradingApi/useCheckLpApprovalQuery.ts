@@ -2,8 +2,8 @@ import { UseQueryResult, useQuery } from '@tanstack/react-query'
 import { TradingApi, UseQueryApiHelperHookArgs } from '@universe/api'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
 import { TradingApiClient } from 'uniswap/src/data/apiClients/tradingApi/TradingApiClient'
-import { ReactQueryCacheKey } from 'utilities/src/reactQuery/cache'
 import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { ReactQueryCacheKey } from 'utilities/src/reactQuery/cache'
 
 export function useCheckLpApprovalQuery({
   params,
@@ -56,7 +56,7 @@ export function useCheckLpApprovalQuery({
     },
     // Disable query completely when on-chain router is enabled OR when params are missing
     // This ensures the queryFn is never called on on-chain chains
-    enabled: (rest.enabled !== false) && !isOnChainEnabled && !!params,
+    enabled: rest.enabled !== false && !isOnChainEnabled && !!params,
     ...rest,
   })
 }

@@ -1,6 +1,8 @@
 import { ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
+import { FeeAmount } from '@uniswap/v3-sdk'
 import { ErrorCallout } from 'components/ErrorCallout'
 import { useDefaultInitialPrice } from 'components/Liquidity/Create/hooks/useDefaultInitialPrice'
+import { PositionFlowStep } from 'components/Liquidity/Create/types'
 import { DepositInputForm } from 'components/Liquidity/DepositInputForm'
 import { useUpdatedAmountsFromDependentAmount } from 'components/Liquidity/hooks/useDependentAmountFallback'
 import { getPriceDifference } from 'components/Liquidity/utils/getPriceDifference'
@@ -17,12 +19,10 @@ import { Button, Flex, Text } from 'ui/src'
 import { AlertTriangleFilled } from 'ui/src/components/icons/AlertTriangleFilled'
 import { WarningSeverity } from 'uniswap/src/components/modals/WarningModal/types'
 import { useUniswapContext } from 'uniswap/src/contexts/UniswapContext'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { Platform } from 'uniswap/src/features/platforms/types/Platform'
 import { useRestrictedTokenAllowlistChecks } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenAllowlistChecks'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { Address } from 'viem'
-import { FeeAmount } from '@uniswap/v3-sdk'
-import { PositionFlowStep } from 'components/Liquidity/Create/types'
 
 // Component for rendering message with clickable addresses
 function MessageWithClickableAddresses({ message }: { message: string }) {
@@ -40,7 +40,7 @@ function MessageWithClickableAddresses({ message }: { message: string }) {
 
   // Split by lines first to preserve line breaks
   const lines = message.split('\n')
-  
+
   return (
     <Flex gap="$gap2">
       {lines.map((line, lineIdx) => {
@@ -59,7 +59,7 @@ function MessageWithClickableAddresses({ message }: { message: string }) {
               parts.push(
                 <Text key={`text-${lineIdx}-${keyCounter++}`} variant="body3" color="$neutral2">
                   {textBefore}
-                </Text>
+                </Text>,
               )
             }
           }
@@ -76,7 +76,7 @@ function MessageWithClickableAddresses({ message }: { message: string }) {
             >
               {address}
               {copiedAddress === address ? ' ✓ Copied!' : ''}
-            </Text>
+            </Text>,
           )
 
           lastIndex = match.index + match[0].length
@@ -89,7 +89,7 @@ function MessageWithClickableAddresses({ message }: { message: string }) {
             parts.push(
               <Text key={`text-${lineIdx}-${keyCounter++}`} variant="body3" color="$neutral2">
                 {textAfter}
-              </Text>
+              </Text>,
             )
           }
         }
@@ -237,9 +237,9 @@ export const DepositStep = () => {
   // Only check when we're actually on the DEPOSIT step to avoid running hooks unnecessarily
   // (DepositStep is rendered on PRICE_RANGE step too, so we need to gate the hooks)
   const isDepositStep = step === PositionFlowStep.DEPOSIT
-  
+
   const chainId = TOKEN0?.chainId as EVMUniverseChainId | undefined
-  const walletAddress = account?.address as Address | undefined
+  const walletAddress = account.address as Address | undefined
 
   // Use the new consolidated hook for allowlist checks
   const feeAmount = positionState.fee?.isDynamic ? undefined : (positionState.fee?.feeAmount as FeeAmount | undefined)
@@ -273,10 +273,10 @@ export const DepositStep = () => {
     ]
 
     // Build warning message for non-wallet addresses
-    let otherAddressMessage: string | undefined = undefined
+    let otherAddressMessage: string | undefined
     if (nonWalletWarnings.length > 0) {
       const warningsByToken = new Map<string, Array<{ label: string; address: string }>>()
-      
+
       for (const warning of nonWalletWarnings) {
         const tokenKey = warning.tokenSymbol || warning.tokenAddress
         if (!warningsByToken.has(tokenKey)) {
@@ -292,10 +292,8 @@ export const DepositStep = () => {
       for (const [tokenSymbol, addresses] of warningsByToken.entries()) {
         if (addresses.length > 0) {
           // Deduplicate addresses by address
-          const uniqueAddresses = Array.from(
-            new Map(addresses.map((a) => [a.address, a])).values()
-          )
-          
+          const uniqueAddresses = Array.from(new Map(addresses.map((a) => [a.address, a])).values())
+
           parts.push(`The following addresses are not whitelisted for ${tokenSymbol}:`)
           const addressList = uniqueAddresses.map((a) => `• ${a.label}: ${a.address}`).join('\n')
           parts.push(addressList)
@@ -367,24 +365,25 @@ export const DepositStep = () => {
                 alignSelf="flex-start"
               >
                 {walletStatus.isAllowed ? (
-                  <Text color="$statusSuccess" fontSize={20}>✓</Text>
+                  <Text color="$statusSuccess" fontSize={20}>
+                    ✓
+                  </Text>
                 ) : (
                   <AlertTriangleFilled color="$statusCritical" size="$icon.20" />
                 )}
               </Flex>
               <Flex alignItems="flex-start" flexWrap="wrap" flexShrink={1} gap="$gap4">
-                <Text 
-                  color={walletStatus.isAllowed ? '$statusSuccess' : '$statusCritical'} 
+                <Text
+                  color={walletStatus.isAllowed ? '$statusSuccess' : '$statusCritical'}
                   variant="body3"
                   fontWeight="600"
                 >
-                  {walletStatus.isAllowed 
-                    ? 'Wallet verified and approved ✓'
-                    : 'Wallet not authorized'}
+                  {walletStatus.isAllowed ? 'Wallet verified and approved ✓' : 'Wallet not authorized'}
                 </Text>
                 {!walletStatus.isAllowed && (
                   <Text variant="body3" color="$neutral2">
-                    You need to complete KYC verification to allow your wallet for trading. Please contact your system administrator to submit your wallet for KYC approval.
+                    You need to complete KYC verification to allow your wallet for trading. Please contact your system
+                    administrator to submit your wallet for KYC approval.
                   </Text>
                 )}
               </Flex>
@@ -394,12 +393,7 @@ export const DepositStep = () => {
           {/* Other address warnings - only show if there are non-wallet issues */}
           {otherAddressWarnings && (
             <Flex row gap="$spacing12" backgroundColor="$surface2" borderRadius="$rounded16" p="$padding12">
-              <Flex
-                backgroundColor="$statusCritical2"
-                p="$padding12"
-                borderRadius="$rounded12"
-                alignSelf="flex-start"
-              >
+              <Flex backgroundColor="$statusCritical2" p="$padding12" borderRadius="$rounded12" alignSelf="flex-start">
                 <AlertTriangleFilled color="$statusCritical" size="$icon.20" />
               </Flex>
               <Flex alignItems="flex-start" flexWrap="wrap" flexShrink={1} gap="$gap4">
@@ -419,17 +413,14 @@ export const DepositStep = () => {
           {/* Loading state */}
           {walletStatus.isLoading && (
             <Flex row gap="$spacing12" backgroundColor="$surface2" borderRadius="$rounded16" p="$padding12">
-              <Flex
-                backgroundColor="$statusWarning2"
-                p="$padding12"
-                borderRadius="$rounded12"
-                alignSelf="flex-start"
-              >
+              <Flex backgroundColor="$statusWarning2" p="$padding12" borderRadius="$rounded12" alignSelf="flex-start">
                 <AlertTriangleFilled color="$statusWarning" size="$icon.20" />
               </Flex>
               <Flex alignItems="flex-start" flexWrap="wrap" flexShrink={1} gap="$gap4">
                 <Text color="$statusWarning" variant="body3">
-                  Checking allowlist status for restricted token{allowlistChecks.debug.restrictedTokens.length > 1 ? 's' : ''}: {allowlistChecks.debug.restrictedTokens.map((t) => t.symbol || t.address).join(', ')}
+                  Checking allowlist status for restricted token
+                  {allowlistChecks.debug.restrictedTokens.length > 1 ? 's' : ''}:{' '}
+                  {allowlistChecks.debug.restrictedTokens.map((t) => t.symbol || t.address).join(', ')}
                 </Text>
               </Flex>
             </Flex>
@@ -475,30 +466,30 @@ export const DepositStep = () => {
       </Flex>
       <ErrorCallout errorMessage={transactionError} onPress={refetch} />
       {/* Show pool-not-found message for on-chain V3 flows */}
-      {typeof transactionError === 'string' && 
-       transactionError.includes('pool') && 
-       transactionError.includes('does not exist') && (
-        <Flex
-          backgroundColor="$surface2"
-          borderRadius="$rounded16"
-          p="$spacing16"
-          gap="$spacing8"
-          borderWidth={1}
-          borderColor="$surface3"
-        >
-          <Text variant="body2" color="$neutral1">
-            <Trans i18nKey="position.poolNotFound.title" />
-          </Text>
-          <Text variant="body3" color="$neutral2">
-            <Trans i18nKey="position.poolNotFound.description" />
-          </Text>
-          {process.env.NODE_ENV !== 'production' && (
-            <Text variant="body3" color="$neutral3" mt="$spacing8">
-              <Trans i18nKey="position.poolNotFound.devNote" />
+      {typeof transactionError === 'string' &&
+        transactionError.includes('pool') &&
+        transactionError.includes('does not exist') && (
+          <Flex
+            backgroundColor="$surface2"
+            borderRadius="$rounded16"
+            p="$spacing16"
+            gap="$spacing8"
+            borderWidth={1}
+            borderColor="$surface3"
+          >
+            <Text variant="body2" color="$neutral1">
+              <Trans i18nKey="position.poolNotFound.title" />
             </Text>
-          )}
-        </Flex>
-      )}
+            <Text variant="body3" color="$neutral2">
+              <Trans i18nKey="position.poolNotFound.description" />
+            </Text>
+            {process.env.NODE_ENV !== 'production' && (
+              <Text variant="body3" color="$neutral3" mt="$spacing8">
+                <Trans i18nKey="position.poolNotFound.devNote" />
+              </Text>
+            )}
+          </Flex>
+        )}
       <CreatePositionModal
         formattedAmounts={updatedFormattedAmounts}
         currencyAmounts={updatedCurrencyAmounts ?? currencyAmounts}

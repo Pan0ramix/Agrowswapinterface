@@ -1,9 +1,8 @@
 /* eslint-disable max-lines */
 import { ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
-import { getProtocolVersionLabel } from 'components/Liquidity/utils/protocolVersion'
-import { Currency, CurrencyAmount, MaxUint256, Price } from '@uniswap/sdk-core'
+import { Currency, CurrencyAmount, MaxUint256, Percent, Price } from '@uniswap/sdk-core'
 import { Pair } from '@uniswap/v2-sdk'
-import { Pool as V3Pool, priceToClosestTick, TickMath, encodeSqrtRatioX96 } from '@uniswap/v3-sdk'
+import { encodeSqrtRatioX96, priceToClosestTick, TickMath, Pool as V3Pool } from '@uniswap/v3-sdk'
 import { Pool as V4Pool } from '@uniswap/v4-sdk'
 import { TradingApi } from '@universe/api'
 import { useDepositInfo } from 'components/Liquidity/Create/hooks/useDepositInfo'
@@ -11,7 +10,8 @@ import { DYNAMIC_FEE_DATA, PositionState } from 'components/Liquidity/Create/typ
 import { useCreatePositionDependentAmountFallback } from 'components/Liquidity/hooks/useDependentAmountFallback'
 import { getTokenOrZeroAddress, validateCurrencyInput } from 'components/Liquidity/utils/currency'
 import { isInvalidRange, isOutOfRange } from 'components/Liquidity/utils/priceRangeInfo'
-import { getProtocolItems } from 'components/Liquidity/utils/protocolVersion'
+import { getProtocolItems, getProtocolVersionLabel } from 'components/Liquidity/utils/protocolVersion'
+import JSBI from 'jsbi'
 import { useCreateLiquidityContext } from 'pages/CreatePosition/CreateLiquidityContextProvider'
 import {
   createContext,
@@ -26,34 +26,34 @@ import {
   useState,
 } from 'react'
 import { PositionField } from 'types/position'
+import { AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
+import { getPositionManagerAddress } from 'uniswap/src/constants/v3Addresses'
 import { useUniswapContextSelector } from 'uniswap/src/contexts/UniswapContext'
 import { useCheckLpApprovalQuery } from 'uniswap/src/data/apiClients/tradingApi/useCheckLpApprovalQuery'
 import { useCreateLpPositionCalldataQuery } from 'uniswap/src/data/apiClients/tradingApi/useCreateLpPositionCalldataQuery'
-import { useV3MintPosition } from 'uniswap/src/features/transactions/liquidity/hooks/useV3MintPosition'
-import { useOnChainLpApproval } from 'uniswap/src/features/transactions/liquidity/hooks/useOnChainLpApproval'
-import { convertFeeToFeeAmount, convertOnChainTxToCreateLpResponse } from 'uniswap/src/features/transactions/liquidity/utils/v3OnChainIntegration'
-import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { FeeAmount } from '@uniswap/v3-sdk'
-import { Percent } from '@uniswap/sdk-core'
-import { toSupportedChainId } from 'uniswap/src/features/chains/utils'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { toSupportedChainId } from 'uniswap/src/features/chains/utils'
 import { useTransactionGasFee, useUSDCurrencyAmountOfGasFee } from 'uniswap/src/features/gas/hooks'
 import { InterfaceEventName } from 'uniswap/src/features/telemetry/constants'
 import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
 import { useTransactionSettingsStore } from 'uniswap/src/features/transactions/components/settings/stores/transactionSettingsStore/useTransactionSettingsStore'
+import { useOnChainLpApproval } from 'uniswap/src/features/transactions/liquidity/hooks/useOnChainLpApproval'
+import { useV3MintPosition } from 'uniswap/src/features/transactions/liquidity/hooks/useV3MintPosition'
 import { CreatePositionTxAndGasInfo, LiquidityTransactionType } from 'uniswap/src/features/transactions/liquidity/types'
 import { getErrorMessageToDisplay, parseErrorMessageTitle } from 'uniswap/src/features/transactions/liquidity/utils'
+import {
+  convertFeeToFeeAmount,
+  convertOnChainTxToCreateLpResponse,
+} from 'uniswap/src/features/transactions/liquidity/utils/v3OnChainIntegration'
 import { TransactionStepType } from 'uniswap/src/features/transactions/steps/types'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { PermitMethod } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
 import { validatePermit, validateTransactionRequest } from 'uniswap/src/features/transactions/swap/utils/trade'
 import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 import { AccountDetails } from 'uniswap/src/features/wallet/types/AccountDetails'
 import { logger } from 'utilities/src/logger/logger'
-import JSBI from 'jsbi'
-import { encodeFunctionData, erc20Abi } from 'viem'
-import { getPositionManagerAddress } from 'uniswap/src/constants/v3Addresses'
-import { AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 import { ONE_SECOND_MS } from 'utilities/src/time/time'
+import { encodeFunctionData, erc20Abi } from 'viem'
 
 /**
  * @internal - exported for testing
@@ -391,7 +391,12 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
       exactField,
       exactAmounts: depositState.exactAmounts,
       skipDependentAmount: protocolVersion === ProtocolVersion.V2 ? false : outOfRange || invalidRange,
-      feeAmount: protocolVersion === ProtocolVersion.V3 ? (positionState.fee?.isDynamic ? undefined : positionState.fee?.feeAmount) : undefined,
+      feeAmount:
+        protocolVersion === ProtocolVersion.V3
+          ? positionState.fee?.isDynamic
+            ? undefined
+            : positionState.fee?.feeAmount
+          : undefined,
       price: protocolVersion === ProtocolVersion.V3 ? price : undefined, // Pass price for V3 mock pool creation (matches upstream useV3DerivedMintInfo)
     }
 
@@ -409,25 +414,31 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   // Dev-only: log currencyAmounts received from useDepositInfo
   if (process.env.NODE_ENV !== 'production') {
     console.log('[CreatePositionTxContext] currencyAmounts received from useDepositInfo', {
-      TOKEN0: currencyAmounts?.TOKEN0 ? {
-        raw: currencyAmounts.TOKEN0.quotient.toString(),
-        human: currencyAmounts.TOKEN0.toExact(),
-        currency: currencyAmounts.TOKEN0.currency.symbol,
-        address: currencyAmounts.TOKEN0.currency.address,
-        decimals: currencyAmounts.TOKEN0.currency.decimals,
-      } : undefined,
-      TOKEN1: currencyAmounts?.TOKEN1 ? {
-        raw: currencyAmounts.TOKEN1.quotient.toString(),
-        human: currencyAmounts.TOKEN1.toExact(),
-        currency: currencyAmounts.TOKEN1.currency.symbol,
-        address: currencyAmounts.TOKEN1.currency.address,
-        decimals: currencyAmounts.TOKEN1.currency.decimals,
-      } : undefined,
+      TOKEN0: currencyAmounts?.TOKEN0
+        ? {
+            raw: currencyAmounts.TOKEN0.quotient.toString(),
+            human: currencyAmounts.TOKEN0.toExact(),
+            currency: currencyAmounts.TOKEN0.currency.symbol,
+            address: currencyAmounts.TOKEN0.currency.address,
+            decimals: currencyAmounts.TOKEN0.currency.decimals,
+          }
+        : undefined,
+      TOKEN1: currencyAmounts?.TOKEN1
+        ? {
+            raw: currencyAmounts.TOKEN1.quotient.toString(),
+            human: currencyAmounts.TOKEN1.toExact(),
+            currency: currencyAmounts.TOKEN1.currency.symbol,
+            address: currencyAmounts.TOKEN1.currency.address,
+            decimals: currencyAmounts.TOKEN1.currency.decimals,
+          }
+        : undefined,
       formattedAmounts,
-      currencyAmountsUSDValue: currencyAmountsUSDValue ? {
-        TOKEN0: currencyAmountsUSDValue.TOKEN0?.toExact(),
-        TOKEN1: currencyAmountsUSDValue.TOKEN1?.toExact(),
-      } : undefined,
+      currencyAmountsUSDValue: currencyAmountsUSDValue
+        ? {
+            TOKEN0: currencyAmountsUSDValue.TOKEN0?.toExact(),
+            TOKEN1: currencyAmountsUSDValue.TOKEN1?.toExact(),
+          }
+        : undefined,
     })
   }
 
@@ -463,7 +474,8 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
 
     // Check if protocol is V3
     const protocolVersionStr = getProtocolVersionLabel(protocolVersion) ?? protocolVersion.toString()
-    const isV3Protocol = protocolVersionStr === 'v3' || protocolVersionStr === 'V3' || protocolVersion === ProtocolVersion.V3
+    const isV3Protocol =
+      protocolVersionStr === 'v3' || protocolVersionStr === 'V3' || protocolVersion === ProtocolVersion.V3
 
     const result = isOnChainEnabled && isV3Protocol
 
@@ -499,8 +511,9 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
 
   // STEP 3: Fully disable Trading API approvals on on-chain enabled chains
   // Use isOnChainEnabled (not just useOnChainV3) to ensure Trading API is never called
-  const approvalQueryEnabled = !isOnChainEnabled && !!addLiquidityApprovalParams && !inputError && !transactionError && !invalidRange
-  
+  const approvalQueryEnabled =
+    !isOnChainEnabled && !!addLiquidityApprovalParams && !inputError && !transactionError && !invalidRange
+
   // Dev-only: log approval query status
   if (process.env.NODE_ENV !== 'production') {
     console.log('[CreatePositionTxContext] Approval query enabled check', {
@@ -514,7 +527,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
       protocolVersion: protocolVersion.toString(),
     })
   }
-  
+
   // Use on-chain approval check when on-chain router is enabled
   const onChainApproval = useOnChainLpApproval({
     amount0: currencyAmounts?.TOKEN0,
@@ -543,41 +556,48 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   })
 
   // Helper to build ERC20 approve transaction request for on-chain path
-  const buildOnChainApprovalTxRequest = useCallback((
-    token: Currency | undefined,
-    spender: string | undefined,
-    chainId: number | undefined,
-  ): TradingApi.TransactionRequest | undefined => {
-    if (!token || !spender || !chainId || token.isNative) {
-      return undefined
-    }
-
-    try {
-      const tokenAddress = token.address as `0x${string}`
-      const spenderAddress = spender as `0x${string}`
-      
-      // Encode approve(spender, MaxUint256) calldata
-      // Convert MaxUint256 (JSBI) to bigint for viem
-      const maxUint256BigInt = BigInt(MaxUint256.toString())
-      const data = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: 'approve',
-        args: [spenderAddress, maxUint256BigInt],
-      })
-
-      return {
-        to: tokenAddress,
-        data,
-        value: '0x0',
-        chainId,
-      } as TradingApi.TransactionRequest
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[CreatePositionTxContext] Failed to build approval tx request', { token: token.address, spender, error })
+  const buildOnChainApprovalTxRequest = useCallback(
+    (
+      token: Currency | undefined,
+      spender: string | undefined,
+      chainId: number | undefined,
+    ): TradingApi.TransactionRequest | undefined => {
+      if (!token || !spender || !chainId || token.isNative) {
+        return undefined
       }
-      return undefined
-    }
-  }, [])
+
+      try {
+        const tokenAddress = token.address as `0x${string}`
+        const spenderAddress = spender as `0x${string}`
+
+        // Encode approve(spender, MaxUint256) calldata
+        // Convert MaxUint256 (JSBI) to bigint for viem
+        const maxUint256BigInt = BigInt(MaxUint256.toString())
+        const data = encodeFunctionData({
+          abi: erc20Abi,
+          functionName: 'approve',
+          args: [spenderAddress, maxUint256BigInt],
+        })
+
+        return {
+          to: tokenAddress,
+          data,
+          value: '0x0',
+          chainId,
+        } as TradingApi.TransactionRequest
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[CreatePositionTxContext] Failed to build approval tx request', {
+            token: token.address,
+            spender,
+            error,
+          })
+        }
+        return undefined
+      }
+    },
+    [],
+  )
 
   // Get Position Manager address for approvals
   const positionManagerAddress = useMemo(() => {
@@ -585,15 +605,18 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
       return undefined
     }
     const chainId = TOKEN0.chainId as EVMUniverseChainId
-    
+
     // Try Agroswap addresses first
     if (chainId === 84532) {
-      const address = AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[chainId as keyof typeof AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES]
+      const address =
+        AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[
+          chainId as keyof typeof AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES
+        ]
       if (address) {
         return address
       }
     }
-    
+
     // Fall back to v3Addresses
     return getPositionManagerAddress(chainId)
   }, [TOKEN0?.chainId])
@@ -603,13 +626,15 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   const approvalCalldata = useMemo(() => {
     if (isOnChainEnabled) {
       // Build approval transaction requests for tokens that need approval
-      const token0Approval = onChainApproval.needsApproval0 && currencyAmounts?.TOKEN0 && positionManagerAddress
-        ? buildOnChainApprovalTxRequest(currencyAmounts.TOKEN0.currency, positionManagerAddress, TOKEN0?.chainId)
-        : undefined
-      
-      const token1Approval = onChainApproval.needsApproval1 && currencyAmounts?.TOKEN1 && positionManagerAddress
-        ? buildOnChainApprovalTxRequest(currencyAmounts.TOKEN1.currency, positionManagerAddress, TOKEN1?.chainId)
-        : undefined
+      const token0Approval =
+        onChainApproval.needsApproval0 && currencyAmounts?.TOKEN0 && positionManagerAddress
+          ? buildOnChainApprovalTxRequest(currencyAmounts.TOKEN0.currency, positionManagerAddress, TOKEN0?.chainId)
+          : undefined
+
+      const token1Approval =
+        onChainApproval.needsApproval1 && currencyAmounts?.TOKEN1 && positionManagerAddress
+          ? buildOnChainApprovalTxRequest(currencyAmounts.TOKEN1.currency, positionManagerAddress, TOKEN1?.chainId)
+          : undefined
 
       const result = {
         token0Approval,
@@ -643,7 +668,16 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
       return result
     }
     return tradingApiApprovalCalldata
-  }, [isOnChainEnabled, onChainApproval, tradingApiApprovalCalldata, currencyAmounts, positionManagerAddress, TOKEN0?.chainId, TOKEN1?.chainId, buildOnChainApprovalTxRequest])
+  }, [
+    isOnChainEnabled,
+    onChainApproval,
+    tradingApiApprovalCalldata,
+    currencyAmounts,
+    positionManagerAddress,
+    TOKEN0?.chainId,
+    TOKEN1?.chainId,
+    buildOnChainApprovalTxRequest,
+  ])
 
   // STEP 3: LP approval must use only on-chain logic on on-chain chains
   // Force usingOnChainLpApproval to be true when isOnChainEnabled is true
@@ -659,8 +693,8 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   // Values coming from Trading API (for non on-chain chains only)
   const tradingApiNeedsApproval0 = tradingApiApprovalCalldata?.token0Approval !== undefined
   const tradingApiNeedsApproval1 = tradingApiApprovalCalldata?.token1Approval !== undefined
-  const tradingApiApprovalState0 = tradingApiNeedsApproval0 ? 'NOT_APPROVED' as const : 'APPROVED' as const
-  const tradingApiApprovalState1 = tradingApiNeedsApproval1 ? 'NOT_APPROVED' as const : 'APPROVED' as const
+  const tradingApiApprovalState0 = tradingApiNeedsApproval0 ? ('NOT_APPROVED' as const) : ('APPROVED' as const)
+  const tradingApiApprovalState1 = tradingApiNeedsApproval1 ? ('NOT_APPROVED' as const) : ('APPROVED' as const)
 
   // Derive effective approval states from the correct source
   const effectiveNeedsApproval0 = isOnChainEnabled ? onChainNeedsApproval0 : tradingApiNeedsApproval0
@@ -684,7 +718,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
       effectiveApprovalState0,
       effectiveApprovalState1,
     })
-    
+
     // Log final approval state after mapping
     console.log('[CreatePositionTxContext] Final approval state', {
       chainId: TOKEN0?.chainId,
@@ -863,35 +897,43 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   // Dev-only: log amounts being passed to useV3MintPosition
   if (process.env.NODE_ENV !== 'production' && useOnChainV3) {
     console.log('[CreatePositionTxContext] Passing amounts to useV3MintPosition', {
-      TOKEN0: TOKEN0 ? {
-        address: TOKEN0.address,
-        symbol: TOKEN0.symbol,
-        decimals: TOKEN0.decimals,
-      } : undefined,
-      TOKEN1: TOKEN1 ? {
-        address: TOKEN1.address,
-        symbol: TOKEN1.symbol,
-        decimals: TOKEN1.decimals,
-      } : undefined,
-      amount0Desired: currencyAmounts?.TOKEN0 ? {
-        raw: currencyAmounts.TOKEN0.quotient.toString(),
-        human: currencyAmounts.TOKEN0.toExact(),
-        currency: currencyAmounts.TOKEN0.currency.symbol,
-        decimals: currencyAmounts.TOKEN0.currency.decimals,
-      } : undefined,
-      amount1Desired: currencyAmounts?.TOKEN1 ? {
-        raw: currencyAmounts.TOKEN1.quotient.toString(),
-        human: currencyAmounts.TOKEN1.toExact(),
-        currency: currencyAmounts.TOKEN1.currency.symbol,
-        decimals: currencyAmounts.TOKEN1.currency.decimals,
-      } : undefined,
+      TOKEN0: TOKEN0
+        ? {
+            address: TOKEN0.address,
+            symbol: TOKEN0.symbol,
+            decimals: TOKEN0.decimals,
+          }
+        : undefined,
+      TOKEN1: TOKEN1
+        ? {
+            address: TOKEN1.address,
+            symbol: TOKEN1.symbol,
+            decimals: TOKEN1.decimals,
+          }
+        : undefined,
+      amount0Desired: currencyAmounts?.TOKEN0
+        ? {
+            raw: currencyAmounts.TOKEN0.quotient.toString(),
+            human: currencyAmounts.TOKEN0.toExact(),
+            currency: currencyAmounts.TOKEN0.currency.symbol,
+            decimals: currencyAmounts.TOKEN0.currency.decimals,
+          }
+        : undefined,
+      amount1Desired: currencyAmounts?.TOKEN1
+        ? {
+            raw: currencyAmounts.TOKEN1.quotient.toString(),
+            human: currencyAmounts.TOKEN1.toExact(),
+            currency: currencyAmounts.TOKEN1.currency.symbol,
+            decimals: currencyAmounts.TOKEN1.currency.decimals,
+          }
+        : undefined,
       slippageTolerance: {
         numerator: slippageTolerancePercent.numerator.toString(),
         denominator: slippageTolerancePercent.denominator.toString(),
         percent: slippageTolerancePercent.toFixed(2),
       },
       creatingPoolOrPair,
-      mockPoolSqrtPrice: v3PoolForPosition?.sqrtRatioX96?.toString(),
+      mockPoolSqrtPrice: v3PoolForPosition?.sqrtRatioX96.toString(),
     })
   }
 
@@ -941,7 +983,8 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     creatingPoolOrPair,
     pool: v3PoolForPosition ?? v3MockPoolForInit,
     accountAddress: account?.address, // Pass account address for transaction simulation
-    enabled: useOnChainV3 && preliminaryIsQueryEnabled && !!feeAmount && ticks[0] !== undefined && ticks[1] !== undefined,
+    enabled:
+      useOnChainV3 && preliminaryIsQueryEnabled && !!feeAmount && ticks[0] !== undefined && ticks[1] !== undefined,
   })
 
   // Check if we have a pool-not-found error that should disable mint
@@ -984,7 +1027,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     params: disableTradingApi ? undefined : createCalldataQueryParams,
     deadlineInMinutes: disableTradingApi ? undefined : customDeadline,
     // Hard guard: completely disable query when on-chain is enabled
-    enabled: disableTradingApi ? false : (isQueryEnabled && !disableTradingApi),
+    enabled: disableTradingApi ? false : isQueryEnabled && !disableTradingApi,
     refetchInterval: false, // Always disable refetch interval
     retry: false,
     refetchOnMount: false,
@@ -1025,17 +1068,8 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
       return
     }
 
-    setRefetch(() =>
-      approvalError ? approvalRefetch : finalCreateError ? createRefetch : undefined,
-    )
-  }, [
-    useOnChainV3,
-    approvalError,
-    approvalRefetch,
-    finalCreateError,
-    createRefetch,
-    setRefetch,
-  ])
+    setRefetch(() => (approvalError ? approvalRefetch : finalCreateError ? createRefetch : undefined))
+  }, [useOnChainV3, approvalError, approvalRefetch, finalCreateError, createRefetch, setRefetch])
 
   // STEP 4: Make transactionError ignore Trading API errors on on-chain enabled chains
   useEffect(() => {
@@ -1043,27 +1077,30 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     // When isOnChainEnabled is true, approvalError and createError from Trading API should be ignored
     // Only on-chain errors should set transactionError
     const effectiveApprovalError = isOnChainEnabled ? undefined : approvalError
-    
+
     // For on-chain path, only use errors from on-chain mint hook
     // Extract user-friendly error message from structured error if available
-    let effectiveCreateError: Error | undefined = undefined
+    let effectiveCreateError: Error | undefined
     if (isOnChainEnabled) {
       if (onChainMintPosition.error) {
         const error = onChainMintPosition.error as any
-        
+
         // Check for structured pool-not-found errors (thrown early, before mint attempt)
         if (error?.code === 'POOL_NOT_FOUND' || error?.code === 'POOL_NOT_INITIALIZED') {
           effectiveCreateError = error
-          
+
           // Dev-only: log that mint is disabled due to pool not found
           if (process.env.NODE_ENV !== 'production') {
-            console.debug('[CreatePositionTxContext] on-chain mint disabled: pool not found for this pair/fee on chain', {
-              chainId: TOKEN0?.chainId,
-              token0: error.token0,
-              token1: error.token1,
-              fee: error.fee,
-              code: error.code,
-            })
+            console.debug(
+              '[CreatePositionTxContext] on-chain mint disabled: pool not found for this pair/fee on chain',
+              {
+                chainId: TOKEN0?.chainId,
+                token0: error.token0,
+                token1: error.token1,
+                fee: error.fee,
+                code: error.code,
+              },
+            )
           }
         } else if (error.poolDiagnostics || error.tickDiagnostics || error.amountDiagnostics) {
           // Use the user-friendly error message from structured error
@@ -1076,7 +1113,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     } else {
       effectiveCreateError = finalCreateError
     }
-    
+
     // Dev-only: log transaction error resolution
     if (process.env.NODE_ENV !== 'production') {
       if (effectiveApprovalError || effectiveCreateError) {
@@ -1093,12 +1130,22 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
         })
       }
     }
-    
-    setTransactionError(getErrorMessageToDisplay({ 
-      approvalError: effectiveApprovalError, 
-      calldataError: effectiveCreateError 
-    }))
-  }, [approvalError, finalCreateError, isOnChainEnabled, useOnChainV3, onChainMintPosition.error, createError, TOKEN0?.chainId])
+
+    setTransactionError(
+      getErrorMessageToDisplay({
+        approvalError: effectiveApprovalError,
+        calldataError: effectiveCreateError,
+      }),
+    )
+  }, [
+    approvalError,
+    finalCreateError,
+    isOnChainEnabled,
+    useOnChainV3,
+    onChainMintPosition.error,
+    createError,
+    TOKEN0?.chainId,
+  ])
 
   if (finalCreateError) {
     try {
@@ -1140,7 +1187,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   // For on-chain enabled chains, use the on-chain approval check directly
   // Use effective values computed earlier to ensure consistency
   const needsApprovals = isOnChainEnabled
-    ? (effectiveNeedsApproval0 || effectiveNeedsApproval1)
+    ? effectiveNeedsApproval0 || effectiveNeedsApproval1
     : !!(
         approvalCalldata?.token0Approval ||
         approvalCalldata?.token1Approval ||
@@ -1171,8 +1218,8 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
   const txInfo = useMemo(() => {
     // Early return if tokens are not properly set - this is expected when user hasn't selected both tokens yet
     const hasBothTokens = !!TOKEN0 && !!TOKEN1
-    const hasBothCurrencyAmounts = !!currencyAmounts?.TOKEN0 && !!currencyAmounts?.TOKEN1
-    
+    const hasBothCurrencyAmounts = !!currencyAmounts?.TOKEN0 && !!currencyAmounts.TOKEN1
+
     // Only try to generate txInfo if we have both tokens and currency amounts
     // This prevents errors when user is still selecting tokens
     if (!hasBothTokens || !hasBothCurrencyAmounts) {
@@ -1202,16 +1249,20 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
           error: onChainMintPosition.error,
         },
         hasCurrencyAmounts: hasBothCurrencyAmounts,
-        TOKEN0: TOKEN0 ? {
-          address: TOKEN0.isToken ? TOKEN0.address : 'native',
-          symbol: TOKEN0.symbol,
-          chainId: TOKEN0.chainId,
-        } : undefined,
-        TOKEN1: TOKEN1 ? {
-          address: TOKEN1.isToken ? TOKEN1.address : 'native',
-          symbol: TOKEN1.symbol,
-          chainId: TOKEN1.chainId,
-        } : undefined,
+        TOKEN0: TOKEN0
+          ? {
+              address: TOKEN0.isToken ? TOKEN0.address : 'native',
+              symbol: TOKEN0.symbol,
+              chainId: TOKEN0.chainId,
+            }
+          : undefined,
+        TOKEN1: TOKEN1
+          ? {
+              address: TOKEN1.isToken ? TOKEN1.address : 'native',
+              symbol: TOKEN1.symbol,
+              chainId: TOKEN1.chainId,
+            }
+          : undefined,
         approvalState: {
           needsApproval0: onChainApproval.needsApproval0,
           needsApproval1: onChainApproval.needsApproval1,

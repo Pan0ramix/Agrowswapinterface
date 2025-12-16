@@ -155,8 +155,8 @@ export function generateLPTransactionSteps(txContext: LiquidityTxAndGasInfo): Tr
             console.log('[generateLPTransactionSteps] Using on-chain path (direct txRequest)', {
               type: txContext.type,
               hasTxRequest: !!txContext.txRequest,
-              txRequestChainId: txContext.txRequest?.chainId,
-              txRequestTo: txContext.txRequest?.to,
+              txRequestChainId: txContext.txRequest.chainId,
+              txRequestTo: txContext.txRequest.to,
             })
           }
           const steps = orderIncreaseLiquiditySteps({
@@ -176,7 +176,7 @@ export function generateLPTransactionSteps(txContext: LiquidityTxAndGasInfo): Tr
             console.log('[generateLPTransactionSteps] generated LP steps', {
               steps: steps.map((s) => ({
                 type: s.type,
-                chainId: 'txRequest' in s ? s.txRequest?.chainId : undefined,
+                chainId: 'txRequest' in s ? s.txRequest.chainId : undefined,
                 label: 'label' in s ? s.label : undefined,
                 hasApprovalToken0: !!approvalToken0,
                 hasApprovalToken1: !!approvalToken1,

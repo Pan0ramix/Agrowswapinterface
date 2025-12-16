@@ -97,3 +97,6 @@ For both directions (USDC→EURC and EURC→USDC):
 - [ ] Network cost shows value (not "—")
 - [ ] No Trading API calls (no 401 errors)
 - [ ] No runtime errors
+
+
+

@@ -1,10 +1,9 @@
-import { UniverseChainId } from 'uniswap/src/features/chains/types'
-import { RPCType } from 'uniswap/src/features/chains/types'
+import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
+import { RPCType, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { boundaryLog, boundaryLogDeduped } from 'uniswap/src/utils/boundaryLog'
 import type { PublicClient } from 'viem'
 import { createPublicClient, defineChain, http } from 'viem'
-import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
 
 export interface EstimateGasFeeParams {
   chainId: number
@@ -68,7 +67,7 @@ export async function estimateGasFee({
               error: error instanceof Error ? error.message : String(error),
             },
           },
-          chainId
+          chainId,
         )
         // Fall through to use default client
       }
@@ -110,7 +109,7 @@ export async function estimateGasFee({
     const gasLimit = await client.estimateGas(gasEstimateParams)
 
     // Get fee data (EIP-1559 or legacy)
-    let feeData: { maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint; gasPrice?: bigint } =
+    const feeData: { maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint; gasPrice?: bigint } =
       (await client.estimateFeesPerGas()) as {
         maxFeePerGas?: bigint
         maxPriorityFeePerGas?: bigint
@@ -132,7 +131,7 @@ export async function estimateGasFee({
               error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
             },
           },
-          chainId
+          chainId,
         )
       }
     }
@@ -172,7 +171,7 @@ export async function estimateGasFee({
           totalCostWei: totalCostWei.toString(),
         },
       },
-      chainId
+      chainId,
     )
 
     return result
@@ -188,7 +187,9 @@ export async function estimateGasFee({
     // Classify tx type for diagnostic
     const isApprovalLike =
       selector === '0x095ea7b3' || // ERC20 approve(address,uint256)
-      (txTo && (txTo === '0x000000000022d473030f116ddee9f6b43ac78ba3' || txTo === '0x000000000022D473030F116dDEE9F6B43aC78BA3')) // Permit2
+      (txTo &&
+        (txTo === '0x000000000022d473030f116ddee9f6b43ac78ba3' ||
+          txTo === '0x000000000022D473030F116dDEE9F6B43aC78BA3')) // Permit2
     const isSwapLike =
       txTo &&
       (txTo === '0xfbe90a25e523e7e668cc2da97bed21d8fb0bda26' || // Agroswap Swap Router
@@ -197,7 +198,7 @@ export async function estimateGasFee({
 
     // Diagnostic log (temporary, minimal)
     if (chainId === 84532 && process.env.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
+       
       console.log('[ESTIMATE FAIL]', {
         chainId,
         to: txTo,
@@ -229,9 +230,8 @@ export async function estimateGasFee({
         ttlMs: 5000,
         minIntervalMs: 5000,
         keyParts: ['ESTIMATE-GAS-failed', chainId, txTo],
-      }
+      },
     )
     throw error
   }
 }
-

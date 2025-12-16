@@ -101,14 +101,16 @@ export function CurrencySearch({
   const handleCurrencySelectTokenSelectorCallback = useCallback(
     async ({ currency }: { currency: Currency }) => {
       console.error('[CurrencySearch] handleCurrencySelectTokenSelectorCallback CALLED', {
-        currency: currency ? {
-          address: currency.isToken ? currency.address : 'native',
-          symbol: currency.symbol,
-          chainId: currency.chainId,
-        } : 'UNDEFINED',
+        currency: currency
+          ? {
+              address: currency.isToken ? currency.address : 'native',
+              symbol: currency.symbol,
+              chainId: currency.chainId,
+            }
+          : 'UNDEFINED',
         isMultichainContext,
       })
-      
+
       if (!isMultichainContext) {
         console.error('[CurrencySearch] Not multichain context, selecting chain', { chainId: currency.chainId })
         const correctChain = await selectChain(currency.chainId)
@@ -118,13 +120,15 @@ export function CurrencySearch({
           return
         }
       }
-      
+
       console.error('[CurrencySearch] Calling onCurrencySelect', {
-        currency: currency ? {
-          address: currency.isToken ? currency.address : 'native',
-          symbol: currency.symbol,
-          chainId: currency.chainId,
-        } : 'UNDEFINED',
+        currency: currency
+          ? {
+              address: currency.isToken ? currency.address : 'native',
+              symbol: currency.symbol,
+              chainId: currency.chainId,
+            }
+          : 'UNDEFINED',
       })
       // Call onCurrencySelect - it will handle resetting the modal state by setting currencySearchInputState to undefined
       // Don't call onDismiss here to avoid race condition - let handleCurrencySelect reset the state first

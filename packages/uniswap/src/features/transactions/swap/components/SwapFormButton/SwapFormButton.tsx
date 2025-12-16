@@ -12,10 +12,10 @@ import { useOnReviewPress } from 'uniswap/src/features/transactions/swap/compone
 import { useSwapFormButtonColors } from 'uniswap/src/features/transactions/swap/components/SwapFormButton/hooks/useSwapFormButtonColors'
 import { useSwapFormButtonText } from 'uniswap/src/features/transactions/swap/components/SwapFormButton/hooks/useSwapFormButtonText'
 import { SwapFormButtonTrace } from 'uniswap/src/features/transactions/swap/components/SwapFormButton/SwapFormButtonTrace'
-import { TestID } from 'uniswap/src/test/fixtures/testIDs'
-import { useEvent } from 'utilities/src/react/hooks'
 import { useSwapFormStoreDerivedSwapInfo } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
+import { TestID } from 'uniswap/src/test/fixtures/testIDs'
 import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
+import { useEvent } from 'utilities/src/react/hooks'
 
 export const SWAP_BUTTON_TEXT_VARIANT = 'buttonLabel1'
 
@@ -71,7 +71,7 @@ export function SwapFormButton({ tokenColor }: { tokenColor?: string }): JSX.Ele
                         tags: { file: 'SwapFormButton', function: 'onPressIn' },
                         extra: { chainId, disabled },
                       },
-                      chainId
+                      chainId,
                     )
                   }
                 : undefined

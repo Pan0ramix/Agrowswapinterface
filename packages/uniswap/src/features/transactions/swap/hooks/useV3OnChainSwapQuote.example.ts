@@ -1,28 +1,28 @@
 /**
  * Example: V3 On-Chain Swap Quote Hook
- * 
+ *
  * This is an EXAMPLE implementation showing how to use the on-chain V3 services
  * to replace Trading API quote/swap endpoints.
- * 
+ *
  * TODO: Integrate this into the actual swap flow by:
  * 1. Using this hook in useDerivedSwapInfo for V3 single-pool swaps
  * 2. Updating useTransactionRequestInfo to use the txPayload from this hook
  * 3. Enabling Review button when txPayload is available
  */
 
-import { Currency, CurrencyAmount, Percent, Token } from '@uniswap/sdk-core'
+import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
 import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { logger } from 'utilities/src/logger/logger'
 import {
-  fetchV3PoolState,
-  quoteExactInputSingle,
   buildExactInputSingleSwapTx,
   calculateAmountOutMinimum,
+  fetchV3PoolState,
   getDeadline,
   parseQuoteError,
-} from '../../services/v3OnChain'
-import { logger } from 'utilities/src/logger/logger'
+  quoteExactInputSingle,
+} from 'uniswap/src/features/transactions/services/v3OnChain'
 
 /**
  * Hook parameters
@@ -35,9 +35,11 @@ interface UseV3OnChainSwapQuoteParams {
   slippageTolerance: Percent
   chainId: EVMUniverseChainId | undefined
   recipient: string | undefined
-  provider: {
-    call: (params: { to: string; data: string }) => Promise<string>
-  } | undefined
+  provider:
+    | {
+        call: (params: { to: string; data: string }) => Promise<string>
+      }
+    | undefined
 }
 
 /**
@@ -47,34 +49,34 @@ interface UseV3OnChainSwapQuoteResult {
   // Quote data
   quoteAmountOut: CurrencyAmount<Currency> | undefined
   priceImpact: Percent | undefined
-  
+
   // Transaction payload
-  txPayload: {
-    to: string
-    data: string
-    value: string
-  } | undefined
-  
+  txPayload:
+    | {
+        to: string
+        data: string
+        value: string
+      }
+    | undefined
+
   // State
   isLoading: boolean
   error: string | undefined
-  
+
   // Pool state
   poolState: 'loading' | 'exists' | 'not-exists' | 'error'
 }
 
 /**
  * Example hook implementation
- * 
+ *
  * NOTE: This is a simplified example. In production, you'd want to:
  * - Use React Query for caching and refetching
  * - Handle loading states more granularly
  * - Add retry logic
  * - Debounce rapid changes
  */
-export function useV3OnChainSwapQuoteExample(
-  params: UseV3OnChainSwapQuoteParams,
-): UseV3OnChainSwapQuoteResult {
+export function useV3OnChainSwapQuoteExample(params: UseV3OnChainSwapQuoteParams): UseV3OnChainSwapQuoteResult {
   const { tokenIn, tokenOut, amountIn, fee, slippageTolerance, chainId, recipient, provider } = params
 
   // Fetch pool state and quote
@@ -122,18 +124,12 @@ export function useV3OnChainSwapQuoteExample(
         provider,
       })
 
-      const quoteAmountOut = CurrencyAmount.fromRawAmount(
-        tokenOut,
-        quoteResult.amountOut,
-      )
+      const quoteAmountOut = CurrencyAmount.fromRawAmount(tokenOut, quoteResult.amountOut)
 
       // Step 3: Calculate price impact (simplified - compare to mid price)
       const midPrice = poolState.pool.token0Price // or token1Price depending on direction
       const executionPrice = quoteAmountOut.divide(amountIn)
-      const priceImpact = new Percent(
-        executionPrice.subtract(midPrice).numerator,
-        midPrice.denominator,
-      ).multiply('-1') // Negative because we're buying the output token
+      const priceImpact = new Percent(executionPrice.subtract(midPrice).numerator, midPrice.denominator).multiply('-1') // Negative because we're buying the output token
 
       // Step 4: Calculate minimum amount out with slippage
       const amountOutMinimum = calculateAmountOutMinimum(quoteAmountOut, slippageTolerance)
@@ -161,7 +157,7 @@ export function useV3OnChainSwapQuoteExample(
       }
     } catch (error) {
       const errorMessage = parseQuoteError(error)
-      
+
       logger.error(error, {
         tags: {
           file: 'useV3OnChainSwapQuote',
@@ -200,28 +196,24 @@ export function useV3OnChainSwapQuoteExample(
 
 /**
  * TODO: Integration Steps
- * 
+ *
  * 1. Replace useTrade hook in useDerivedSwapInfo.ts:
  *    - Check if swap is single-pool V3
  *    - If yes, use useV3OnChainSwapQuote instead
  *    - Fall back to useTrade for multi-hop or other routing
- * 
+ *
  * 2. Update useTransactionRequestInfo.ts:
  *    - Check if txPayload is available from on-chain hook
  *    - Use it directly instead of calling Trading API
  *    - Keep existing flow for other routing types
- * 
+ *
  * 3. Update SwapFormButton:
  *    - Enable Review button when txPayload exists
  *    - Show loading state while fetching quote
  *    - Display error messages from on-chain failures
- * 
+ *
  * 4. Update SwapReviewScreen:
  *    - Use txPayload to build transaction
  *    - Show quoteAmountOut and priceImpact
  *    - Submit transaction directly to wallet
  */
-
-
-
-

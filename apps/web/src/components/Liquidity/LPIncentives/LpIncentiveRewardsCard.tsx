@@ -103,7 +103,7 @@ function LpIncentiveRewardsCard({
 
       return {
         lpIncentiveRewards: formatTokenAmount(rewards, token.decimals),
-        userHasRewards: BigInt(rewards) >= threshold, // Returns true if rewards are at least 0.001 UNI
+        userHasRewards: BigInt(rewards) >= threshold, // Returns true if rewards are at least 0.001 AGX
         isParseRewardsError: false,
       }
     } catch (e) {

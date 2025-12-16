@@ -84,7 +84,7 @@ export default function ClaimPopup() {
                 }}
               />{' '}
               <Text variant="heading2" color="white" mt="$spacing16">
-                {unclaimedAmount?.toFixed(0, { groupSeparator: ',' }) ?? '-'} UNI
+                {unclaimedAmount?.toFixed(0, { groupSeparator: ',' }) ?? '-'} AGX
               </Text>
               <Text variant="subheading2" color="white" mt="$spacing20">
                 <span role="img" aria-label="party">

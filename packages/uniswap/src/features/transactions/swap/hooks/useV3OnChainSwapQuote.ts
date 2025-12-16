@@ -1,27 +1,27 @@
 /**
  * V3 On-Chain Swap Quote Hook
- * 
+ *
  * Fetches swap quotes and builds transaction payloads using pure on-chain V3 operations.
  * This replaces Trading API quote/swap endpoints for single-pool V3 swaps.
  */
 
+import { skipToken, useQuery } from '@tanstack/react-query'
 import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
 import { FeeAmount, Pool } from '@uniswap/v3-sdk'
-import { skipToken, useQuery, type UseQueryResult } from '@tanstack/react-query'
-import { PublicClient } from 'viem'
 import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import {
-  fetchV3PoolState,
-  quoteExactInputSingle,
-  buildExactInputSingleSwapTx,
-  calculateAmountOutMinimum,
-  getDeadline,
-  parseQuoteError,
-  type V3QuoteResult,
-} from '../services/v3OnChain'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { logger } from 'utilities/src/logger/logger'
+import {
+  buildExactInputSingleSwapTx,
+  calculateAmountOutMinimum,
+  fetchV3PoolState,
+  getDeadline,
+  parseQuoteError,
+  quoteExactInputSingle,
+  type V3QuoteResult,
+} from 'uniswap/src/features/transactions/swap/services/v3OnChain'
+
 // Using a string directly instead of enum to avoid adding to cache.ts
 const V3_ON_CHAIN_SWAP_QUOTE_CACHE_KEY = 'V3OnChainSwapQuote'
 
@@ -46,21 +46,21 @@ interface V3SwapQuoteResult {
   // Quote data
   quoteAmountOut: CurrencyAmount<Currency>
   quoteResult: V3QuoteResult
-  
+
   // Pool state
   pool: Pool
   poolState: 'exists'
-  
+
   // Price impact (simplified calculation)
   priceImpact: Percent | undefined
-  
+
   // Transaction payload
   txPayload: {
     to: string
     data: string
     value: string
   }
-  
+
   // Minimum amount out with slippage
   amountOutMinimum: CurrencyAmount<Currency>
 }
@@ -72,30 +72,32 @@ interface UseV3OnChainSwapQuoteReturn {
   // Quote data
   quoteAmountOut: CurrencyAmount<Currency> | undefined
   priceImpact: Percent | undefined
-  
+
   // Transaction payload
-  txPayload: {
-    to: string
-    data: string
-    value: string
-  } | undefined
-  
+  txPayload:
+    | {
+        to: string
+        data: string
+        value: string
+      }
+    | undefined
+
   // State
   isLoading: boolean
   isError: boolean
   error: Error | null
-  
+
   // Pool state
   poolState: 'loading' | 'exists' | 'not-exists' | 'error'
   pool: Pool | undefined
-  
+
   // Raw data
   data: V3SwapQuoteResult | undefined
 }
 
 /**
  * React hook for fetching V3 on-chain swap quotes
- * 
+ *
  * @example
  * ```tsx
  * const { quoteAmountOut, txPayload, isLoading, error } = useV3OnChainSwapQuote({
@@ -109,19 +111,8 @@ interface UseV3OnChainSwapQuoteReturn {
  * })
  * ```
  */
-export function useV3OnChainSwapQuote(
-  params: UseV3OnChainSwapQuoteParams,
-): UseV3OnChainSwapQuoteReturn {
-  const {
-    tokenIn,
-    tokenOut,
-    amountIn,
-    fee,
-    slippageTolerance,
-    chainId,
-    recipient,
-    enabled = true,
-  } = params
+export function useV3OnChainSwapQuote(params: UseV3OnChainSwapQuoteParams): UseV3OnChainSwapQuoteReturn {
+  const { tokenIn, tokenOut, amountIn, fee, slippageTolerance, chainId, recipient, enabled = true } = params
 
   // Get viem public client
   const publicClient = useMemo(() => {
@@ -148,15 +139,7 @@ export function useV3OnChainSwapQuote(
 
   // Query function
   const queryFn = useMemo(() => {
-    if (
-      !tokenIn ||
-      !tokenOut ||
-      !amountIn ||
-      !fee ||
-      !chainId ||
-      !recipient ||
-      !publicClient
-    ) {
+    if (!tokenIn || !tokenOut || !amountIn || !fee || !chainId || !recipient || !publicClient) {
       return skipToken
     }
 
@@ -194,9 +177,7 @@ export function useV3OnChainSwapQuote(
         try {
           const executionPrice = quoteAmountOut.divide(amountIn)
           const isTokenInToken0 = tokenIn.wrapped.sortsBefore(tokenOut.wrapped)
-          const currentPrice = isTokenInToken0
-            ? poolState.pool.token0Price
-            : poolState.pool.token1Price
+          const currentPrice = isTokenInToken0 ? poolState.pool.token0Price : poolState.pool.token1Price
 
           const priceDiff = executionPrice.subtract(currentPrice)
           priceImpact = new Percent(priceDiff.numerator, currentPrice.denominator).multiply('-1')
@@ -235,7 +216,7 @@ export function useV3OnChainSwapQuote(
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
         const parsedError = parseQuoteError(error)
-        
+
         logger.error(error, {
           tags: {
             file: 'useV3OnChainSwapQuote',
@@ -253,24 +234,10 @@ export function useV3OnChainSwapQuote(
         throw new Error(parsedError)
       }
     }
-  }, [
-    tokenIn,
-    tokenOut,
-    amountIn,
-    fee,
-    slippageTolerance,
-    chainId,
-    recipient,
-    publicClient,
-  ])
+  }, [tokenIn, tokenOut, amountIn, fee, slippageTolerance, chainId, recipient, publicClient])
 
   // Execute query
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-  } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey,
     queryFn,
     enabled: enabled && !!queryFn && queryFn !== skipToken,
@@ -306,4 +273,3 @@ export function useV3OnChainSwapQuote(
     data,
   }
 }
-

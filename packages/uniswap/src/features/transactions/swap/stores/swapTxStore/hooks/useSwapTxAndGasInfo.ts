@@ -1,6 +1,6 @@
 import { TradingApi } from '@universe/api'
 import { useMemo, useRef } from 'react'
-import { logger } from 'utilities/src/logger/logger'
+import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
 import { useTokenApprovalInfo } from 'uniswap/src/features/transactions/swap/review/hooks/useTokenApprovalInfo'
 import { getUniswapXSwapTxAndGasInfo } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/uniswapx/utils'
 import {
@@ -10,13 +10,13 @@ import {
   getWrapTxAndGasInfo,
   usePermitTxInfo,
 } from 'uniswap/src/features/transactions/swap/review/services/swapTxAndGasInfoService/utils'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { useTransactionRequestInfo } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/hooks/useTransactionRequestInfo'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import type { SwapTxAndGasInfo } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
 import { AccountDetails } from 'uniswap/src/features/wallet/types/AccountDetails'
 import { CurrencyField } from 'uniswap/src/types/currency'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
+import { logger } from 'utilities/src/logger/logger'
 
 /** @deprecated Delete when ServiceBasedSwapTransactionInfo is fully rolled out */
 export function useSwapTxAndGasInfo({
@@ -26,13 +26,8 @@ export function useSwapTxAndGasInfo({
   derivedSwapInfo: DerivedSwapInfo
   account?: AccountDetails
 }): SwapTxAndGasInfo {
-  const {
-    chainId,
-    wrapType,
-    currencyAmounts,
-    trade: tradeState,
-  } = derivedSwapInfo
-  const trade = tradeState?.trade
+  const { chainId, wrapType, currencyAmounts, trade: tradeState } = derivedSwapInfo
+  const trade = tradeState.trade
 
   // Get router address for on-chain-only chains to pass to approval check
   const routerAddress = useMemo(() => {
@@ -78,7 +73,7 @@ export function useSwapTxAndGasInfo({
         ttlMs: 15000,
         minIntervalMs: 3000,
         keyParts: ['TX-H04', chainId, !!trade, !!trade?.quote],
-      }
+      },
     )
   }
 
@@ -102,7 +97,7 @@ export function useSwapTxAndGasInfo({
         ttlMs: 15000,
         minIntervalMs: 3000,
         keyParts: ['TX-H05', chainId, !!permitTxInfo.permitTxRequest],
-      }
+      },
     )
   }
 

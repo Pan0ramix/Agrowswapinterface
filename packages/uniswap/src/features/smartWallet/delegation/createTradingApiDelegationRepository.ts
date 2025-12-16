@@ -26,10 +26,10 @@ export function createTradingApiDelegationRepository(ctx: {
    */
   const getWalletDelegations: DelegationRepository['getWalletDelegations'] = async (input) => {
     const result: ChainDelegationDetails = {}
-    
+
     // Filter out on-chain-only chains (Trading API disabled for these)
     const filteredChainIds = input.chainIds.filter((chainId) => !isOnChainOnlyChain(chainId))
-    
+
     // If all chains are on-chain-only, return empty result
     if (filteredChainIds.length === 0) {
       for (const chainId of input.chainIds) {
@@ -37,7 +37,7 @@ export function createTradingApiDelegationRepository(ctx: {
       }
       return result
     }
-    
+
     try {
       const response = await ctx.tradingApiClient.checkWalletDelegation({
         walletAddresses: [input.address],
@@ -53,7 +53,7 @@ export function createTradingApiDelegationRepository(ctx: {
           result[String(chainId)] = null
           continue
         }
-        
+
         const delegationDetails = walletDelegationDetails?.[chainId]
         if (delegationDetails) {
           result[String(chainId)] = {

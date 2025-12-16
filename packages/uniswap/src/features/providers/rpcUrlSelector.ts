@@ -111,7 +111,7 @@ export function selectRpcUrl(chainId: UniverseChainId, rpcType: RPCType = RPCTyp
               ttlMs: 10000,
               minIntervalMs: 10000,
               keyParts: ['Selected-Public-RPC', chainId, rpcType],
-            }
+            },
           )
         }
         return { rpcUrl: publicRPCUrl }

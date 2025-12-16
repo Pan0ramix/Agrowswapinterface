@@ -231,8 +231,8 @@ export function useSwapFormScreenCallbacks({
     // Determine which amount to preserve based on the field switch direction
     // When switching from INPUT to OUTPUT: preserve current exactAmountToken (old INPUT) as new OUTPUT
     // When switching from OUTPUT to INPUT: preserve formattedDerivedValueRef (old OUTPUT) as new INPUT
-    let newExactAmountToken: string | undefined = undefined
-    
+    let newExactAmountToken: string | undefined
+
     if (!isFiatMode) {
       if (exactOutputWouldFailIfCurrenciesSwitched && exactFieldIsInput) {
         // Special case: force exact field to INPUT, preserve derived value
@@ -245,7 +245,7 @@ export function useSwapFormScreenCallbacks({
         newExactAmountToken = formattedDerivedValueRef.current
       }
       // If switching from INPUT to INPUT (cross-chain case) or OUTPUT to OUTPUT, don't preserve (let it recalculate)
-        }
+    }
 
     updateSwapForm({
       exactCurrencyField: newExactCurrencyField,

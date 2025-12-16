@@ -2,11 +2,10 @@ import { PartialMessage } from '@bufbuild/protobuf'
 import { GetPortfolioResponse } from '@uniswap/client-data-api/dist/data/v1/api_pb.d'
 import { Balance } from '@uniswap/client-data-api/dist/data/v1/types_pb'
 import { CurrencyAmount, NativeCurrency, Token } from '@uniswap/sdk-core'
-import { nativeOnChain } from 'uniswap/src/constants/tokens'
 import { TradingApi } from '@universe/api'
-import { DEFAULT_NATIVE_ADDRESS_LEGACY } from 'uniswap/src/features/chains/evm/defaults'
 import { getNativeAddress } from 'uniswap/src/constants/addresses'
 import { fetchTokenByAddress, searchTokenToCurrencyInfo } from 'uniswap/src/data/rest/searchTokensAndPools'
+import { DEFAULT_NATIVE_ADDRESS_LEGACY } from 'uniswap/src/features/chains/evm/defaults'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { getPrimaryStablecoin } from 'uniswap/src/features/chains/utils'
 import { isSVMChain } from 'uniswap/src/features/platforms/utils/chains'
@@ -18,7 +17,6 @@ import {
 import { getCurrencyAmount, ValueType } from 'uniswap/src/features/tokens/getCurrencyAmount'
 import { SolanaToken } from 'uniswap/src/features/tokens/SolanaToken'
 import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { isOnChainDebug } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
 import { toTradingApiSupportedChainId } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
 import { CurrencyId } from 'uniswap/src/types/currency'
 import { areAddressesEqual } from 'uniswap/src/utils/addresses'
@@ -365,7 +363,7 @@ async function resolveCurrency({
         nativeCurrency = nativeOnChain(chainId)
       } catch {
         // Fallback: try NativeCurrency.onChain if available
-        if (typeof NativeCurrency?.onChain === 'function') {
+        if (typeof NativeCurrency.onChain === 'function') {
           nativeCurrency = NativeCurrency.onChain(chainId)
         } else {
           // Last resort: construct from chain metadata
@@ -378,7 +376,7 @@ async function resolveCurrency({
           }
         }
       }
-      
+
       return {
         currency: nativeCurrency.wrapped,
         tokenInfo: null,

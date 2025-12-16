@@ -1,6 +1,6 @@
 /**
  * Candidate Route Generation
- * 
+ *
  * Generates all possible routing paths for swaps, including Carbon token routing.
  * Supports 4 routing cases:
  * 1. Normal tokens (neither is Carbon)
@@ -11,10 +11,10 @@
 
 import { Currency, Token } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { WRAPPED_NATIVE_CURRENCY } from 'uniswap/src/constants/tokens'
-import { getCarbonCounterpartToken } from './getCounterpartToken'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { PublicClient } from 'viem'
+import { getCarbonCounterpartToken } from 'uniswap/src/features/transactions/swap/services/onchainRouter/getCounterpartToken'
 
 /**
  * Represents a single hop in a route
@@ -389,7 +389,7 @@ async function generateCarbonToCarbonRoutes(
 
 /**
  * Generate all candidate routes for a swap
- * 
+ *
  * @param tokenIn - Input token
  * @param tokenOut - Output token
  * @param chainId - Chain ID
@@ -417,7 +417,7 @@ export async function generateCandidateRoutes(
   if (!isTokenInCarbon && !isTokenOutCarbon) {
     // Add direct route
     const directRoutes = await generateNormalTokenRoutes(tokenIn, tokenOut, fees)
-    
+
     // Add two-hop via WETH
     const weth = getWrappedNativeCurrency(chainId)
     const twoHopRoutes: CandidateRoute[] = []
@@ -495,4 +495,3 @@ export async function generateCandidateRoutes(
   // Should never reach here
   return []
 }
-

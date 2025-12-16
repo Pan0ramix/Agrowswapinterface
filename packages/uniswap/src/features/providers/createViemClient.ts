@@ -33,7 +33,7 @@ export function createViemClient({
       chainId === UniverseChainId.BaseSepolia &&
       (rpcType === RPCType.Public || rpcType === RPCType.Default || rpcType === RPCType.Fallback)
     if (shouldForcePublic) {
-      const primaryPublic = chainInfo.rpcUrls?.[RPCType.Public]?.http?.[0]
+      const primaryPublic = chainInfo.rpcUrls[RPCType.Public]?.http[0]
       if (primaryPublic && primaryPublic !== effectiveRpcUrl) {
         effectiveRpcUrl = primaryPublic
         if (process.env.NODE_ENV !== 'production') {
@@ -72,7 +72,7 @@ export function createViemClient({
 
     // Attach the effective RPC URL for downstream logging/labeling when viem transport does not expose it.
     try {
-      ;(client as any).__agroswapEffectiveRpcUrl = effectiveRpcUrl
+      (client as any).__agroswapEffectiveRpcUrl = effectiveRpcUrl
     } catch {
       // ignore
     }
@@ -94,7 +94,7 @@ export function createViemClient({
           maxPerWindow: 1,
           windowMs: 5000,
           includeKeys: ['chainId', 'rpcType', 'rpcLabel'],
-        }
+        },
       )
     }
 

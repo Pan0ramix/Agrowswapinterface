@@ -1,30 +1,30 @@
+import { useQuery } from '@tanstack/react-query'
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
 import { TradingApi } from '@universe/api'
+import type { providers } from 'ethers/lib/ethers'
+import { Interface } from 'ethers/lib/utils'
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
 import { useUniswapContextSelector } from 'uniswap/src/contexts/UniswapContext'
 import { useCheckApprovalQuery } from 'uniswap/src/data/apiClients/tradingApi/useCheckApprovalQuery'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { convertGasFeeToDisplayValue, useActiveGasStrategy } from 'uniswap/src/features/gas/hooks'
 import { GasFeeResult } from 'uniswap/src/features/gas/types'
+import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
+import {
+  isOnChainOnlyChain,
+  isOnChainRouterEnabled,
+} from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { ApprovalAction, TokenApprovalInfo } from 'uniswap/src/features/transactions/swap/types/trade'
 import { isUniswapX } from 'uniswap/src/features/transactions/swap/utils/routing'
 import {
   getTokenAddressForApi,
   toTradingApiSupportedChainId,
 } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
-import {
-  isOnChainOnlyChain,
-  isOnChainRouterEnabled,
-} from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { WrapType } from 'uniswap/src/features/transactions/types/wrap'
 import { AccountDetails } from 'uniswap/src/features/wallet/types/AccountDetails'
-import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
 import { logger } from 'utilities/src/logger/logger'
 import { ONE_MINUTE_MS, ONE_SECOND_MS } from 'utilities/src/time/time'
-import { Interface } from 'ethers/lib/utils'
-import type { providers } from 'ethers/lib/ethers'
 
 export interface TokenApprovalInfoParams {
   chainId: UniverseChainId
@@ -182,14 +182,7 @@ export function useTokenApprovalInfo(params: TokenApprovalInfoParams): ApprovalT
     isLoading: isAllowanceLoading,
     error: allowanceError,
   } = useQuery({
-    queryKey: [
-      'onchain-allowance',
-      chainId,
-      address,
-      tokenInAddress,
-      spenderAddress,
-      amount,
-    ],
+    queryKey: ['onchain-allowance', chainId, address, tokenInAddress, spenderAddress, amount],
     queryFn: async () => {
       if (!publicClient || !address || !tokenInAddress || !spenderAddress || !amount || currencyIn?.isNative) {
         return null
@@ -229,13 +222,7 @@ export function useTokenApprovalInfo(params: TokenApprovalInfoParams): ApprovalT
       }
     },
     enabled: Boolean(
-      isOnChainOnly &&
-      publicClient &&
-      address &&
-      tokenInAddress &&
-      spenderAddress &&
-      amount &&
-      !currencyIn?.isNative,
+      isOnChainOnly && publicClient && address && tokenInAddress && spenderAddress && amount && !currencyIn?.isNative,
     ),
     staleTime: 10_000, // 10 seconds
     gcTime: 30_000, // 30 seconds
@@ -332,14 +319,19 @@ export function useTokenApprovalInfo(params: TokenApprovalInfoParams): ApprovalT
       if (allowanceError || !onChainAllowance) {
         // If we can't check allowance, assume approval is needed for safety
         if (onChainApprovalTxRequest) {
-          logger.debug('useTokenApprovalInfo', 'onChainApprovalNeeded', '[SWAP-STEPS] on-chain approval needed (allowance check failed)', {
-            chainId,
-            token: tokenInAddress,
-            spender: spenderAddress,
-            hasApprovalTxRequest: !!onChainApprovalTxRequest,
-            approvalTxRequestTo: onChainApprovalTxRequest.to,
-            approvalTxRequestDataLen: (onChainApprovalTxRequest.data as string | undefined)?.length,
-          })
+          logger.debug(
+            'useTokenApprovalInfo',
+            'onChainApprovalNeeded',
+            '[SWAP-STEPS] on-chain approval needed (allowance check failed)',
+            {
+              chainId,
+              token: tokenInAddress,
+              spender: spenderAddress,
+              hasApprovalTxRequest: !!onChainApprovalTxRequest,
+              approvalTxRequestTo: onChainApprovalTxRequest.to,
+              approvalTxRequestDataLen: (onChainApprovalTxRequest.data as string | undefined)?.length,
+            },
+          )
           return {
             // NOTE: ApprovalAction.Permit2Approve is used for all ERC20 approvals in this codebase,
             // including direct router approvals (not just Permit2 contract approvals).
@@ -358,16 +350,21 @@ export function useTokenApprovalInfo(params: TokenApprovalInfoParams): ApprovalT
 
       if (!onChainAllowance.isSufficient) {
         if (onChainApprovalTxRequest) {
-          logger.debug('useTokenApprovalInfo', 'onChainApprovalNeeded', '[SWAP-STEPS] on-chain approval needed (allowance insufficient)', {
-            chainId,
-            token: tokenInAddress,
-            spender: spenderAddress,
-            allowance: onChainAllowance.allowance.toString(),
-            required: onChainAllowance.required.toString(),
-            hasApprovalTxRequest: !!onChainApprovalTxRequest,
-            approvalTxRequestTo: onChainApprovalTxRequest.to,
-            approvalTxRequestDataLen: (onChainApprovalTxRequest.data as string | undefined)?.length,
-          })
+          logger.debug(
+            'useTokenApprovalInfo',
+            'onChainApprovalNeeded',
+            '[SWAP-STEPS] on-chain approval needed (allowance insufficient)',
+            {
+              chainId,
+              token: tokenInAddress,
+              spender: spenderAddress,
+              allowance: onChainAllowance.allowance.toString(),
+              required: onChainAllowance.required.toString(),
+              hasApprovalTxRequest: !!onChainApprovalTxRequest,
+              approvalTxRequestTo: onChainApprovalTxRequest.to,
+              approvalTxRequestDataLen: (onChainApprovalTxRequest.data as string | undefined)?.length,
+            },
+          )
           return {
             // NOTE: ApprovalAction.Permit2Approve is used for all ERC20 approvals in this codebase,
             // including direct router approvals (not just Permit2 contract approvals).
@@ -504,7 +501,9 @@ export function useTokenApprovalInfo(params: TokenApprovalInfoParams): ApprovalT
       unknownApproval && !isLoading && !isAllowanceLoading
         ? new Error('Approval action unknown')
         : allowanceError
-          ? new Error(`Allowance check failed: ${allowanceError instanceof Error ? allowanceError.message : String(allowanceError)}`)
+          ? new Error(
+              `Allowance check failed: ${allowanceError instanceof Error ? allowanceError.message : String(allowanceError)}`,
+            )
           : null
 
     return {

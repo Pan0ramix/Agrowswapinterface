@@ -143,7 +143,7 @@ export const SearchModalList = memo(function _SearchModalList({
         )
       case OnchainItemListOptionType.Token:
         // Guard against partially populated currencyInfo when token metadata fails to load
-        if (!item.currencyInfo?.currency) {
+        if (!item.currencyInfo.currency) {
           return <></>
         }
         return (
@@ -326,8 +326,8 @@ function key(item: SearchModalOption): string {
     case OnchainItemListOptionType.Token:
       // Guard against partially populated currencyInfo when token metadata fails to load
       // Prefer currencyId; fall back to address/symbol to avoid null deref.
-      return `token-${item.chainId ?? item.currencyInfo?.currency?.chainId ?? 'unknown'}-${
-        item.currencyInfo?.currencyId ?? item.address ?? item.currencyInfo?.currency?.symbol ?? 'unknown'
+      return `token-${item.chainId ?? item.currencyInfo.currency.chainId ?? 'unknown'}-${
+        item.currencyInfo.currencyId ?? item.address ?? item.currencyInfo.currency.symbol ?? 'unknown'
       }`
     case OnchainItemListOptionType.WalletByAddress:
       return `wallet-${item.address}`

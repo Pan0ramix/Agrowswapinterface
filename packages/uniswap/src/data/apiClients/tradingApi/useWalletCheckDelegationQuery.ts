@@ -18,15 +18,15 @@ export function useWalletCheckDelegationQuery({
   TradingApi.WalletCheckDelegationResponseBody
 >): UseQueryResult<TradingApi.WalletCheckDelegationResponseBody> {
   // Gate Trading API for on-chain-only chains
-  const hasOnChainOnlyChain = params?.chainIds?.some((chainId) => isOnChainOnlyChain(chainId))
+  const hasOnChainOnlyChain = params?.chainIds.some((chainId) => isOnChainOnlyChain(chainId))
   const shouldDisable = hasOnChainOnlyChain || !params
 
   const queryKey = walletCheckDelegationQueryKey(params)
 
   return useQuery<TradingApi.WalletCheckDelegationResponseBody>({
     queryKey,
-    queryFn: shouldDisable ? skipToken : (params ? walletCheckDelegationQueryFn(params) : skipToken),
-    enabled: !shouldDisable && (rest.enabled !== false),
+    queryFn: shouldDisable ? skipToken : params ? walletCheckDelegationQueryFn(params) : skipToken,
+    enabled: !shouldDisable && rest.enabled !== false,
     ...rest,
   })
 }

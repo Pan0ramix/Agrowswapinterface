@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { Token } from '@uniswap/sdk-core'
 import { GqlResult } from '@universe/api'
-import { PublicClient, erc20Abi } from 'viem'
+import { useWagmiStoreReady } from 'hooks/useWagmiStoreReady'
+import { erc20Abi, PublicClient } from 'viem'
 import { useChainId } from 'wagmi'
-import { useWagmiStoreReady } from './useWagmiStoreReady'
 
 /**
  * Safe wrapper for useChainId that handles cases where wagmi store isn't ready
@@ -12,7 +12,7 @@ import { useWagmiStoreReady } from './useWagmiStoreReady'
  */
 function useSafeChainId(): number | undefined {
   const isStoreReady = useWagmiStoreReady()
-  
+
   // Hook must be called unconditionally (React rules)
   // But we check store readiness to handle errors gracefully
   try {
@@ -22,7 +22,10 @@ function useSafeChainId(): number | undefined {
   } catch (error) {
     // If wagmi store isn't ready, return undefined
     // This can happen during SSR or when wagmi provider isn't set up yet
-    if (error instanceof Error && (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('getSnapshot') || error.message.includes('length') || error.message.includes('undefined'))
+    ) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[useSafeChainId] Wagmi store not ready, returning undefined', error)
       }
@@ -32,17 +35,17 @@ function useSafeChainId(): number | undefined {
     throw error
   }
 }
+
 import { getTokensAsync } from 'components/AccountDrawer/MiniPortfolio/Pools/getTokensAsync'
 // Removed useAccount import - using useChainId directly to avoid getSnapshot errors when wagmi store isn't ready
 import { useInterfaceMulticall } from 'hooks/useContract'
 import { useMemo } from 'react'
 import { RPCType, UniverseChainId } from 'uniswap/src/features/chains/types'
-import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { useSearchTokens } from 'uniswap/src/features/dataApi/searchTokens'
 import { CurrencyInfo } from 'uniswap/src/features/dataApi/types'
 import { buildCurrency, buildCurrencyInfo } from 'uniswap/src/features/dataApi/utils/buildCurrency'
-import { Platform } from 'uniswap/src/features/platforms/types/Platform'
 import { isEVMChain } from 'uniswap/src/features/platforms/utils/chains'
+import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { getValidAddress } from 'uniswap/src/utils/addresses'
 import { currencyId } from 'uniswap/src/utils/currencyId'
 import { DEFAULT_ERC20_DECIMALS } from 'utilities/src/tokens/constants'
@@ -64,21 +67,27 @@ async function fetchTokenDirectlyFromRPC({
   try {
     // Use viem's readContract to fetch token data
     const [name, symbol, decimals] = await Promise.all([
-      publicClient.readContract({
-        address: address as `0x${string}`,
-        abi: erc20Abi,
-        functionName: 'name',
-      }).catch(() => null),
-      publicClient.readContract({
-        address: address as `0x${string}`,
-        abi: erc20Abi,
-        functionName: 'symbol',
-      }).catch(() => null),
-      publicClient.readContract({
-        address: address as `0x${string}`,
-        abi: erc20Abi,
-        functionName: 'decimals',
-      }).catch(() => null),
+      publicClient
+        .readContract({
+          address: address as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'name',
+        })
+        .catch(() => null),
+      publicClient
+        .readContract({
+          address: address as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'symbol',
+        })
+        .catch(() => null),
+      publicClient
+        .readContract({
+          address: address as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'decimals',
+        })
+        .catch(() => null),
     ])
 
     if (!name && !symbol) {
@@ -118,7 +127,7 @@ export function useSearchTokensWithFallback({
   // Get active chain ID from wallet connection
   // Use safe chainId wrapper to avoid errors when wagmi store isn't ready
   const wagmiChainId = useSafeChainId()
-  
+
   // Use chainId directly - this is more reliable than useAccount which can fail if store isn't ready
   const activeChainId = wagmiChainId ? (wagmiChainId as UniverseChainId) : null
 
@@ -137,7 +146,7 @@ export function useSearchTokensWithFallback({
 
   // Must call hooks unconditionally - useInterfaceMulticall will handle undefined chainId gracefully
   const multicall = useInterfaceMulticall(effectiveChainFilter ?? undefined)
-  
+
   // Use viem PublicClient - prefer wallet-connected client, fallback to public RPC
   // This ensures we can fetch tokens even when wallet isn't connected
   const publicClient = useMemo(() => {
@@ -220,7 +229,7 @@ export function useSearchTokensWithFallback({
     // 2. API search returned an error (e.g., 401 Unauthorized, network error)
     const hasApiResults = apiSearchResult.data && apiSearchResult.data.length > 0
     const hasApiError = !!apiSearchResult.error
-    
+
     // If API has an error, trigger fallback immediately (don't wait for loading to finish)
     if (hasApiError) {
       console.log('[useSearchTokensWithFallback] API error detected, triggering on-chain fallback', {
@@ -230,7 +239,7 @@ export function useSearchTokensWithFallback({
       })
       return true
     }
-    
+
     // Wait for API to finish loading before deciding
     if (apiSearchResult.loading) {
       return false
@@ -238,7 +247,7 @@ export function useSearchTokensWithFallback({
 
     // If API finished loading but returned no results, trigger fallback
     const shouldFallback = !hasApiResults
-    
+
     if (shouldFallback) {
       console.log('[useSearchTokensWithFallback] API returned no results, triggering on-chain fallback', {
         searchQuery,
@@ -248,7 +257,15 @@ export function useSearchTokensWithFallback({
     }
 
     return shouldFallback
-  }, [skip, searchQuery, effectiveChainFilter, apiSearchResult.loading, apiSearchResult.data, apiSearchResult.error, publicClient])
+  }, [
+    skip,
+    searchQuery,
+    effectiveChainFilter,
+    apiSearchResult.loading,
+    apiSearchResult.data,
+    apiSearchResult.error,
+    publicClient,
+  ])
 
   // Try to fetch token from chain if API search failed
   const onChainTokenQuery = useQuery({
@@ -380,7 +397,7 @@ export function useSearchTokensWithFallback({
   }, [apiSearchResult.data, onChainTokenQuery.data])
 
   const loading = apiSearchResult.loading || (shouldTryFallback && onChainTokenQuery.isPending)
-  
+
   // Only show API error if we don't have on-chain results
   // If we successfully fetched the token on-chain, ignore the API error
   const error = combinedResults.length > 0 ? undefined : apiSearchResult.error

@@ -1,22 +1,26 @@
 import { PoolSortFields } from 'appGraphql/data/pools/useTopPools'
 import { OrderDirection } from 'appGraphql/data/util'
-import { ExploreStatsResponse, PoolStats, ExplorerStats } from '@uniswap/client-explore/dist/uniswap/explore/v1/service_pb'
 import { ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
+import {
+  ExplorerStats,
+  ExploreStatsResponse,
+  PoolStats,
+} from '@uniswap/client-explore/dist/uniswap/explore/v1/service_pb'
 import { ALL_NETWORKS_ARG } from '@universe/api'
 import { FeatureFlags, useFeatureFlag } from '@universe/gating'
 import { ExternalArrowLink } from 'components/Liquidity/ExternalArrowLink'
 import { PositionInfo } from 'components/Liquidity/types'
+import { NATIVE_CHAIN_ID } from 'constants/tokens'
 import { useAccount } from 'hooks/useAccount'
 import { TopPoolsSection } from 'pages/Positions/TopPoolsSection'
-import { useTranslation } from 'react-i18next'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useTopPools } from 'state/explore/topPools'
 import { Flex, useMedia } from 'ui/src'
-import { useExploreStatsQuery } from 'uniswap/src/data/rest/exploreStats'
 import { useAgroswapPoolsQuery } from 'uniswap/src/data/rest/agroswapPools'
+import { useExploreStatsQuery } from 'uniswap/src/data/rest/exploreStats'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { toGraphQLChain } from 'uniswap/src/features/chains/utils'
-import { NATIVE_CHAIN_ID } from 'constants/tokens'
 
 const MAX_BOOSTED_POOLS = 3
 
@@ -34,7 +38,7 @@ function extractPoolsFromPositions(
 
   // Get unique pools by poolId, aggregating liquidity from all positions in the same pool
   const poolMap = new Map<string, { position: PositionInfo; totalToken0: number; totalToken1: number }>()
-  
+
   positions.forEach((position) => {
     if (position.chainId === chainId && position.poolId && position.version === ProtocolVersion.V3) {
       const existing = poolMap.get(position.poolId)
@@ -68,10 +72,10 @@ function extractPoolsFromPositions(
     const estimatedTvlUSD = totalToken0 + totalToken1
 
     // Handle native tokens correctly - use NATIVE_CHAIN_ID for native, actual address for tokens
-    const token0Address = position.currency0Amount?.currency.isToken
+    const token0Address = position.currency0Amount.currency.isToken
       ? position.currency0Amount.currency.address
       : NATIVE_CHAIN_ID
-    const token1Address = position.currency1Amount?.currency.isToken
+    const token1Address = position.currency1Amount.currency.isToken
       ? position.currency1Amount.currency.address
       : NATIVE_CHAIN_ID
 
@@ -83,16 +87,16 @@ function extractPoolsFromPositions(
       token0: {
         chain: graphQLChain,
         address: token0Address,
-        symbol: position.currency0Amount?.currency.symbol || '',
-        name: position.currency0Amount?.currency.name || '',
-        decimals: position.currency0Amount?.currency.decimals || 18,
+        symbol: position.currency0Amount.currency.symbol || '',
+        name: position.currency0Amount.currency.name || '',
+        decimals: position.currency0Amount.currency.decimals || 18,
       },
       token1: {
         chain: graphQLChain,
         address: token1Address,
-        symbol: position.currency1Amount?.currency.symbol || '',
-        name: position.currency1Amount?.currency.name || '',
-        decimals: position.currency1Amount?.currency.decimals || 18,
+        symbol: position.currency1Amount.currency.symbol || '',
+        name: position.currency1Amount.currency.name || '',
+        decimals: position.currency1Amount.currency.decimals || 18,
       },
       totalLiquidity: {
         currency: 'USD',
@@ -128,11 +132,12 @@ export function TopPools({ chainId, positions }: { chainId: UniverseChainId | nu
   // When chainId is null, default to Base Sepolia for Agroswap
   const effectiveChainId = chainId ?? UniverseChainId.BaseSepolia
   const isBaseSepolia = effectiveChainId === UniverseChainId.BaseSepolia
-  
+
   const agroswapQuery = useAgroswapPoolsQuery({ chainId: effectiveChainId, enabled: isBaseSepolia })
+  // Disable Uniswap query when using Base Sepolia - we only use our Agroswap factory contract pools
   const uniswapQuery = useExploreStatsQuery<ExploreStatsResponse>({
     input: { chainId: chainId ? chainId.toString() : ALL_NETWORKS_ARG },
-    enabled: !isBaseSepolia,
+    enabled: !isBaseSepolia, // Disabled for Base Sepolia - never load Uniswap data for our factory contract chains
   })
 
   // Extract pools from user positions as fallback
@@ -143,17 +148,21 @@ export function TopPools({ chainId, positions }: { chainId: UniverseChainId | nu
     return undefined
   }, [isBaseSepolia, positions, effectiveChainId])
 
-  // Always prefer Agroswap data when available for Base Sepolia, fallback to positions, then Uniswap
+  // Always prefer Agroswap data when available for Base Sepolia, fallback to positions only
+  // NEVER use Uniswap data for Base Sepolia - only use our factory contract pools
   const exploreStatsData = useMemo(() => {
     if (isBaseSepolia) {
-      // Priority: Agroswap query > Positions fallback > Uniswap
+      // Priority: Agroswap query > Positions fallback (NO Uniswap fallback)
       if (agroswapQuery.data && agroswapQuery.data.stats?.poolStats && agroswapQuery.data.stats.poolStats.length > 0) {
         return agroswapQuery.data
       }
       if (positionsFallback) {
         return positionsFallback
       }
+      // Return undefined instead of falling back to Uniswap
+      return undefined
     }
+    // Only return Uniswap data for non-Base-Sepolia chains
     return uniswapQuery.data
   }, [isBaseSepolia, agroswapQuery.data, positionsFallback, uniswapQuery.data])
 
@@ -170,8 +179,8 @@ export function TopPools({ chainId, positions }: { chainId: UniverseChainId | nu
     console.log('[TopPools] Base Sepolia pools:', {
       hasData: !!exploreStatsData,
       stats: exploreStatsData?.stats,
-      poolStatsCount: exploreStatsData?.stats?.poolStats?.length,
-      poolStatsV3Count: exploreStatsData?.stats?.poolStatsV3?.length,
+      poolStatsCount: exploreStatsData?.stats?.poolStats.length,
+      poolStatsV3Count: exploreStatsData?.stats?.poolStatsV3.length,
       topPoolsCount: topPools?.length,
       isLoading: exploreStatsLoading,
       error: exploreStatsError,
@@ -205,9 +214,9 @@ export function TopPools({ chainId, positions }: { chainId: UniverseChainId | nu
       )}
       {/* Always show Top Pools section - will show loading state if no pools yet */}
       <Flex gap="$gap20">
-        <TopPoolsSection 
-          title={t('pool.top.tvl')} 
-          pools={topPools || []} 
+        <TopPoolsSection
+          title={t('pool.top.tvl')}
+          pools={topPools || []}
           isLoading={exploreStatsLoading}
           showEmptyState={true}
         />

@@ -1,12 +1,15 @@
-import { useQuery, UseQueryResult } from '@tanstack/react-query'
 import { ConnectError } from '@connectrpc/connect'
-import { ExploreStatsResponse, PoolStats, ExplorerStats } from '@uniswap/client-explore/dist/uniswap/explore/v1/service_pb'
-import { UniverseChainId } from 'uniswap/src/features/chains/types'
-import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { RPCType } from 'uniswap/src/features/chains/types'
+import { UseQueryResult, useQuery } from '@tanstack/react-query'
+import {
+  ExplorerStats,
+  ExploreStatsResponse,
+  PoolStats,
+} from '@uniswap/client-explore/dist/uniswap/explore/v1/service_pb'
 import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
+import { RPCType, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { toGraphQLChain } from 'uniswap/src/features/chains/utils'
-import { queryFactoryPools, queryPoolsFromSubgraph, OnChainPoolData } from './agroswapPoolsOnChain'
+import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
+import { OnChainPoolData, queryFactoryPools, queryPoolsFromSubgraph } from 'uniswap/src/data/rest/agroswapPoolsOnChain'
 
 /**
  * Configuration flag to switch between on-chain and subgraph queries
@@ -40,7 +43,8 @@ export function useAgroswapPoolsQuery({
         throw new Error('Chain ID is required')
       }
 
-      const factoryAddress = AGROSWAP_V3_CORE_FACTORY_ADDRESSES[queryChainId as keyof typeof AGROSWAP_V3_CORE_FACTORY_ADDRESSES]
+      const factoryAddress =
+        AGROSWAP_V3_CORE_FACTORY_ADDRESSES[queryChainId as keyof typeof AGROSWAP_V3_CORE_FACTORY_ADDRESSES]
       if (!factoryAddress) {
         throw new Error(`Factory address not found for chain ${queryChainId}`)
       }
@@ -63,21 +67,6 @@ export function useAgroswapPoolsQuery({
       } else {
         // Query on-chain from factory contract
         pools = await queryFactoryPools(publicClient, factoryAddress as `0x${string}`, queryChainId)
-      }
-
-      // Debug logging
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[useAgroswapPoolsQuery] Fetched pools:', {
-          chainId: queryChainId,
-          poolsCount: pools.length,
-          pools: pools.slice(0, 3).map(p => ({
-            address: p.poolAddress,
-            token0: p.token0.symbol,
-            token1: p.token1.symbol,
-            tvlUSD: p.tvlUSD,
-            volume24hUSD: p.volume24hUSD,
-          })),
-        })
       }
 
       // Convert on-chain pool data to ExploreStatsResponse format
@@ -126,15 +115,6 @@ export function useAgroswapPoolsQuery({
       const response = new ExploreStatsResponse({
         stats,
       })
-
-      // Debug logging
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[useAgroswapPoolsQuery] Created response:', {
-          hasStats: !!response.stats,
-          poolStatsCount: response.stats?.poolStats?.length,
-          poolStatsV3Count: response.stats?.poolStatsV3?.length,
-        })
-      }
 
       return response
     },

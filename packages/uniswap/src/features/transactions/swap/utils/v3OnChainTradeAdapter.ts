@@ -1,15 +1,13 @@
 /**
  * V3 On-Chain Trade Adapter
- * 
+ *
  * Converts on-chain V3 quotes into a format compatible with the existing trade system.
  * This allows on-chain quotes to work seamlessly with existing swap UI components.
  */
 
 import { Currency, CurrencyAmount, Percent, Price, TradeType } from '@uniswap/sdk-core'
 import { FeeAmount, Pool, Route } from '@uniswap/v3-sdk'
-import { ClassicTrade } from 'uniswap/src/features/transactions/swap/types/trade'
 import { TradingApi } from '@universe/api'
-import { ZERO_PERCENT } from '@uniswap/router-sdk'
 
 /**
  * Creates a trade-like object from on-chain V3 quote data
@@ -156,7 +154,7 @@ export function createV3OnChainTradeLike(
 /**
  * Helper to determine if we should use on-chain quotes
  * For now, only for Base Sepolia single-pool V3 swaps
- * 
+ *
  * TODO: Add feature flag support:
  * ```typescript
  * import { useFeatureFlag } from '@universe/gating'
@@ -205,4 +203,3 @@ export function shouldUseV3OnChainQuote({
 
   return true
 }
-

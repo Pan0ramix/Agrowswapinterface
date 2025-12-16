@@ -1,25 +1,26 @@
-import { TradingApi } from '@universe/api'
 import { Percent } from '@uniswap/sdk-core'
+import { TradingApi } from '@universe/api'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Flex, HeightAnimator, Text, TouchableArea } from 'ui/src'
 import type { Warning } from 'uniswap/src/components/modals/WarningModal/types'
 import type { CurrencyInfo } from 'uniswap/src/features/dataApi/types'
 import type { GasFeeResult } from 'uniswap/src/features/gas/types'
+import { useLocalizationContext } from 'uniswap/src/features/language/LocalizationContext'
 import { EstimatedSwapTime } from 'uniswap/src/features/transactions/swap/components/EstimatedBridgeTime'
 import { MaxSlippageRow } from 'uniswap/src/features/transactions/swap/components/MaxSlippageRow/MaxSlippageRow'
 import { PriceImpactRow } from 'uniswap/src/features/transactions/swap/components/PriceImpactRow/PriceImpactRow'
 import { RoutingInfo } from 'uniswap/src/features/transactions/swap/components/RoutingInfo'
 import { SwapRateRatio } from 'uniswap/src/features/transactions/swap/components/SwapRateRatio'
 import { useIsUnichainFlashblocksEnabled } from 'uniswap/src/features/transactions/swap/hooks/useIsUnichainFlashblocksEnabled'
-import { usePriceUXEnabled } from 'uniswap/src/features/transactions/swap/hooks/usePriceUXEnabled'
 import { useOnChainSwapDetails } from 'uniswap/src/features/transactions/swap/hooks/useOnChainSwapDetails'
-import { useSwapReviewTransactionStore } from 'uniswap/src/features/transactions/swap/review/stores/swapReviewTransactionStore/useSwapReviewTransactionStore'
+import { usePriceUXEnabled } from 'uniswap/src/features/transactions/swap/hooks/usePriceUXEnabled'
 import { AcceptNewQuoteRow } from 'uniswap/src/features/transactions/swap/review/SwapDetails/AcceptNewQuoteRow'
-import { useLocalizationContext } from 'uniswap/src/features/language/LocalizationContext'
-import { formatPriceImpact } from 'uniswap/src/features/transactions/swap/utils/formatPriceImpact'
+import { useSwapReviewTransactionStore } from 'uniswap/src/features/transactions/swap/review/stores/swapReviewTransactionStore/useSwapReviewTransactionStore'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import type { UniswapXGasBreakdown } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
+import { formatPriceImpact } from 'uniswap/src/features/transactions/swap/utils/formatPriceImpact'
 import { getSwapFeeUsdFromDerivedSwapInfo } from 'uniswap/src/features/transactions/swap/utils/getSwapFeeUsd'
 import { isBridge, isChained } from 'uniswap/src/features/transactions/swap/utils/routing'
 import { TransactionDetails } from 'uniswap/src/features/transactions/TransactionDetails/TransactionDetails'
@@ -29,7 +30,6 @@ import type {
 } from 'uniswap/src/features/transactions/TransactionDetails/types'
 import { CurrencyField } from 'uniswap/src/types/currency'
 import { isMobileApp, isMobileWeb } from 'utilities/src/platform'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 
 interface SwapDetailsProps {
   acceptedDerivedSwapInfo: DerivedSwapInfo<CurrencyInfo, CurrencyInfo>
@@ -72,23 +72,25 @@ export function SwapDetails({
   const priceUxEnabled = usePriceUXEnabled()
   const { t } = useTranslation()
   const { formatPercent } = useLocalizationContext()
-  
+
   // Get swapTxContext from store to access approveTxRequest
   const swapTxContext = useSwapReviewTransactionStore((s) => s.swapTxContext)
-  const approveTxRequest = swapTxContext?.approveTxRequest
-  
+  const approveTxRequest = swapTxContext.approveTxRequest
+
   // Compute on-chain swap details for on-chain-only chains
-  const chainId = acceptedDerivedSwapInfo?.chainId
+  const chainId = acceptedDerivedSwapInfo.chainId
   const isOnChainOnly = chainId ? isOnChainOnlyChain(chainId) : false
   const { data: onChainDetails } = useOnChainSwapDetails({
     derivedSwapInfo: acceptedDerivedSwapInfo,
-    approveTxRequest: approveTxRequest ? {
-      to: approveTxRequest.to as string,
-      data: approveTxRequest.data as string,
-    } : undefined,
-    enabled: isOnChainOnly && !!acceptedDerivedSwapInfo?.trade?.trade,
+    approveTxRequest: approveTxRequest
+      ? {
+          to: approveTxRequest.to as string,
+          data: approveTxRequest.data as string,
+        }
+      : undefined,
+    enabled: isOnChainOnly && !!acceptedDerivedSwapInfo.trade.trade,
   })
-  
+
   // State for rate toggle (on-chain-only swaps)
   const [showInverseRate, setShowInverseRate] = useState(false)
 
@@ -98,13 +100,13 @@ export function SwapDetails({
   // For on-chain-only swaps, use on-chain details directly instead of trade enrichment
   const baseTrade = derivedSwapInfo.trade.trade ?? derivedSwapInfo.trade.indicativeTrade
   const baseAcceptedTrade = acceptedDerivedSwapInfo.trade.trade ?? acceptedDerivedSwapInfo.trade.indicativeTrade
-  
+
   // Create enriched trades with on-chain details for on-chain-only swaps
   const trade = useMemo(() => {
     if (!baseTrade) {
       return baseTrade
     }
-    
+
     // For on-chain-only swaps, ensure executionPrice and priceImpact are set from on-chain details
     if (isOnChainOnly && onChainDetails) {
       const enrichedTrade = { ...baseTrade }
@@ -121,15 +123,15 @@ export function SwapDetails({
       }
       return enrichedTrade
     }
-    
+
     return baseTrade
   }, [baseTrade, isOnChainOnly, onChainDetails])
-  
+
   const acceptedTrade = useMemo(() => {
     if (!baseAcceptedTrade) {
       return baseAcceptedTrade
     }
-    
+
     // For on-chain-only swaps, ensure executionPrice and priceImpact are set from on-chain details
     if (isOnChainOnly && onChainDetails) {
       const enrichedTrade = { ...baseAcceptedTrade }
@@ -146,7 +148,7 @@ export function SwapDetails({
       }
       return enrichedTrade
     }
-    
+
     return baseAcceptedTrade
   }, [baseAcceptedTrade, isOnChainOnly, onChainDetails])
 
@@ -191,25 +193,27 @@ export function SwapDetails({
           displayValue: networkCost.gasFeeWei.toString(), // Will be formatted by NetworkFee component
           isLoading: false,
           error: null,
-          params: networkCost.maxFeePerGas && networkCost.maxPriorityFeePerGas && networkCost.gasLimit
-            ? {
-                maxFeePerGas: networkCost.maxFeePerGas.toString(),
-                maxPriorityFeePerGas: networkCost.maxPriorityFeePerGas.toString(),
-                gasLimit: networkCost.gasLimit.toString(),
-              }
-            : networkCost.gasLimit
+          params:
+            networkCost.maxFeePerGas && networkCost.maxPriorityFeePerGas && networkCost.gasLimit
               ? {
-                  gasPrice: '0', // Legacy format fallback
+                  maxFeePerGas: networkCost.maxFeePerGas.toString(),
+                  maxPriorityFeePerGas: networkCost.maxPriorityFeePerGas.toString(),
                   gasLimit: networkCost.gasLimit.toString(),
                 }
+              : networkCost.gasLimit
+                ? {
+                    gasPrice: '0', // Legacy format fallback
+                    gasLimit: networkCost.gasLimit.toString(),
+                  }
+                : undefined,
+          gasEstimate:
+            networkCost.gasLimit && networkCost.maxFeePerGas && networkCost.maxPriorityFeePerGas
+              ? ({
+                  gasLimit: networkCost.gasLimit.toString(),
+                  maxFeePerGas: networkCost.maxFeePerGas.toString(),
+                  maxPriorityFeePerGas: networkCost.maxPriorityFeePerGas.toString(),
+                } as any)
               : undefined,
-          gasEstimate: networkCost.gasLimit && networkCost.maxFeePerGas && networkCost.maxPriorityFeePerGas
-            ? {
-                gasLimit: networkCost.gasLimit.toString(),
-                maxFeePerGas: networkCost.maxFeePerGas.toString(),
-                maxPriorityFeePerGas: networkCost.maxPriorityFeePerGas.toString(),
-              } as any
-            : undefined,
         }
       }
     }
@@ -253,14 +257,14 @@ export function SwapDetails({
         onShowWarning={onShowWarning}
       >
         {/* Rate row - use on-chain details directly for on-chain-only swaps */}
-        {isOnChainOnly && onChainDetails?.rate?.forward ? (
+        {isOnChainOnly && onChainDetails?.rate.forward ? (
           <Flex row alignItems="center" justifyContent="space-between">
             <Text color="$neutral2" variant="body3">
               {t('swap.details.rate')}
             </Text>
             <TouchableArea onPress={() => setShowInverseRate(!showInverseRate)}>
               <Text color="$neutral1" variant="body3">
-                {showInverseRate ? (onChainDetails.rate.inverse || '—') : (onChainDetails.rate.forward || '—')}
+                {showInverseRate ? onChainDetails.rate.inverse || '—' : onChainDetails.rate.forward || '—'}
               </Text>
             </TouchableArea>
           </Flex>
@@ -284,8 +288,8 @@ export function SwapDetails({
           <RoutingInfo trade={acceptedTrade} gasFee={gasFee} chainId={acceptedTrade.inputAmount.currency.chainId} />
         )}
         {/* Price Impact row - use on-chain details directly for on-chain-only swaps */}
-        {!priceUxEnabled && (
-          isOnChainOnly && onChainDetails ? (
+        {!priceUxEnabled &&
+          (isOnChainOnly && onChainDetails ? (
             <>
               {onChainDetails.lpFeeBps !== null && onChainDetails.lpFeeBps > 0 && onChainDetails.lpFeeAmount && (
                 <Flex row alignItems="center" justifyContent="space-between">
@@ -297,29 +301,30 @@ export function SwapDetails({
                       const lpFee = new Percent(onChainDetails.lpFeeBps, 10000)
                       const feePercent = formatPercent(lpFee)
                       const feeAmount = onChainDetails.lpFeeAmount.toSignificant(6)
-                      return feeAmount && feePercent ? `${feeAmount} ${onChainDetails.lpFeeAmount.currency.symbol} (${feePercent})` : feePercent || '—'
+                      return feeAmount && feePercent
+                        ? `${feeAmount} ${onChainDetails.lpFeeAmount.currency.symbol} (${feePercent})`
+                        : feePercent || '—'
                     })()}
                   </Text>
                 </Flex>
               )}
-            <Flex row alignItems="center" justifyContent="space-between">
-              <Text color="$neutral2" variant="body3">
-                {t('swap.priceImpact')}
-              </Text>
-              <Text color="$neutral1" variant="body3">
-                {onChainDetails.priceImpactBps !== null 
-                  ? (() => {
-                      const priceImpact = new Percent(onChainDetails.priceImpactBps, 10000)
-                      return formatPriceImpact(priceImpact, formatPercent) || '—'
-                    })()
-                  : '—'}
-              </Text>
-            </Flex>
+              <Flex row alignItems="center" justifyContent="space-between">
+                <Text color="$neutral2" variant="body3">
+                  {t('swap.priceImpact')}
+                </Text>
+                <Text color="$neutral1" variant="body3">
+                  {onChainDetails.priceImpactBps !== null
+                    ? (() => {
+                        const priceImpact = new Percent(onChainDetails.priceImpactBps, 10000)
+                        return formatPriceImpact(priceImpact, formatPercent) || '—'
+                      })()
+                    : '—'}
+                </Text>
+              </Flex>
             </>
           ) : (
             <PriceImpactRow derivedSwapInfo={acceptedDerivedSwapInfo} />
-          )
-        )}
+          ))}
       </TransactionDetails>
     </HeightAnimator>
   )

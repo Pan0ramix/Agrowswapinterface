@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useContext, useMemo } from 'react'
+import { FiatCurrency } from 'uniswap/src/features/fiatCurrency/constants'
 // biome-ignore lint/style/noRestrictedImports: legacy import will be migrated
 import { useFiatConverter } from 'uniswap/src/features/fiatCurrency/conversion'
-import { FiatCurrency } from 'uniswap/src/features/fiatCurrency/constants'
 // biome-ignore lint/style/noRestrictedImports: legacy import will be migrated
 import { useLocalizedFormatter } from 'uniswap/src/features/language/formatter'
 
@@ -75,7 +75,7 @@ export const useLocalizationContext = (): LocalizationContextState => {
     // In development, log a warning but don't crash
     // In production, return a fallback to prevent app crashes
     if (process.env.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
+       
       console.warn(
         '`useLocalizationContext` called outside of `LocalizationContextProvider`. Using fallback. This may indicate a missing provider in the component tree.',
       )

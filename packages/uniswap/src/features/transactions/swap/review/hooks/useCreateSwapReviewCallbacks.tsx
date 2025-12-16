@@ -16,23 +16,21 @@ import {
 import type { GetExecuteSwapService } from 'uniswap/src/features/transactions/swap/services/executeSwapService'
 import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { useSwapDependenciesStore } from 'uniswap/src/features/transactions/swap/stores/swapDependenciesStore/useSwapDependenciesStore'
-import { useSwapTxStore } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/useSwapTxStore'
 import type { SwapFormState } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/types'
+import { useSwapTxStore } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/useSwapTxStore'
 import type { SetCurrentStepFn } from 'uniswap/src/features/transactions/swap/types/swapCallback'
+import {
+  isValidSwapTxContext,
+  validateSwapTxContextWithReasons,
+} from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
 import { isClassic } from 'uniswap/src/features/transactions/swap/utils/routing'
+import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
+import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
 import { createTransactionId } from 'uniswap/src/utils/createTransactionId'
+import { summarizeTrade, summarizeTxRequest, swapDebug, swapError } from 'uniswap/src/utils/swapDebug'
 import { tryCatch } from 'utilities/src/errors'
 import { isWebApp } from 'utilities/src/platform'
 import { useEvent } from 'utilities/src/react/hooks'
-import {
-  swapDebug,
-  swapError,
-  summarizeTxRequest,
-  summarizeTrade,
-} from 'uniswap/src/utils/swapDebug'
-import { isValidSwapTxContext, validateSwapTxContextWithReasons } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
-import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
-import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
 
 interface SwapReviewCallbacks {
   onSwapButtonClick: () => Promise<void>
@@ -173,10 +171,7 @@ export function useCreateSwapReviewCallbacks(ctx: {
 
     // Fast path for on-chain-only chains: skip ensureFreshSwapTxData if txRequests already exist
     // This avoids calling the classic service that requires trade.quote.quote (which doesn't exist on-chain-only)
-    const hasOnChainOnlyTx =
-      isOnChainOnly &&
-      isClassic(swapTxStoreState) &&
-      !!swapTxStoreState.txRequests?.length
+    const hasOnChainOnlyTx = isOnChainOnly && isClassic(swapTxStoreState) && !!swapTxStoreState.txRequests?.length
 
     let freshSwapTxData
 
@@ -227,17 +222,14 @@ export function useCreateSwapReviewCallbacks(ctx: {
       freshSwapTxData = data
     }
 
-    const tx0 = freshSwapTxData?.txRequests?.[0]
-    const storeTx0 = swapTxStoreState?.txRequests?.[0]
-    const normalizedValue =
-      typeof tx0?.value === 'bigint'
-        ? `0x${tx0.value.toString(16)}`
-        : tx0?.value ?? '0x0'
+    const tx0 = freshSwapTxData.txRequests?.[0]
+    const storeTx0 = swapTxStoreState.txRequests?.[0]
+    const normalizedValue = typeof tx0?.value === 'bigint' ? `0x${tx0.value.toString(16)}` : (tx0?.value ?? '0x0')
 
-    const freshChainId = freshSwapTxData?.trade?.inputAmount?.currency.chainId
+    const freshChainId = freshSwapTxData.trade?.inputAmount.currency.chainId
 
     swapDebug(freshChainId ?? chainId, '[SWAP-CTA] prepared-swap-tx-context', {
-      routing: freshSwapTxData?.routing ? String(freshSwapTxData.routing) : undefined,
+      routing: freshSwapTxData.routing ? String(freshSwapTxData.routing) : undefined,
       hasTxRequest: Boolean(tx0),
       txTo: tx0?.to,
       txDataLen: (tx0?.data as string | undefined)?.length,
@@ -251,7 +243,7 @@ export function useCreateSwapReviewCallbacks(ctx: {
       storeTxTo: storeTx0?.to,
       storeTxDataLen: (storeTx0?.data as string | undefined)?.length,
       storeTxValue: storeTx0?.value,
-      storeRouting: swapTxStoreState?.routing ? String(swapTxStoreState.routing) : undefined,
+      storeRouting: swapTxStoreState.routing ? String(swapTxStoreState.routing) : undefined,
     })
 
     const executeSwapService = getExecuteSwapService({
@@ -296,7 +288,7 @@ export function useCreateSwapReviewCallbacks(ctx: {
   const onSwapButtonClick = useCallback(async () => {
     const chainId = swapParams.derivedSwapInfo.chainId
     const isOnChainOnly = chainId ? isOnChainOnlyChain(chainId) : false
-    
+
     // Boundary log A: UI click handler (Base Sepolia only) - MUST be first line
     if (chainId === 84532) {
       swapError(chainId, '[BOUNDARY-A][UI] swap-click', {
@@ -307,7 +299,7 @@ export function useCreateSwapReviewCallbacks(ctx: {
         routing: swapParams.trade?.routing ? String(swapParams.trade.routing) : undefined,
       })
     }
-    
+
     // Hard log at the very top to prove click handler is reached
     swapDebug(chainId, '[SWAP-CTA] onPress-enter', {
       disabled: false, // We're inside the handler, so it's not disabled
@@ -336,7 +328,7 @@ export function useCreateSwapReviewCallbacks(ctx: {
       hasTrade: Boolean(swapParams.trade),
       tradeSummary: summarizeTrade(swapParams.trade),
       hasSwapTxContext: Boolean(swapTxContext),
-      swapTxContextRouting: swapTxContext?.routing ? String(swapTxContext.routing) : undefined,
+      swapTxContextRouting: swapTxContext.routing ? String(swapTxContext.routing) : undefined,
       txRequestsLength: txRequests?.length ?? 0,
       firstTxRequestSummary: summarizeTxRequest(firstTxRequest),
     })
@@ -350,7 +342,7 @@ export function useCreateSwapReviewCallbacks(ctx: {
         accountFromWallet: accountFromWallet?.address,
         accountFromDerived: derivedSwapInfo.account?.address,
       })
-      
+
       // Upstream behavior: should open connect wallet modal when account is missing
       // Note: Connect modal should be opened at the component level (not in this callback)
       // The button should be disabled or show "Connect Wallet" when no account
@@ -378,7 +370,7 @@ export function useCreateSwapReviewCallbacks(ctx: {
           tags: { file: 'useCreateSwapReviewCallbacks', function: 'onSwapButtonClick' },
           extra: { chainId },
         },
-        chainId
+        chainId,
       )
 
       if (authTrigger) {
@@ -397,7 +389,7 @@ export function useCreateSwapReviewCallbacks(ctx: {
           tags: { file: 'useCreateSwapReviewCallbacks', function: 'onSwapButtonClick' },
           extra: { chainId },
         },
-        chainId
+        chainId,
       )
     } catch (error: any) {
       // Single unmissable trace: UI execution error
@@ -412,7 +404,7 @@ export function useCreateSwapReviewCallbacks(ctx: {
             stack: error?.stack,
           },
         },
-        chainId
+        chainId,
       )
 
       // Top-level error handler - prevents unhandled promise rejection
@@ -424,7 +416,7 @@ export function useCreateSwapReviewCallbacks(ctx: {
         hasTxRequests,
         txRequestsLength: txRequests?.length ?? 0,
         txId,
-        routing: swapTxContext?.routing ? String(swapTxContext.routing) : undefined,
+        routing: swapTxContext.routing ? String(swapTxContext.routing) : undefined,
       })
       // Ensure submitting state is reset
       updateSwapForm({ isSubmitting: false })
@@ -432,7 +424,18 @@ export function useCreateSwapReviewCallbacks(ctx: {
       onFailure(error instanceof Error ? error : new Error(String(error)))
       throw error // Re-throw to ensure error is not silently absorbed
     }
-  }, [authTrigger, onFailure, submitTransaction, updateSwapForm, onSubmitSwap, swapParams, swapTxStoreState, derivedSwapInfo, wallet, account])
+  }, [
+    authTrigger,
+    onFailure,
+    submitTransaction,
+    updateSwapForm,
+    onSubmitSwap,
+    swapParams,
+    swapTxStoreState,
+    derivedSwapInfo,
+    wallet,
+    account,
+  ])
 
   const onConfirmWarning = useCallback(async () => {
     setWarningAcknowledged(true)

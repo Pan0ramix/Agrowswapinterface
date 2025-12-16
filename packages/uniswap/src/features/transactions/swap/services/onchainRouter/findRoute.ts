@@ -1,6 +1,6 @@
 /**
  * Main Route Finding Orchestrator
- * 
+ *
  * Orchestrates the full routing flow:
  * 1. Generate candidate routes
  * 2. Validate routes with QuoterV2
@@ -9,12 +9,12 @@
 
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
-import { PublicClient } from 'viem'
 import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
-import { generateCandidateRoutes, CandidateRoute } from './generateCandidateRoutes'
-import { validateRouteWithQuoter, ValidatedRoute } from './validateRouteWithQuoter'
-import { chooseBestRoute } from './chooseBestRoute'
 import { logger } from 'utilities/src/logger/logger'
+import { PublicClient } from 'viem'
+import { chooseBestRoute } from 'uniswap/src/features/transactions/swap/services/onchainRouter/chooseBestRoute'
+import { CandidateRoute, generateCandidateRoutes } from 'uniswap/src/features/transactions/swap/services/onchainRouter/generateCandidateRoutes'
+import { ValidatedRoute, validateRouteWithQuoter } from 'uniswap/src/features/transactions/swap/services/onchainRouter/validateRouteWithQuoter'
 
 /**
  * Complete route result
@@ -28,7 +28,7 @@ export interface RouteResult {
 
 /**
  * Find the best route for a swap
- * 
+ *
  * @param tokenIn - Input token
  * @param tokenOut - Output token
  * @param amountIn - Input amount (for exact input)
@@ -53,8 +53,7 @@ export async function findRoute(
     return null
   }
   try {
-    const rpcUrl =
-      (publicClient as any)?.__agroswapEffectiveRpcUrl ?? publicClient?.transport?.config?.url
+    const rpcUrl = (publicClient as any)?.__agroswapEffectiveRpcUrl ?? publicClient.transport.config?.url
     const rpcLabel = rpcUrl?.includes?.('sepolia.base.org') ? 'base-public' : 'alt-public'
     let rpcOrigin: string | undefined
     if (rpcUrl) {
@@ -66,17 +65,10 @@ export async function findRoute(
       }
     }
     const allowTestnetFallback =
-      chainId === UniverseChainId.BaseSepolia ||
-      process.env.NEXT_PUBLIC_ENABLE_TESTNET_ONCHAIN_FALLBACK === 'true'
+      chainId === UniverseChainId.BaseSepolia || process.env.NEXT_PUBLIC_ENABLE_TESTNET_ONCHAIN_FALLBACK === 'true'
 
     // Step 1: Generate candidate routes
-    const candidateRoutes = await generateCandidateRoutes(
-      tokenIn,
-      tokenOut,
-      chainId,
-      publicClient,
-      fees as any,
-    )
+    const candidateRoutes = await generateCandidateRoutes(tokenIn, tokenOut, chainId, publicClient, fees as any)
 
     if (candidateRoutes.length === 0) {
       logger.debug('findRoute', 'findRoute', 'No candidate routes generated', {
@@ -144,7 +136,17 @@ export async function findRoute(
 
     // Step 2: Validate routes with QuoterV2 (in parallel for performance)
     const validationPromises = candidateRoutes.map((route) =>
-      validateRouteWithQuoter(route, amountIn, amountOut, tokenIn, tokenOut, chainId, publicClient, rpcLabel, rpcOrigin),
+      validateRouteWithQuoter(
+        route,
+        amountIn,
+        amountOut,
+        tokenIn,
+        tokenOut,
+        chainId,
+        publicClient,
+        rpcLabel,
+        rpcOrigin,
+      ),
     )
 
     const validatedRoutes = (await Promise.all(validationPromises)).filter(
@@ -251,11 +253,13 @@ export async function findRoute(
     // Ensure we always have both amounts from the validated route
     const finalAmountIn = bestRoute.amountInCurrency || amountIn
     const finalAmountOut = bestRoute.amountOutCurrency || amountOut
-    
+
     if (!finalAmountIn || !finalAmountOut) {
-      throw new Error(`Route result missing required amounts: amountIn=${!!finalAmountIn}, amountOut=${!!finalAmountOut}`)
+      throw new Error(
+        `Route result missing required amounts: amountIn=${!!finalAmountIn}, amountOut=${!!finalAmountOut}`,
+      )
     }
-    
+
     return {
       route: bestRoute,
       amountIn: finalAmountIn,
@@ -286,4 +290,3 @@ export function isOnChainRouterEnabled(chainId: number): boolean {
   const { isOnChainRouterEnabled: checkEnabled } = require('./config')
   return checkEnabled(chainId)
 }
-

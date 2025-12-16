@@ -10,4 +10,3 @@ export function isPortfolioSupportedChain(chainId: number | undefined): boolean 
   }
   return true
 }
-

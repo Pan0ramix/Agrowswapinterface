@@ -1,15 +1,11 @@
 /**
  * On-Chain Debug Bundle Builder
- * 
+ *
  * Collects all debug data for a single quote/tx-build cycle and emits as one structured JSON bundle.
  * Gated by isOnChainDebug(chainId).
  */
 
-import { Currency, CurrencyAmount, Price } from '@uniswap/sdk-core'
-import { Address, PublicClient } from 'viem'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { isOnChainDebug, makeOnChainDebugId, debugOnChain } from './isOnChainDebug'
-import { V3PoolOnChainState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
+import { debugOnChain, isOnChainDebug, makeOnChainDebugId } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
 
 export interface OnChainDebugBundle {
   header: {
@@ -118,7 +114,7 @@ export function createOnChainDebugBundle(chainId: number): {
 } {
   const isDebug = isOnChainDebug(chainId)
   const debugId = makeOnChainDebugId('quote')
-  
+
   const bundle: Partial<OnChainDebugBundle> = {
     header: {
       debugId,
@@ -127,7 +123,7 @@ export function createOnChainDebugBundle(chainId: number): {
       timestamp: Date.now(),
     },
   }
-  
+
   return {
     bundle,
     emit: () => {

@@ -21,13 +21,13 @@ import {
 } from 'uniswap/src/features/transactions/swap/form/SwapFormScreen/SwapFormTooltips/BestRouteTooltip'
 import { usePriceUXEnabled } from 'uniswap/src/features/transactions/swap/hooks/usePriceUXEnabled'
 import { useV4SwapEnabled } from 'uniswap/src/features/transactions/swap/hooks/useV4SwapEnabled'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { Trade } from 'uniswap/src/features/transactions/swap/types/trade'
 import { isBridge, isClassic, isUniswapX } from 'uniswap/src/features/transactions/swap/utils/routing'
 import { openUri } from 'uniswap/src/utils/linking'
 import { useRoutingEntries } from 'uniswap/src/utils/routingDiagram/routingRegistry'
 import { NumberType } from 'utilities/src/format/types'
 import { isWebPlatform } from 'utilities/src/platform'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 
 export function RoutingInfo({
   trade,
@@ -107,7 +107,7 @@ function RoutingInfoInternal({
     }
 
     // Fallback for on-chain-only swaps without routing diagram
-    const chainId = trade.inputAmount?.currency?.chainId
+    const chainId = trade.inputAmount.currency.chainId
     const isOnChainOnly = chainId ? isOnChainOnlyChain(chainId) : false
     if (isOnChainOnly) {
       return (

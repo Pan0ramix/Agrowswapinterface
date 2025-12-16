@@ -1,18 +1,17 @@
 /**
  * V3 On-Chain Integration Utilities
- * 
+ *
  * Helper functions to integrate on-chain V3 LP operations into existing UI flows.
  */
 
-import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
-import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 
 /**
  * Determines if we should use on-chain V3 operations instead of Trading API
  * Uses the same chain check as the on-chain router for consistency
- * 
+ *
  * Enabled chains: [84532 (Base Sepolia), 8453 (Base), 137 (Polygon)]
  */
 export function shouldUseV3OnChainLp({
@@ -113,4 +112,3 @@ export function convertOnChainTxToCreateLpResponse(
     sqrtRatioX96: txPayload.sqrtPriceX96,
   }
 }
-

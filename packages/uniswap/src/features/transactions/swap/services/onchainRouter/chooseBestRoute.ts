@@ -1,24 +1,21 @@
 /**
  * Best Route Selection
- * 
+ *
  * Chooses the route with the highest output amount from validated routes.
  * For Carbon-to-Carbon routes, prioritizes by tier (1 > 2 > 3) when amounts are similar.
  */
 
-import { CurrencyAmount, Currency } from '@uniswap/sdk-core'
-import { ValidatedRoute } from './validateRouteWithQuoter'
+import { ValidatedRoute } from 'uniswap/src/features/transactions/swap/services/onchainRouter/validateRouteWithQuoter'
 
 /**
  * Choose the best route from validated routes
- * 
+ *
  * Selection criteria:
  * 1. Highest amountOut (primary)
  * 2. For Carbon-to-Carbon routes, prefer lower tier when amounts are within 0.1%
  * 3. Lower gas estimate when amounts are equal
  */
-export function chooseBestRoute(
-  validatedRoutes: ValidatedRoute[],
-): ValidatedRoute | null {
+export function chooseBestRoute(validatedRoutes: ValidatedRoute[]): ValidatedRoute | null {
   if (validatedRoutes.length === 0) {
     return null
   }
@@ -87,10 +84,7 @@ export function chooseBestRoute(
 /**
  * Compare two routes and return the better one
  */
-export function compareRoutes(
-  routeA: ValidatedRoute,
-  routeB: ValidatedRoute,
-): ValidatedRoute {
+export function compareRoutes(routeA: ValidatedRoute, routeB: ValidatedRoute): ValidatedRoute {
   const amountA = BigInt(routeA.amountOut)
   const amountB = BigInt(routeB.amountOut)
 
@@ -126,6 +120,3 @@ export function compareRoutes(
   // Default to first route
   return routeA
 }
-
-
-

@@ -17,7 +17,7 @@ export function getErrorMessageToDisplay({
       // Return the user-friendly message from structured error
       return error.userMessage || error.message || true
     }
-    
+
     return parseErrorMessageTitle(calldataError, { includeRequestId: true }) || true
   }
 

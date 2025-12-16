@@ -4,6 +4,7 @@ import { PositionStatus, ProtocolVersion } from '@uniswap/client-data-api/dist/d
 import { Currency, CurrencyAmount, Percent, Price } from '@uniswap/sdk-core'
 import { GraphQLApi } from '@universe/api'
 import { FeatureFlags, useFeatureFlag } from '@universe/gating'
+import useMultiChainPositions from 'components/AccountDrawer/MiniPortfolio/Pools/useMultiChainPositions'
 import { BreadcrumbNavContainer, BreadcrumbNavLink } from 'components/BreadcrumbNav'
 import { WrappedLiquidityPositionRangeChart } from 'components/Charts/LiquidityPositionRangeChart/LiquidityPositionRangeChart'
 import { Dropdown } from 'components/Dropdowns/Dropdown'
@@ -27,7 +28,6 @@ import { useAccount } from 'hooks/useAccount'
 import { useSrcColor } from 'hooks/useColor'
 import { useLpIncentivesFormattedEarnings } from 'hooks/useLpIncentivesFormattedEarnings'
 import { usePositionTokenURI } from 'hooks/usePositionTokenURI'
-import useMultiChainPositions from 'components/AccountDrawer/MiniPortfolio/Pools/useMultiChainPositions'
 import NotFound from 'pages/NotFound'
 import { useMemo, useState } from 'react'
 import { ArrowLeft } from 'react-feather'
@@ -151,7 +151,7 @@ function PositionPage({ chainId }: { chainId: EVMUniverseChainId | undefined }) 
     const match = onChainPositions?.find((p) => {
       const sameToken =
         tokenIdFromUrl &&
-        (p.tokenId?.toString?.() === tokenIdFromUrl || p.details?.tokenId?.toString?.() === tokenIdFromUrl)
+        (p.tokenId?.toString?.() === tokenIdFromUrl || p.details.tokenId.toString() === tokenIdFromUrl)
       const sameChain = chainId ? p.chainId === chainId : true
       return sameToken && sameChain
     })

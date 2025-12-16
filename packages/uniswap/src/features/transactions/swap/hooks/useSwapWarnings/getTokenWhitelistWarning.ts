@@ -1,8 +1,8 @@
 import { TFunction } from 'i18next'
 import { Warning, WarningAction, WarningLabel, WarningSeverity } from 'uniswap/src/components/modals/WarningModal/types'
+import type { TokenWhitelistStatus } from 'uniswap/src/features/transactions/hooks/useTokenWhitelistStatus'
 import { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import { CurrencyField } from 'uniswap/src/types/currency'
-import type { TokenWhitelistStatus } from 'uniswap/src/features/transactions/hooks/useTokenWhitelistStatus'
 
 export function getTokenWhitelistWarning(
   t: TFunction,
@@ -19,10 +19,8 @@ export function getTokenWhitelistWarning(
   const outputToken = currencies[CurrencyField.OUTPUT]?.currency
 
   // Check if any token is restricted and wallet is not allowed
-  const isInputRestrictedNotAllowed =
-    inputTokenStatus?.isRestricted && !inputTokenStatus?.isAllowed
-  const isOutputRestrictedNotAllowed =
-    outputTokenStatus?.isRestricted && !outputTokenStatus?.isAllowed
+  const isInputRestrictedNotAllowed = inputTokenStatus?.isRestricted && !inputTokenStatus.isAllowed
+  const isOutputRestrictedNotAllowed = outputTokenStatus?.isRestricted && !outputTokenStatus.isAllowed
 
   // Check if swap router is not whitelisted (highest priority warning)
   if (swapRouterNotWhitelisted && swapRouterAddress) {
@@ -81,9 +79,7 @@ export function getTokenWhitelistWarning(
   }
 
   // Determine which token(s) are causing the issue
-  const restrictedTokenSymbol = isInputRestrictedNotAllowed
-    ? inputToken?.symbol
-    : outputToken?.symbol
+  const restrictedTokenSymbol = isInputRestrictedNotAllowed ? inputToken?.symbol : outputToken?.symbol
 
   const buttonText = t('swap.warning.tokenWhitelist.button', {
     tokenSymbol: restrictedTokenSymbol ?? '',
@@ -95,10 +91,6 @@ export function getTokenWhitelistWarning(
     action: WarningAction.DisableReview,
     title: t('swap.warning.tokenWhitelist.title'),
     message: t('swap.warning.tokenWhitelist.message'),
-    buttonText:
-      !restrictedTokenSymbol
-        ? t('swap.warning.tokenWhitelistFallback.button')
-        : buttonText,
+    buttonText: !restrictedTokenSymbol ? t('swap.warning.tokenWhitelistFallback.button') : buttonText,
   }
 }
-

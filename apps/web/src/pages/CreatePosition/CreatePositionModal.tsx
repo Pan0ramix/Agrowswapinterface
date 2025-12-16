@@ -1,5 +1,6 @@
 import { ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
+import { FeeAmount } from '@uniswap/v3-sdk'
 import {
   getLiquidityRangeChartProps,
   WrappedLiquidityPositionRangeChart,
@@ -31,9 +32,11 @@ import { NetworkLogo } from 'uniswap/src/components/CurrencyLogo/NetworkLogo'
 import { TokenLogo } from 'uniswap/src/components/CurrencyLogo/TokenLogo'
 import { GetHelpHeader } from 'uniswap/src/components/dialog/GetHelpHeader'
 import { Modal } from 'uniswap/src/components/modals/Modal'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { useLocalizationContext } from 'uniswap/src/features/language/LocalizationContext'
 import { useGetPasskeyAuthStatus } from 'uniswap/src/features/passkey/hooks/useGetPasskeyAuthStatus'
 import { ModalName } from 'uniswap/src/features/telemetry/constants'
+import { useRestrictedTokenAllowlistChecks } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenAllowlistChecks'
 import {
   CreatePositionTxAndGasInfo,
   isValidLiquidityTxContext,
@@ -44,10 +47,7 @@ import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 import { isSignerMnemonicAccountDetails } from 'uniswap/src/features/wallet/types/AccountDetails'
 import { NumberType } from 'utilities/src/format/types'
 import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
-import { useRestrictedTokenAllowlistChecks } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenAllowlistChecks'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { Address } from 'viem'
-import { FeeAmount } from '@uniswap/v3-sdk'
 
 export function CreatePositionModal({
   formattedAmounts,
@@ -189,7 +189,7 @@ export function CreatePositionModal({
       hasTxInfo: !!txInfo,
       hasAccount: !!account,
       isValidAccount: account ? isSignerMnemonicAccountDetails(account) : false,
-      hasCurrencyAmounts: !!currencyAmounts?.TOKEN0 && !!currencyAmounts?.TOKEN1,
+      hasCurrencyAmounts: !!currencyAmounts?.TOKEN0 && !!currencyAmounts.TOKEN1,
       txInfoType: txInfo?.type,
       txInfoAction: txInfo?.action,
       txInfoTxRequest: !!txInfo?.txRequest,
@@ -215,7 +215,7 @@ export function CreatePositionModal({
         hasAccount: !!account,
         isValidAccount: account ? isSignerMnemonicAccountDetails(account) : false,
         isValidTx,
-        hasCurrencyAmounts: !!currencyAmounts?.TOKEN0 && !!currencyAmounts?.TOKEN1,
+        hasCurrencyAmounts: !!currencyAmounts?.TOKEN0 && !!currencyAmounts.TOKEN1,
       })
       return
     }
@@ -424,30 +424,32 @@ export function CreatePositionModal({
               />
             )}
             {/* Show pool-not-found message for on-chain V3 flows */}
-            {typeof transactionError === 'string' && 
-             transactionError.includes('pool') && 
-             transactionError.includes('does not exist') && (
-              <Flex
-                backgroundColor="$surface2"
-                borderRadius="$rounded16"
-                p="$spacing16"
-                gap="$spacing8"
-                borderWidth={1}
-                borderColor="$surface3"
-              >
-                <Text variant="body2" color="$neutral1">
-                  Pool Not Found
-                </Text>
-                <Text variant="body3" color="$neutral2">
-                  The V3 pool for this token pair and fee tier does not exist on this chain. A pool must be created and initialized before you can add liquidity.
-                </Text>
-                {process.env.NODE_ENV !== 'production' && (
-                  <Text variant="body3" color="$neutral3" mt="$spacing8">
-                    On this development environment, the pool must be created and initialized via a separate script or tool before adding liquidity.
+            {typeof transactionError === 'string' &&
+              transactionError.includes('pool') &&
+              transactionError.includes('does not exist') && (
+                <Flex
+                  backgroundColor="$surface2"
+                  borderRadius="$rounded16"
+                  p="$spacing16"
+                  gap="$spacing8"
+                  borderWidth={1}
+                  borderColor="$surface3"
+                >
+                  <Text variant="body2" color="$neutral1">
+                    Pool Not Found
                   </Text>
-                )}
-              </Flex>
-            )}
+                  <Text variant="body3" color="$neutral2">
+                    The V3 pool for this token pair and fee tier does not exist on this chain. A pool must be created
+                    and initialized before you can add liquidity.
+                  </Text>
+                  {process.env.NODE_ENV !== 'production' && (
+                    <Text variant="body3" color="$neutral3" mt="$spacing8">
+                      On this development environment, the pool must be created and initialized via a separate script or
+                      tool before adding liquidity.
+                    </Text>
+                  )}
+                </Flex>
+              )}
             <PoolOutOfSyncError />
           </Flex>
         </Flex>

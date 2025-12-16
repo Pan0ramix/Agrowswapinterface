@@ -7,7 +7,7 @@ export function getDeviceLocales(): DeviceLocale[] {
     // Safely access chrome.i18n if available (extension context)
     // Otherwise fall back to navigator.language (web browser context)
     const chrome = getChrome()
-    const uiLanguage = chrome?.i18n?.getUILanguage?.()
+    const uiLanguage = chrome?.i18n.getUILanguage()
     if (uiLanguage) {
       return [{ languageCode: uiLanguage, languageTag: uiLanguage }]
     }

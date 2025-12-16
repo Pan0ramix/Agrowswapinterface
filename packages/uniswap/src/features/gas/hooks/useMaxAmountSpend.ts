@@ -4,9 +4,9 @@ import JSBI from 'jsbi'
 import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
 import { GENERIC_L2_GAS_CONFIG } from 'uniswap/src/features/chains/gasDefaults'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
+import { useDynamicConfigValueSafe } from 'uniswap/src/features/experiments/useDynamicConfigValueSafe'
 import { getCurrencyAmount, ValueType } from 'uniswap/src/features/tokens/getCurrencyAmount'
 import { TransactionType } from 'uniswap/src/features/transactions/types/transactionDetails'
-import { useDynamicConfigValueSafe } from 'uniswap/src/features/experiments/useDynamicConfigValueSafe'
 
 /**
  * Given some token amount, return the max that can be spent of it
@@ -69,11 +69,7 @@ export function useMinGasAmount(chainId?: UniverseChainId, txType?: TransactionT
 
 export function useLowBalanceWarningGasPercentage(): number {
   // Use safe wrapper to avoid Statsig hook ordering issues
-  return useDynamicConfigValueSafe(
-    DynamicConfigs.Swap,
-    SwapConfigKey.LowBalanceWarningGasPercentage,
-    100,
-  )
+  return useDynamicConfigValueSafe(DynamicConfigs.Swap, SwapConfigKey.LowBalanceWarningGasPercentage, 100)
 }
 
 export function useCalculateMinForGas(config: {

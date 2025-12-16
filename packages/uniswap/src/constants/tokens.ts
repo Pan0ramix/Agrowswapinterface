@@ -192,29 +192,32 @@ export const MATIC_MAINNET = new Token(
   'Polygon Matic',
 )
 
-export const UNI = {
+export const AGX = {
   [UniverseChainId.Mainnet]: new Token(
     UniverseChainId.Mainnet,
     UNI_ADDRESSES[UniverseChainId.Mainnet] as string,
     18,
-    'UNI',
-    'Uniswap',
+    'AGX',
+    'Agroswap',
   ),
   [UniverseChainId.Optimism]: new Token(
     UniverseChainId.Optimism,
     UNI_ADDRESSES[UniverseChainId.Optimism] as string,
     18,
-    'UNI',
-    'Uniswap',
+    'AGX',
+    'Agroswap',
   ),
   [UniverseChainId.Sepolia]: new Token(
     UniverseChainId.Sepolia,
     UNI_ADDRESSES[UniverseChainId.Sepolia] as string,
     18,
-    'UNI',
-    'Uniswap',
+    'AGX',
+    'Agroswap',
   ),
 }
+
+// Keep UNI export for backward compatibility, but it points to AGX
+export const UNI = AGX
 
 export const OP = new Token(
   UniverseChainId.Optimism,

@@ -44,6 +44,9 @@ const ExtensionUninstall = lazy(() => import('pages/ExtensionUninstall/Extension
 const Portfolio = lazy(() => import('pages/Portfolio/Portfolio'))
 const ToucanToken = lazy(() => import('pages/Explore/ToucanToken'))
 const Wrapped = lazy(() => import('pages/Wrapped'))
+const Projects = lazy(() => import('pages/Projects'))
+const RequestAccess = lazy(() => import('pages/RequestAccess'))
+const LearnMore = lazy(() => import('pages/LearnMore'))
 
 interface RouterConfig {
   browserRouterEnabled?: boolean
@@ -419,6 +422,22 @@ export const routes: RouteDefinition[] = [
     getElement: () => <Wrapped />,
     getTitle: () => 'Uniswap Wrapped',
     enabled: (args) => args.isWrappedEnabled ?? false,
+  }),
+  // Agroswap routes
+  createRouteDefinition({
+    path: '/projects',
+    getElement: () => <Projects />,
+    getTitle: () => 'Tokenize Your Project',
+  }),
+  createRouteDefinition({
+    path: '/request-access',
+    getElement: () => <RequestAccess />,
+    getTitle: () => 'Request Access',
+  }),
+  createRouteDefinition({
+    path: '/learn-more',
+    getElement: () => <LearnMore />,
+    getTitle: () => 'Learn How Compliant Carbon Trading Works',
   }),
   createRouteDefinition({ path: '*', getElement: () => <Navigate to="/not-found" replace /> }),
   createRouteDefinition({ path: '/not-found', getElement: () => <NotFound /> }),

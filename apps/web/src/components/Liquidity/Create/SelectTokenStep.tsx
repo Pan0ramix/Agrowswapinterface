@@ -48,6 +48,7 @@ import { nativeOnChain, WRAPPED_NATIVE_CURRENCY } from 'uniswap/src/constants/to
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import type { CurrencyInfo } from 'uniswap/src/features/dataApi/types'
+import { buildCurrencyInfo } from 'uniswap/src/features/dataApi/utils/buildCurrency'
 import { useLocalizationContext } from 'uniswap/src/features/language/LocalizationContext'
 import { Platform } from 'uniswap/src/features/platforms/types/Platform'
 import { isSVMChain } from 'uniswap/src/features/platforms/utils/chains'
@@ -56,7 +57,6 @@ import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
 import { FeePoolSelectAction } from 'uniswap/src/features/telemetry/types'
 import { useCurrencyInfo } from 'uniswap/src/features/tokens/useCurrencyInfo'
 import { areCurrenciesEqual, currencyId } from 'uniswap/src/utils/currencyId'
-import { buildCurrencyInfo } from 'uniswap/src/features/dataApi/utils/buildCurrency'
 import { NumberType } from 'utilities/src/format/types'
 import { useTrace } from 'utilities/src/telemetry/trace/TraceContext'
 import { isV4UnsupportedChain } from 'utils/networkSupportsV4'
@@ -270,37 +270,45 @@ export function SelectTokensStep({
   const handleCurrencySelect = useCallback(
     (currency: Currency) => {
       window.console.error('[SelectTokenStep] handleCurrencySelect CALLED', {
-        currency: currency ? {
-          address: currency.isToken ? currency.address : 'native',
-          symbol: currency.symbol,
-          chainId: currency.chainId,
-          isNative: currency.isNative,
-        } : 'UNDEFINED',
+        currency: currency
+          ? {
+              address: currency.isToken ? currency.address : 'native',
+              symbol: currency.symbol,
+              chainId: currency.chainId,
+              isNative: currency.isNative,
+            }
+          : 'UNDEFINED',
         currencySearchInputState,
         currentCurrencyInputs: {
-          tokenA: currencyInputs.tokenA ? {
-            address: currencyInputs.tokenA.isToken ? currencyInputs.tokenA.address : 'native',
-            symbol: currencyInputs.tokenA.symbol,
-            chainId: currencyInputs.tokenA.chainId,
-          } : undefined,
-          tokenB: currencyInputs.tokenB ? {
-            address: currencyInputs.tokenB.isToken ? currencyInputs.tokenB.address : 'native',
-            symbol: currencyInputs.tokenB.symbol,
-            chainId: currencyInputs.tokenB.chainId,
-          } : undefined,
+          tokenA: currencyInputs.tokenA
+            ? {
+                address: currencyInputs.tokenA.isToken ? currencyInputs.tokenA.address : 'native',
+                symbol: currencyInputs.tokenA.symbol,
+                chainId: currencyInputs.tokenA.chainId,
+              }
+            : undefined,
+          tokenB: currencyInputs.tokenB
+            ? {
+                address: currencyInputs.tokenB.isToken ? currencyInputs.tokenB.address : 'native',
+                symbol: currencyInputs.tokenB.symbol,
+                chainId: currencyInputs.tokenB.chainId,
+              }
+            : undefined,
         },
       })
 
       // Store the current search input state to avoid race conditions with modal dismissal
       const currentSearchState = currencySearchInputState
-      
+
       if (currentSearchState === undefined) {
         console.warn('[SelectTokenStep] handleCurrencySelect called but currencySearchInputState is undefined', {
-          currency: currency ? {
-            address: currency.isToken ? currency.address : 'native',
-            symbol: currency.symbol,
-            chainId: currency.chainId,
-          } : undefined,
+          currency: currency
+            ? {
+                address: currency.isToken ? currency.address : 'native',
+                symbol: currency.symbol,
+                chainId: currency.chainId,
+              }
+            : undefined,
         })
         // Still close the modal even if state is undefined
         setCurrencySearchInputState(undefined)
@@ -318,15 +326,17 @@ export function SelectTokensStep({
       const otherCurrency = currencyInputs[otherInputState]
       const wrappedCurrencyNew = currency.isNative ? currency.wrapped : currency
       const wrappedCurrencyOther = otherCurrency?.isNative ? otherCurrency.wrapped : otherCurrency
-      
+
       console.log('[SelectTokenStep] Processing currency selection', {
         currentSearchState,
         otherInputState,
-        otherCurrency: otherCurrency ? {
-          address: otherCurrency.isToken ? otherCurrency.address : 'native',
-          symbol: otherCurrency.symbol,
-          chainId: otherCurrency.chainId,
-        } : undefined,
+        otherCurrency: otherCurrency
+          ? {
+              address: otherCurrency.isToken ? otherCurrency.address : 'native',
+              symbol: otherCurrency.symbol,
+              chainId: otherCurrency.chainId,
+            }
+          : undefined,
         areCurrenciesEqual: areCurrenciesEqual(currency, otherCurrency),
         areWrappedCurrenciesEqual: areCurrenciesEqual(wrappedCurrencyNew, wrappedCurrencyOther),
         chainIdsMatch: otherCurrency?.chainId === currency.chainId,
@@ -344,8 +354,8 @@ export function SelectTokensStep({
         })
         setCurrencyInputs((prevState) => {
           const newState = {
-          ...prevState,
-          [otherInputState]: undefined,
+            ...prevState,
+            [otherInputState]: undefined,
             [currentSearchState]: currency,
           }
           console.log('[SelectTokenStep] setCurrencyInputs (equal currencies)', {
@@ -372,8 +382,8 @@ export function SelectTokensStep({
         })
         setCurrencyInputs((prevState) => {
           const newState = {
-          ...prevState,
-          [otherInputState]: undefined,
+            ...prevState,
+            [otherInputState]: undefined,
             [currentSearchState]: currency,
           }
           console.log('[SelectTokenStep] setCurrencyInputs (chain mismatch)', {
@@ -406,7 +416,7 @@ export function SelectTokensStep({
           })
           setCurrencyInputs((prevState) => {
             const newState = {
-            ...prevState,
+              ...prevState,
               [currentSearchState]: currency,
             }
             console.log('[SelectTokenStep] setCurrencyInputs (normal flow)', {
@@ -632,7 +642,17 @@ export function SelectTokensStep({
                   <Flex row flex={1} flexBasis={0} $md={{ flexBasis: 'auto' }}>
                     <CurrencySelector
                       loading={loadingA}
-                      currencyInfo={token0CurrencyInfo || (token0 ? buildCurrencyInfo({ currency: token0, currencyId: currencyId(token0), logoUrl: undefined, safetyInfo: undefined }) : undefined)}
+                      currencyInfo={
+                        token0CurrencyInfo ||
+                        (token0
+                          ? buildCurrencyInfo({
+                              currency: token0,
+                              currencyId: currencyId(token0),
+                              logoUrl: undefined,
+                              safetyInfo: undefined,
+                            })
+                          : undefined)
+                      }
                       onPress={() => {
                         setCurrencySearchInputState('tokenA')
                       }}
@@ -641,7 +661,17 @@ export function SelectTokensStep({
                   <Flex row flex={1} flexBasis={0} $md={{ flexBasis: 'auto' }}>
                     <CurrencySelector
                       loading={loadingB}
-                      currencyInfo={token1CurrencyInfo || (token1 ? buildCurrencyInfo({ currency: token1, currencyId: currencyId(token1), logoUrl: undefined, safetyInfo: undefined }) : undefined)}
+                      currencyInfo={
+                        token1CurrencyInfo ||
+                        (token1
+                          ? buildCurrencyInfo({
+                              currency: token1,
+                              currencyId: currencyId(token1),
+                              logoUrl: undefined,
+                              safetyInfo: undefined,
+                            })
+                          : undefined)
+                      }
                       onPress={() => {
                         setCurrencySearchInputState('tokenB')
                       }}

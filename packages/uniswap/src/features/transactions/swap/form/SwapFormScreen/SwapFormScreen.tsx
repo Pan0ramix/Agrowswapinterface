@@ -1,12 +1,18 @@
 import type { BottomSheetView } from '@gorhom/bottom-sheet'
 import type { ComponentProps } from 'react'
+import { useMemo } from 'react'
 import type { FlexProps } from 'ui/src'
 import { Flex } from 'ui/src'
+import { useActiveAddress } from 'uniswap/src/features/accounts/store/hooks'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { chainIdToPlatform } from 'uniswap/src/features/platforms/utils/chains'
+import { RestrictedTokenWarnings } from 'uniswap/src/features/transactions/components/RestrictedTokenWarnings/RestrictedTokenWarnings'
 import type { TransactionSettingConfig } from 'uniswap/src/features/transactions/components/settings/types'
 import { filterSettingsByPlatform } from 'uniswap/src/features/transactions/components/settings/utils'
 import { TransactionModalInnerContainer } from 'uniswap/src/features/transactions/components/TransactionModal/TransactionModal'
 import { useTransactionModalContext } from 'uniswap/src/features/transactions/components/TransactionModal/TransactionModalContext'
+import { getPoolAddressesFromTrade } from 'uniswap/src/features/transactions/hooks/getPoolAddressesFromTrade'
+import { useRestrictedTokenWarnings } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenWarnings'
 import { SwapFormSettings } from 'uniswap/src/features/transactions/swap/components/SwapFormSettings/SwapFormSettings'
 import { Slippage } from 'uniswap/src/features/transactions/swap/components/SwapFormSettings/settingsConfigurations/slippage/Slippage/Slippage'
 import { TradeRoutingPreference } from 'uniswap/src/features/transactions/swap/components/SwapFormSettings/settingsConfigurations/TradeRoutingPreference/TradeRoutingPreference'
@@ -25,17 +31,10 @@ import {
   useSwapFormStore,
   useSwapFormStoreDerivedSwapInfo,
 } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
-import { BridgeTrade } from 'uniswap/src/features/transactions/swap/types/trade'
-import { isExtensionApp, isWebApp } from 'utilities/src/platform'
-import { useRestrictedTokenWarnings } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenWarnings'
-import { getPoolAddressesFromTrade } from 'uniswap/src/features/transactions/hooks/getPoolAddressesFromTrade'
-import { useActiveAddress } from 'uniswap/src/features/accounts/store/hooks'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { BridgeTrade, ClassicTrade } from 'uniswap/src/features/transactions/swap/types/trade'
 import { CurrencyField } from 'uniswap/src/types/currency'
+import { isExtensionApp, isWebApp } from 'utilities/src/platform'
 import { Address } from 'viem'
-import { useMemo } from 'react'
-import { ClassicTrade } from 'uniswap/src/features/transactions/swap/types/trade'
-import { RestrictedTokenWarnings } from 'uniswap/src/features/transactions/components/RestrictedTokenWarnings/RestrictedTokenWarnings'
 
 interface SwapFormScreenProps {
   hideContent: boolean
@@ -93,7 +92,7 @@ function SwapFormContent(): JSX.Element {
   }))
 
   const priceUXEnabled = usePriceUXEnabled()
-  
+
   // Get tokens and chain info for allowlist checks
   const derivedSwapInfo = useSwapFormStoreDerivedSwapInfo((s) => s)
   const accountAddress = useActiveAddress(derivedSwapInfo.chainId)

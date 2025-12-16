@@ -1,14 +1,14 @@
 import { Currency, CurrencyAmount, Price, TradeType } from '@uniswap/sdk-core'
+import { FeeAmount } from '@uniswap/v3-sdk'
 import JSBI from 'jsbi'
 import { useEffect, useMemo, useState } from 'react'
 import { PositionField } from 'types/position'
 import { PollingInterval } from 'uniswap/src/constants/misc'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { useTrade } from 'uniswap/src/features/transactions/swap/hooks/useTrade'
 import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { fetchV3PoolState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
-import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { FeeAmount } from '@uniswap/v3-sdk'
 
 export function useDefaultInitialPrice({
   currencies,
@@ -52,7 +52,7 @@ export function useDefaultInitialPrice({
       try {
         const publicClient = createViemClient(chainId!)
         const feeTiers: FeeAmount[] = [FeeAmount.LOW, FeeAmount.MEDIUM, FeeAmount.HIGH]
-        
+
         for (const fee of feeTiers) {
           const poolState = await fetchV3PoolState({
             tokenIn: currencyIn,

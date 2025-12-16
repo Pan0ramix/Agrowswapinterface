@@ -81,13 +81,13 @@ export function useLpIncentivesFormattedEarnings({
       return result
     }
 
-    // Create a UNI token amount from the unclaimed rewards (using Mainnet UNI)
+    // Create an AGX token amount from the unclaimed rewards (using Mainnet AGX)
     const uniLpRewardsCurrencyAmount = CurrencyAmount.fromRawAmount(
       LP_INCENTIVES_REWARD_TOKEN,
       liquidityPosition.unclaimedRewardsAmountUni as string,
     )
 
-    // Set the UNI rewards currency amount in the result
+    // Set the AGX rewards currency amount in the result
     result.uniLpRewardsCurrencyAmount = uniLpRewardsCurrencyAmount
     result.hasRewards = uniLpRewardsCurrencyAmount.greaterThan(0)
 

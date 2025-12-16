@@ -10,7 +10,7 @@ import { Computer } from 'pages/Landing/components/Icons'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
 import { Flex, Text, useMedia } from 'ui/src'
-import { MATIC_MAINNET, UNI, USDC_BASE } from 'uniswap/src/constants/tokens'
+import { AGX, MATIC_MAINNET, USDC_BASE } from 'uniswap/src/constants/tokens'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { toGraphQLChain } from 'uniswap/src/features/chains/utils'
@@ -30,7 +30,7 @@ const tokens: { chainId: UniverseChainId; address: string }[] = [
   },
   {
     chainId: UniverseChainId.Mainnet,
-    address: UNI[UniverseChainId.Mainnet].address,
+    address: AGX[UniverseChainId.Mainnet].address,
   },
   {
     chainId: UniverseChainId.Mainnet,

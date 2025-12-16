@@ -1,3 +1,4 @@
+import { BigNumber } from '@ethersproject/bignumber'
 import {
   GetLPPriceDiscrepancyRequest,
   GetLPPriceDiscrepancyResponse,
@@ -5,17 +6,20 @@ import {
 import { getLiquidityEventName } from 'components/Liquidity/analytics'
 import { popupRegistry } from 'components/Popups/registry'
 import { PopupType } from 'components/Popups/types'
+import { timestampToDeadline } from 'hooks/useTransactionDeadline'
 import { handleAtomicSendCalls } from 'state/sagas/transactions/5792'
 import {
   getDisplayableError,
+  getSigner,
   handleApprovalTransactionStep,
   handleOnChainStep,
   handlePermitTransactionStep,
   handleSignatureStep,
 } from 'state/sagas/transactions/utils'
+import type { InterfaceState } from 'state/webReducer'
 import invariant from 'tiny-invariant'
-import { call, delay, select, spawn } from 'typed-redux-saga'
 import type { SagaGenerator } from 'typed-redux-saga'
+import { call, delay, select, spawn } from 'typed-redux-saga'
 import { ZERO_ADDRESS } from 'uniswap/src/constants/misc'
 import { TradingApiClient } from 'uniswap/src/data/apiClients/tradingApi/TradingApiClient'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
@@ -36,6 +40,7 @@ import type {
 } from 'uniswap/src/features/transactions/liquidity/steps/migrate'
 import type { LiquidityAction, ValidatedLiquidityTxContext } from 'uniswap/src/features/transactions/liquidity/types'
 import { LiquidityTransactionType } from 'uniswap/src/features/transactions/liquidity/types'
+import { updateMintDeadline } from 'uniswap/src/features/transactions/liquidity/utils/updateMintDeadline'
 import type { HandleOnChainStepParams, TransactionStep } from 'uniswap/src/features/transactions/steps/types'
 import { TransactionStepType } from 'uniswap/src/features/transactions/steps/types'
 import type { SetCurrentStepFn } from 'uniswap/src/features/transactions/swap/types/swapCallback'
@@ -51,11 +56,6 @@ import { SignerMnemonicAccountDetails } from 'uniswap/src/features/wallet/types/
 import { currencyId, isNativeCurrencyAddress } from 'uniswap/src/utils/currencyId'
 import { createSaga } from 'uniswap/src/utils/saga'
 import { logger } from 'utilities/src/logger/logger'
-import { updateMintDeadline } from 'uniswap/src/features/transactions/liquidity/utils/updateMintDeadline'
-import { timestampToDeadline } from 'hooks/useTransactionDeadline'
-import { BigNumber } from '@ethersproject/bignumber'
-import { getSigner } from 'state/sagas/transactions/utils'
-import type { InterfaceState } from 'state/webReducer'
 
 type LiquidityParams = {
   selectChain: (chainId: number) => Promise<boolean>
@@ -77,12 +77,12 @@ type LiquidityParams = {
 /**
  * Compute deadline using Uniswap's shared deadline helper
  * This ensures LP mint deadlines are computed identically to swap deadlines
- * 
+ *
  * TTL source: state.user.userDeadline (from Redux state, same as swaps)
  * - For L2 chains: timestampToDeadline uses L2_DEADLINE_FROM_NOW constant (300 seconds), ignoring ttl
  * - For L1 chains: timestampToDeadline uses ttl from user settings (can be undefined)
  * - Returns undefined if blockTimestamp or required TTL is missing (same behavior as swaps)
- * 
+ *
  * This matches the exact behavior of useGetTransactionDeadline used by swaps.
  */
 function* computeDeadlineForMint(chainId: number, accountAddress: string): SagaGenerator<number | undefined> {
@@ -172,7 +172,7 @@ function* getLiquidityTxRequest(
   // TTL source: state.user.userDeadline (same as swaps)
   if (txRequest?.data && txRequest.data.startsWith('0x88316456') && txRequest.chainId) {
     const freshDeadline = yield* call(computeDeadlineForMint, txRequest.chainId, accountAddress)
-    
+
     if (freshDeadline !== undefined) {
       const updatedData = updateMintDeadline(txRequest.data, freshDeadline)
       txRequest = {
@@ -361,8 +361,8 @@ function* modifyLiquidity(params: LiquidityParams & { steps: TransactionStep[] }
       console.log(`[liquiditySaga] Processing step ${i + 1}/${steps.length}`, {
         stepType: step.type,
         hasTxRequest: 'txRequest' in step,
-        txRequestChainId: 'txRequest' in step ? step.txRequest?.chainId : undefined,
-        txRequestTo: 'txRequest' in step ? step.txRequest?.to : undefined,
+        txRequestChainId: 'txRequest' in step ? step.txRequest.chainId : undefined,
+        txRequestTo: 'txRequest' in step ? step.txRequest.to : undefined,
       })
     }
 
@@ -391,12 +391,15 @@ function* modifyLiquidity(params: LiquidityParams & { steps: TransactionStep[] }
             console.log('[liquiditySaga] Executing position transaction step', {
               stepType: step.type,
               hasTxRequest: 'txRequest' in step,
-              txRequest: 'txRequest' in step ? {
-                chainId: step.txRequest?.chainId,
-                to: step.txRequest?.to,
-                data: step.txRequest?.data ? `${step.txRequest.data.substring(0, 20)}...` : undefined,
-                value: step.txRequest?.value,
-              } : undefined,
+              txRequest:
+                'txRequest' in step
+                  ? {
+                      chainId: step.txRequest.chainId,
+                      to: step.txRequest.to,
+                      data: step.txRequest.data ? `${step.txRequest.data.substring(0, 20)}...` : undefined,
+                      value: step.txRequest.value,
+                    }
+                  : undefined,
             })
           }
           yield* call(handlePositionTransactionStep, {
@@ -501,7 +504,7 @@ function* liquidity(params: LiquidityParams) {
   }
 
   const steps = yield* call(generateLPTransactionSteps, liquidityTxContext)
-  
+
   // Debug logging (development only)
   if (process.env.NODE_ENV !== 'production') {
     console.log('[liquiditySaga] Generated transaction steps', {

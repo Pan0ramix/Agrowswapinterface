@@ -1,31 +1,32 @@
 import { Currency, CurrencyAmount, Percent, Price, TradeType } from '@uniswap/sdk-core'
 import { ClassicQuoteResponse, TradingApi } from '@universe/api'
-import { FeeAmount, Route } from '@uniswap/v3-sdk'
 import { FeatureFlags } from '@universe/gating'
-import { useEffect, useMemo, useRef } from 'react'
-import { useFeatureFlagSafe } from 'uniswap/src/features/experiments/useDynamicConfigValueSafe'
 import JSBI from 'jsbi'
+import { useEffect, useMemo, useRef } from 'react'
 import { useUniswapContextSelector } from 'uniswap/src/contexts/UniswapContext'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
+import { useFeatureFlagSafe } from 'uniswap/src/features/experiments/useDynamicConfigValueSafe'
 import { useOnChainCurrencyBalance } from 'uniswap/src/features/portfolio/api'
 import { getCurrencyAmount, ValueType } from 'uniswap/src/features/tokens/getCurrencyAmount'
-import { useCurrencyInfo, useCurrencyInfoWithLoading } from 'uniswap/src/features/tokens/useCurrencyInfo'
-import { getCachedCurrencyInfo } from 'uniswap/src/features/transactions/swap/form/hooks/useOnSelectCurrency'
+import { useCurrencyInfoWithLoading } from 'uniswap/src/features/tokens/useCurrencyInfo'
 import { useTransactionSettingsStore } from 'uniswap/src/features/transactions/components/settings/stores/transactionSettingsStore/useTransactionSettingsStore'
 import { useUSDCValue } from 'uniswap/src/features/transactions/hooks/useUSDCPrice'
+import { getCachedCurrencyInfo } from 'uniswap/src/features/transactions/swap/form/hooks/useOnSelectCurrency'
+import { useOnChainSwapQuote } from 'uniswap/src/features/transactions/swap/hooks/useOnChainSwapQuote'
 import { usePriceUXEnabled } from 'uniswap/src/features/transactions/swap/hooks/usePriceUXEnabled'
 import { useTrade } from 'uniswap/src/features/transactions/swap/hooks/useTrade'
-import { useOnChainSwapQuote } from 'uniswap/src/features/transactions/swap/hooks/useOnChainSwapQuote'
-import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { logger } from 'utilities/src/logger/logger'
+import {
+  isOnChainOnlyChain,
+  isOnChainRouterEnabled,
+} from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import { getWrapType } from 'uniswap/src/features/transactions/swap/utils/wrap'
 import type { TransactionState } from 'uniswap/src/features/transactions/types/transactionState'
 import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 import { CurrencyField } from 'uniswap/src/types/currency'
 import { buildCurrencyId } from 'uniswap/src/utils/currencyId'
+import { logger } from 'utilities/src/logger/logger'
 
 /**
  * Builds a minimal ClassicQuoteResponse adapter from on-chain quote data
@@ -44,7 +45,7 @@ function buildOnChainQuoteAdapter(
 ): ClassicQuoteResponse {
   // Generate deterministic requestId from on-chain quote data
   const quoteAmount = isExactIn ? onChainQuote.quoteAmountOut : onChainQuote.quoteAmountIn
-  const requestId = `onchain:${chainId ?? 'unknown'}:${Date.now()}:${amountRaw ?? '0'}:${quoteAmount?.quotient?.toString() ?? '0'}`
+  const requestId = `onchain:${chainId ?? 'unknown'}:${Date.now()}:${amountRaw ?? '0'}:${quoteAmount?.quotient.toString() ?? '0'}`
 
   // Create minimal quote adapter that satisfies upstream expectations
   return {
@@ -57,8 +58,8 @@ function buildOnChainQuoteAdapter(
       gasFeeUSD: undefined,
       txFailureReasons: undefined,
       // Include minimal fields that might be accessed
-      expectedAmountIn: isExactIn ? amountRaw : (quoteAmount?.quotient?.toString() ?? amountRaw),
-      expectedAmountOut: isExactIn ? (quoteAmount?.quotient?.toString() ?? amountRaw) : amountRaw,
+      expectedAmountIn: isExactIn ? amountRaw : (quoteAmount?.quotient.toString() ?? amountRaw),
+      expectedAmountOut: isExactIn ? (quoteAmount?.quotient.toString() ?? amountRaw) : amountRaw,
     },
   } as ClassicQuoteResponse
 }
@@ -99,8 +100,10 @@ export function useDerivedSwapInfo({
   // Fallback: If GraphQL doesn't have the token, use cached CurrencyInfo from token selection
   // This ensures tokens appear immediately even if they're not in GraphQL database
   const currencyInId = currencyAssetIn ? buildCurrencyId(currencyAssetIn.chainId, currencyAssetIn.address) : undefined
-  const currencyOutId = currencyAssetOut ? buildCurrencyId(currencyAssetOut.chainId, currencyAssetOut.address) : undefined
-  
+  const currencyOutId = currencyAssetOut
+    ? buildCurrencyId(currencyAssetOut.chainId, currencyAssetOut.address)
+    : undefined
+
   const cachedCurrencyInInfo = currencyInId ? getCachedCurrencyInfo(currencyInId) : undefined
   const cachedCurrencyOutInfo = currencyOutId ? getCachedCurrencyInfo(currencyOutId) : undefined
 
@@ -175,8 +178,8 @@ export function useDerivedSwapInfo({
         chainId,
         isExactIn,
         exactAmountToken,
-        amountSpecifiedRaw: amountSpecified?.quotient?.toString(),
-        amountSpecifiedExact: amountSpecified?.toExact(),
+        amountSpecifiedRaw: amountSpecified.quotient.toString(),
+        amountSpecifiedExact: amountSpecified.toExact(),
         tokenIn: currencyIn?.symbol,
         tokenOut: currencyOut?.symbol,
       })
@@ -195,19 +198,20 @@ export function useDerivedSwapInfo({
   // This hook uses the full on-chain router (findRoute, QuoterV2, etc.)
   // Supports both exact input and exact output
   const onChainQuoteEnabled = useMemo(() => {
-    const enabled = useOnChainQuote &&
+    const enabled =
+      useOnChainQuote &&
       !!amountSpecified &&
       JSBI.greaterThan(amountSpecified.quotient, JSBI.BigInt(0)) &&
       !!currencyIn &&
       !!currencyOut
-    
+
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
       logger.debug('useDerivedSwapInfo', 'useDerivedSwapInfo', 'On-chain quote enabled check', {
         chainId,
         enabled,
         useOnChainQuote,
         hasAmountSpecified: !!amountSpecified,
-        amountSpecifiedRaw: amountSpecified?.quotient?.toString(),
+        amountSpecifiedRaw: amountSpecified?.quotient.toString(),
         hasCurrencyIn: !!currencyIn,
         hasCurrencyOut: !!currencyOut,
         isExactIn,
@@ -216,21 +220,21 @@ export function useDerivedSwapInfo({
         hasRecipient: !!account?.address,
       })
     }
-    
+
     return enabled
   }, [useOnChainQuote, amountSpecified, currencyIn, currencyOut, isExactIn, account?.address, chainId])
-  
+
   const onChainQuote = useOnChainSwapQuote({
     tokenIn: currencyIn,
     tokenOut: currencyOut,
-    amountIn: isExactIn ? amountSpecified ?? undefined : undefined,
-    amountOut: !isExactIn ? amountSpecified ?? undefined : undefined,
+    amountIn: isExactIn ? (amountSpecified ?? undefined) : undefined,
+    amountOut: !isExactIn ? (amountSpecified ?? undefined) : undefined,
     slippageTolerance,
     chainId: chainId as EVMUniverseChainId | undefined,
     recipient: account?.address,
     enabled: onChainQuoteEnabled,
   })
-  
+
   // Debug logging for Base Sepolia
   if (chainId === 84532) {
     console.log('[ONCHAIN-QUOTE-HOOK] useOnChainSwapQuote result', {
@@ -271,7 +275,7 @@ export function useDerivedSwapInfo({
   // For on-chain-only chains (Base Sepolia), always skip Trading API (never enable it)
   // On-chain routing now supports both exact input and exact output
   const shouldSkipTrade = useOnChainQuote || isOnChainOnlyChain(chainId as number | undefined)
-  
+
   const trade = useTrade({
     account: useOnChainQuote ? undefined : account, // Disable by passing undefined account
     amountSpecified: useOnChainQuote ? undefined : amountSpecified, // Disable by passing undefined amount
@@ -291,7 +295,7 @@ export function useDerivedSwapInfo({
     // If we have a successful on-chain quote, use it instead of Trading API trade
     if (useOnChainQuote && onChainQuote.data) {
       const { quoteAmountIn, quoteAmountOut, txPayload, route: routeResult, priceImpact } = onChainQuote.data
-      
+
       // For exact output, quoteAmountIn is the calculated input; for exact input, quoteAmountOut is the calculated output
       const calculatedAmount = isExactIn ? quoteAmountOut : quoteAmountIn
       const specifiedAmount = amountSpecified
@@ -309,8 +313,8 @@ export function useDerivedSwapInfo({
       })
 
       if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
-        const txTo = txPayload?.to ? String(txPayload.to).toLowerCase() : undefined
-        const txDataLen = txPayload?.data?.length ?? 0
+        const txTo = txPayload.to ? String(txPayload.to).toLowerCase() : undefined
+        const txDataLen = txPayload.data.length ?? 0
         logger.debugDeduped(
           'useDerivedSwapInfo',
           'useDerivedSwapInfo',
@@ -318,16 +322,16 @@ export function useDerivedSwapInfo({
           {
             chainId,
             isExactIn,
-            amountInRaw: actualInputAmount?.quotient?.toString(),
+            amountInRaw: actualInputAmount?.quotient.toString(),
             amountInExact: actualInputAmount?.toExact(),
-            amountOutRaw: actualOutputAmount?.quotient?.toString(),
+            amountOutRaw: actualOutputAmount?.quotient.toString(),
             amountOutExact: actualOutputAmount?.toExact(),
             routeDescription: routeResult?.route ? String(routeResult.route) : undefined,
             hasRoute: !!routeResult?.route,
             txTo,
-            txValue: txPayload?.value,
+            txValue: txPayload.value,
             txDataLen,
-            txGasLimit: txPayload?.gasLimit,
+            txGasLimit: txPayload.gasLimit,
             // Shape verification: ensure amounts are CurrencyAmount objects
             inputAmountShape: shape(amountSpecified),
             outputAmountShape: shape(quoteAmountOut),
@@ -336,7 +340,7 @@ export function useDerivedSwapInfo({
             ttlMs: 5000,
             minIntervalMs: 5000,
             includeKeys: ['chainId', 'txTo', 'txDataLen'],
-          }
+          },
         )
       }
 
@@ -346,7 +350,7 @@ export function useDerivedSwapInfo({
       let executionPrice: Price<Currency, Currency> | undefined
       const inputAmount = actualInputAmount
       const outputAmount = actualOutputAmount
-      
+
       if (inputAmount && outputAmount && inputAmount.currency && outputAmount.currency) {
         try {
           // Try using divide method first (preferred as it handles decimals correctly)
@@ -389,15 +393,14 @@ export function useDerivedSwapInfo({
       // For now, we'll create a minimal trade object without the Route
       // The UI should work with just inputAmount, outputAmount, and executionPrice
       // Only set priceImpact if we have a valid value; leave undefined so UI shows "—"
-      const priceImpactPercent: Percent | undefined = priceImpact !== undefined 
-        ? new Percent(Math.round(priceImpact * 10000), 10000) 
-        : undefined
+      const priceImpactPercent: Percent | undefined =
+        priceImpact !== undefined ? new Percent(Math.round(priceImpact * 10000), 10000) : undefined
 
       // Build quote adapter to satisfy upstream invariants (requestId, quote.quoteId)
       const quoteAdapter = buildOnChainQuoteAdapter(
         onChainQuote.data,
         chainId,
-        amountSpecified?.quotient?.toString(),
+        amountSpecified?.quotient.toString(),
         isExactIn,
       )
 
@@ -405,7 +408,7 @@ export function useDerivedSwapInfo({
       // For EXACT_INPUT: minAmountOut = outputAmount * (1 - slippage), maxAmountIn = inputAmount
       // For EXACT_OUTPUT: minAmountOut = outputAmount, maxAmountIn = inputAmount * (1 + slippage)
       const slippagePercent = slippageTolerance
-      
+
       // Defensive: ensure quoteAmountOut is a CurrencyAmount-like object with multiply method
       // Check for both the method existence and that it's actually callable
       let minAmountOut: CurrencyAmount<Currency> | undefined = quoteAmountOut
@@ -429,15 +432,15 @@ export function useDerivedSwapInfo({
                 {
                   chainId,
                   quoteAmountOutType: typeof quoteAmountOut,
-                  hasMultiply: typeof quoteAmountOut?.multiply === 'function',
-                  hasCurrency: typeof quoteAmountOut?.currency !== 'undefined',
+                  hasMultiply: typeof quoteAmountOut.multiply === 'function',
+                  hasCurrency: typeof quoteAmountOut.currency !== 'undefined',
                   quoteAmountOutShape: shape(quoteAmountOut),
                 },
                 {
                   ttlMs: 5000,
                   minIntervalMs: 5000,
                   keyParts: ['quoteAmountOut-missing-multiply', chainId],
-                }
+                },
               )
             }
           }
@@ -453,7 +456,7 @@ export function useDerivedSwapInfo({
           minAmountOut = quoteAmountOut
         }
       }
-      
+
       // Defensive: ensure amountSpecified is a CurrencyAmount-like object with multiply method
       let maxAmountIn: CurrencyAmount<Currency> | undefined = amountSpecified ?? undefined
       if (amountSpecified) {
@@ -497,11 +500,10 @@ export function useDerivedSwapInfo({
         // Trade type and slippage (required for analytics)
         tradeType: isExactIn ? TradeType.EXACT_INPUT : TradeType.EXACT_OUTPUT,
         // Convert Percent to number (decimal value, 0-1 range)
-        slippageTolerance:
-          JSBI.greaterThan(slippagePercent.asFraction.denominator, JSBI.BigInt(0))
-            ? Number(slippagePercent.asFraction.numerator.toString()) /
-              Number(slippagePercent.asFraction.denominator.toString())
-            : 0,
+        slippageTolerance: JSBI.greaterThan(slippagePercent.asFraction.denominator, JSBI.BigInt(0))
+          ? Number(slippagePercent.asFraction.numerator.toString()) /
+            Number(slippagePercent.asFraction.denominator.toString())
+          : 0,
         // Min/max amounts (required for analytics)
         minAmountOut: minAmountOut ?? actualOutputAmount,
         maxAmountIn: maxAmountIn ?? actualInputAmount,
@@ -556,8 +558,8 @@ export function useDerivedSwapInfo({
               hasTxPayload: !!onChainQuote.data.txPayload,
               hasRoute: !!onChainQuote.data.route,
               txPayloadKeys: onChainQuote.data.txPayload ? Object.keys(onChainQuote.data.txPayload) : null,
-              txPayloadTo: onChainQuote.data.txPayload?.to,
-              txPayloadDataLen: (onChainQuote.data.txPayload?.data as string | undefined)?.length,
+              txPayloadTo: onChainQuote.data.txPayload.to,
+              txPayloadDataLen: (onChainQuote.data.txPayload.data as string | undefined)?.length,
             }
           : null,
         isOnChainQuoteLoading: onChainQuote.isLoading,
@@ -621,7 +623,7 @@ export function useDerivedSwapInfo({
   }, [tokenInBalance, tokenOutBalance])
 
   const finalOnChainQuote = useOnChainQuote && onChainQuote.data ? onChainQuote.data : undefined
-  
+
   // Debug logging for Base Sepolia
   if (chainId === 84532) {
     console.log('[DERIVED-SWAP-INFO] Final derivedSwapInfo', {
@@ -635,7 +637,7 @@ export function useDerivedSwapInfo({
       isExactIn,
     })
   }
-  
+
   return useMemo(() => {
     return {
       chainId,

@@ -1,12 +1,12 @@
 /**
  * Revert Reason Decoder
- * 
+ *
  * Decodes transaction revert reasons for better error messages.
  * Supports ERC20 errors, V3 pool errors, panic codes, and custom errors.
  */
 
-import { PublicClient, decodeErrorResult, decodeFunctionResult, Abi } from 'viem'
 import { logger } from 'utilities/src/logger/logger'
+import { Abi, decodeErrorResult, PublicClient } from 'viem'
 
 /**
  * Common error ABIs for decoding
@@ -15,12 +15,21 @@ const ERC20_ERROR_ABI = [
   {
     type: 'error',
     name: 'InsufficientBalance',
-    inputs: [{ name: 'account', type: 'address' }, { name: 'balance', type: 'uint256' }, { name: 'needed', type: 'uint256' }],
+    inputs: [
+      { name: 'account', type: 'address' },
+      { name: 'balance', type: 'uint256' },
+      { name: 'needed', type: 'uint256' },
+    ],
   },
   {
     type: 'error',
     name: 'InsufficientAllowance',
-    inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }, { name: 'allowance', type: 'uint256' }, { name: 'needed', type: 'uint256' }],
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' },
+      { name: 'allowance', type: 'uint256' },
+      { name: 'needed', type: 'uint256' },
+    ],
   },
 ] as const
 
@@ -77,7 +86,7 @@ const PANIC_CODES: Record<bigint, string> = {
 
 /**
  * Decode revert reason from transaction data
- * 
+ *
  * @param publicClient - Viem public client
  * @param to - Contract address
  * @param data - Transaction data (calldata)
@@ -198,7 +207,7 @@ function formatDecodedError(decoded: { errorName: string; args?: any }): string 
 
 /**
  * Simulate transaction and decode revert if it fails
- * 
+ *
  * @param publicClient - Viem public client
  * @param params - Transaction parameters
  * @returns Simulation result or decoded revert reason
@@ -237,4 +246,3 @@ export async function simulateTransaction(
     }
   }
 }
-

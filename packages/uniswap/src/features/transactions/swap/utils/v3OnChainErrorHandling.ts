@@ -1,6 +1,6 @@
 /**
  * V3 On-Chain Error Handling
- * 
+ *
  * Utilities for converting on-chain errors into user-friendly messages.
  */
 
@@ -80,7 +80,3 @@ export function isRetryableError(error: unknown): boolean {
   // Default to not retryable for safety
   return false
 }
-
-
-
-

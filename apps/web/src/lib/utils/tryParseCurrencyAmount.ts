@@ -28,7 +28,7 @@ export default function tryParseCurrencyAmount<T extends Currency>(
     const typedValueParsed = parseUnits(truncatedValue, currency.decimals).toString()
     if (typedValueParsed !== '0') {
       const result = CurrencyAmount.fromRawAmount(currency, JSBI.BigInt(typedValueParsed))
-      
+
       // Dev-only: log parsing transformation
       if (process.env.NODE_ENV !== 'production') {
         console.log('[tryParseCurrencyAmount] Input → Raw conversion', {
@@ -41,7 +41,7 @@ export default function tryParseCurrencyAmount<T extends Currency>(
           currencyAddress: currency.address,
         })
       }
-      
+
       return result
     }
   } catch (error) {

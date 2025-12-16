@@ -1,13 +1,17 @@
+import { BigNumber } from '@ethersproject/bignumber'
 import { JsonRpcSigner } from '@ethersproject/providers'
 import { getAccount } from '@wagmi/core'
 import { popupRegistry } from 'components/Popups/registry'
 import { PopupType } from 'components/Popups/types'
 import { wagmiConfig } from 'components/Web3Provider/wagmiConfig'
+import { timestampToDeadline } from 'hooks/useTransactionDeadline'
 import { getRoutingForTransaction } from 'state/activity/utils'
 import { getSigner, watchForInterruption } from 'state/sagas/transactions/utils'
 import { handleGetCapabilities } from 'state/walletCapabilities/lib/handleGetCapabilities'
 import { setCapabilitiesByChain } from 'state/walletCapabilities/reducer'
+import type { InterfaceState } from 'state/webReducer'
 import { call, put, select } from 'typed-redux-saga'
+import { updateMintDeadline } from 'uniswap/src/features/transactions/liquidity/utils/updateMintDeadline'
 import { addTransaction } from 'uniswap/src/features/transactions/slice'
 import { HandleOnChainStepParams, OnChainTransactionStepBatched } from 'uniswap/src/features/transactions/steps/types'
 import {
@@ -17,22 +21,18 @@ import {
 } from 'uniswap/src/features/transactions/types/transactionDetails'
 import { ValidatedTransactionRequest } from 'uniswap/src/features/transactions/types/transactionRequests'
 import { didUserReject } from 'utils/swapErrorToUserReadableMessage'
-import { updateMintDeadline } from 'uniswap/src/features/transactions/liquidity/utils/updateMintDeadline'
-import { timestampToDeadline } from 'hooks/useTransactionDeadline'
-import { BigNumber } from '@ethersproject/bignumber'
-import type { InterfaceState } from 'state/webReducer'
 
 const CURRENT_SEND_CALLS_VERSION = '2.0.0'
 
 /**
  * Compute deadline using Uniswap's shared deadline helper (for batched transactions)
  * Same logic as computeDeadlineForMint in liquiditySaga.ts
- * 
+ *
  * TTL source: state.user.userDeadline (from Redux state, same as swaps)
  * - For L2 chains: timestampToDeadline uses L2_DEADLINE_FROM_NOW constant (300 seconds), ignoring ttl
  * - For L1 chains: timestampToDeadline uses ttl from user settings (can be undefined)
  * - Returns undefined if blockTimestamp or required TTL is missing (same behavior as swaps)
- * 
+ *
  * This matches the exact behavior of useGetTransactionDeadline used by swaps.
  */
 async function computeDeadlineForBatchedMint(

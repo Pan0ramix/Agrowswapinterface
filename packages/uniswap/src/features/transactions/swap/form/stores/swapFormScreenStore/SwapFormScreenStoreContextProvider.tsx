@@ -4,10 +4,6 @@ import type { TextInputProps } from 'react-native'
 import type { CurrencyInputPanelRef } from 'uniswap/src/components/CurrencyInputPanel/types'
 import { WarningSeverity } from 'uniswap/src/components/modals/WarningModal/types'
 import { usePrefetchSwappableTokens } from 'uniswap/src/data/apiClients/tradingApi/useTradingApiSwappableTokensQuery'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { isOnChainDebug } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
-import { isTradingApiEnabled } from 'uniswap/src/features/transactions/swap/utils/isTradingApiEnabled'
-import { logger } from 'utilities/src/logger/logger'
 import { getTokenWarningSeverity } from 'uniswap/src/features/tokens/safetyUtils'
 import type { DecimalPadInputRef } from 'uniswap/src/features/transactions/components/DecimalPadInput/DecimalPadInput'
 import {
@@ -22,16 +18,19 @@ import { useTemporaryExactOutputUnavailableWarning } from 'uniswap/src/features/
 import { useUpdateSwapFormOnMountIfExactOutputWillFail } from 'uniswap/src/features/transactions/swap/form/stores/swapFormScreenStore/hooks/useUpdateSwapFormOnMountIfExactOutputWillFail'
 import { SwapFormScreenStoreContext } from 'uniswap/src/features/transactions/swap/form/stores/swapFormScreenStore/SwapFormScreenStoreContext'
 import { useSwapFormScreenCallbacks } from 'uniswap/src/features/transactions/swap/form/stores/swapFormScreenStore/useSwapFormScreenCallbacks'
-
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import {
   useSwapFormStore,
   useSwapFormStoreDerivedSwapInfo,
 } from 'uniswap/src/features/transactions/swap/stores/swapFormStore/useSwapFormStore'
 import { getExactOutputWillFail } from 'uniswap/src/features/transactions/swap/utils/getExactOutputWillFail'
+import { isOnChainDebug } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
+import { isTradingApiEnabled } from 'uniswap/src/features/transactions/swap/utils/isTradingApiEnabled'
 import { CurrencyField } from 'uniswap/src/types/currency'
 // biome-ignore lint/style/noRestrictedImports: legacy import will be migrated
 import { formatCurrencyAmount } from 'utilities/src/format/localeBased'
 import { NumberType } from 'utilities/src/format/types'
+import { logger } from 'utilities/src/logger/logger'
 import { isMobileApp } from 'utilities/src/platform'
 import { useHasValueChanged } from 'utilities/src/react/useHasValueChanged'
 
@@ -90,20 +89,29 @@ export const SwapFormScreenStoreContextProvider = ({
   // Prefetch swappable tokens only when Trading API is enabled (not on-chain-only chains)
   const inputChainId = input?.chainId ?? output?.chainId
   const outputChainId = output?.chainId ?? input?.chainId
-  const disableTradingApiInput = inputChainId ? (isOnChainOnlyChain(inputChainId) || !isTradingApiEnabled(inputChainId)) : false
-  const disableTradingApiOutput = outputChainId ? (isOnChainOnlyChain(outputChainId) || !isTradingApiEnabled(outputChainId)) : false
-  
+  const disableTradingApiInput = inputChainId
+    ? isOnChainOnlyChain(inputChainId) || !isTradingApiEnabled(inputChainId)
+    : false
+  const disableTradingApiOutput = outputChainId
+    ? isOnChainOnlyChain(outputChainId) || !isTradingApiEnabled(outputChainId)
+    : false
+
   // Log when Trading API is prevented (debug only)
   if (isOnChainDebug(inputChainId) && (disableTradingApiInput || disableTradingApiOutput)) {
-    logger.debug('SwapFormScreenStoreContextProvider', 'usePrefetchSwappableTokens', '[TRADING-API] Prevented swappable_tokens prefetch', {
-      inputChainId,
-      outputChainId,
-      disableTradingApiInput,
-      disableTradingApiOutput,
-      reason: 'on-chain-only chain or Trading API disabled',
-    })
+    logger.debug(
+      'SwapFormScreenStoreContextProvider',
+      'usePrefetchSwappableTokens',
+      '[TRADING-API] Prevented swappable_tokens prefetch',
+      {
+        inputChainId,
+        outputChainId,
+        disableTradingApiInput,
+        disableTradingApiOutput,
+        reason: 'on-chain-only chain or Trading API disabled',
+      },
+    )
   }
-  
+
   usePrefetchSwappableTokens(input, disableTradingApiInput)
   usePrefetchSwappableTokens(output, disableTradingApiOutput)
 

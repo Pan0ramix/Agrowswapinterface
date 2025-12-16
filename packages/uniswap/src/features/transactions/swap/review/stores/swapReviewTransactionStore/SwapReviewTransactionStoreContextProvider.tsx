@@ -9,8 +9,8 @@ import { isClassic, isUniswapX } from 'uniswap/src/features/transactions/swap/ut
 import { isWrapAction } from 'uniswap/src/features/transactions/swap/utils/wrap'
 import { getRelevantTokenWarningSeverity } from 'uniswap/src/features/transactions/TransactionDetails/utils/getRelevantTokenWarningSeverity'
 import { CurrencyField } from 'uniswap/src/types/currency'
-import { useHasValueChanged } from 'utilities/src/react/useHasValueChanged'
 import { logger } from 'utilities/src/logger/logger'
+import { useHasValueChanged } from 'utilities/src/react/useHasValueChanged'
 
 export const SwapReviewTransactionStoreContextProvider = ({
   children,
@@ -41,7 +41,7 @@ export const SwapReviewTransactionStoreContextProvider = ({
 
   // Check if we have Trading API quote (on-chain-only trades have quote: undefined)
   const hasApiQuote = useMemo(() => {
-    return !!trade?.quote?.quote
+    return !!trade?.quote.quote
   }, [trade])
 
   const txSimulationErrors = useMemo(() => {
@@ -50,7 +50,7 @@ export const SwapReviewTransactionStoreContextProvider = ({
     }
     // On-chain-only trades (chainId 84532) have quote: undefined
     // Return undefined when API quote is not available (on-chain-only mode)
-    return hasApiQuote ? trade.quote?.quote?.txFailureReasons : undefined
+    return hasApiQuote ? trade.quote.quote.txFailureReasons : undefined
   }, [trade, hasApiQuote])
 
   // Dev-only shape logging to verify trade object structure (on-chain-only chains)
@@ -64,10 +64,9 @@ export const SwapReviewTransactionStoreContextProvider = ({
       hasToExact: typeof x?.toExact === 'function',
     })
     // Check if swapTxContext has txRequests (only Classic/Wrap/Bridge/Chained have it)
-    const hasTxRequests = isClassic(swapTxContext) || isWrapAction(wrapType)
-      ? !!(swapTxContext as any).txRequests
-      : false
-    const txRequestsLength = hasTxRequests ? (swapTxContext as any).txRequests?.length ?? 0 : 0
+    const hasTxRequests =
+      isClassic(swapTxContext) || isWrapAction(wrapType) ? !!(swapTxContext as any).txRequests : false
+    const txRequestsLength = hasTxRequests ? ((swapTxContext as any).txRequests?.length ?? 0) : 0
 
     const routing = (trade as any).routing
     logger.debugDeduped(
@@ -79,7 +78,7 @@ export const SwapReviewTransactionStoreContextProvider = ({
         hasTrade: !!trade,
         hasQuote: !!trade.quote,
         hasApiQuote,
-        hasQuoteQuote: !!trade.quote?.quote,
+        hasQuoteQuote: !!trade.quote.quote,
         routing,
         hasTxRequests,
         txRequestsLength: txRequestsLength ?? 0,
@@ -90,7 +89,7 @@ export const SwapReviewTransactionStoreContextProvider = ({
         maxPerWindow: 1,
         windowMs: 4000,
         includeKeys: ['chainId', 'hasTrade', 'hasQuote', 'hasApiQuote', 'hasQuoteQuote', 'routing'],
-      }
+      },
     )
   }
 

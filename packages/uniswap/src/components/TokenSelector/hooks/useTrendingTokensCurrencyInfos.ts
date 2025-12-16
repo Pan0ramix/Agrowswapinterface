@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
+import { Token } from '@uniswap/sdk-core'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { CurrencyInfo } from 'uniswap/src/features/dataApi/types'
 import { buildCurrencyInfo } from 'uniswap/src/features/dataApi/utils/buildCurrency'
 import { currencyId } from 'uniswap/src/utils/currencyId'
-import { Token } from '@uniswap/sdk-core'
 
 export function useTrendingTokensCurrencyInfos(
   chainFilter: Maybe<UniverseChainId>,
@@ -40,7 +40,11 @@ export function useTrendingTokensCurrencyInfos(
           (t: any) =>
             new Token(UniverseChainId.BaseSepolia, t.address, t.decimals, t.symbol ?? 'UNKNOWN', t.name ?? 'Unknown'),
         )
-      console.log('[TokenList] Parsed tokens:', tokens.length, tokens.map(t => t.symbol))
+      console.log(
+        '[TokenList] Parsed tokens:',
+        tokens.length,
+        tokens.map((t) => t.symbol),
+      )
       const currencyInfos = tokens.map((token: Token) =>
         buildCurrencyInfo({
           currency: token,

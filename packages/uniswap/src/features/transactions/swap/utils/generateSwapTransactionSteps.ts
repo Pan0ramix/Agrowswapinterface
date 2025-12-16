@@ -17,19 +17,15 @@ import {
   validateSwapTxContextWithReasons,
 } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
 import { isBridge, isClassic, isUniswapX } from 'uniswap/src/features/transactions/swap/utils/routing'
-import { logger } from 'utilities/src/logger/logger'
 import { boundaryLog } from 'uniswap/src/utils/boundaryLog'
 
-export function generateSwapTransactionSteps(
-  txContext: SwapTxAndGasInfo,
-  v4Enabled?: boolean
-): TransactionStep[] {
+export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enabled?: boolean): TransactionStep[] {
   // Log ENTER with presence flags
   const trade = txContext.trade
   const txRequests = (txContext as any)?.txRequests
   const firstTxRequest = txRequests?.[0]
   const quote = (trade as any)?.quote
-  const chainId = trade?.inputAmount?.currency?.chainId
+  const chainId = trade?.inputAmount.currency.chainId
   const approveTxRequest = (txContext as any)?.approveTxRequest
 
   // Guaranteed "enter" log at the very top (Base Sepolia only)
@@ -45,10 +41,10 @@ export function generateSwapTransactionSteps(
         txRequestsLength: txRequests?.length ?? 0,
       },
     },
-    chainId
+    chainId,
   )
 
-  // eslint-disable-next-line no-console
+   
   console.log('[GENERATE-STEPS] ENTER', {
     chainId,
     routing: trade?.routing ? String(trade.routing) : undefined,
@@ -128,7 +124,7 @@ export function generateSwapTransactionSteps(
     // Get detailed validation reasons - guaranteed to run
     const validation = validateSwapTxContextWithReasons(normalizedContext)
     const { reasons, snapshot } = validation
-    const firstReason = reasons?.[0]
+    const firstReason = reasons[0]
     const hasBlockingReasons = reasons.length > 0
     const txRequestsLength = (normalizedContext as any)?.txRequests?.length ?? 0
     const hasTxRequests = txRequestsLength > 0
@@ -151,7 +147,7 @@ export function generateSwapTransactionSteps(
           txContextKeys: normalizedContext ? Object.keys(normalizedContext as any) : [],
         },
       },
-      chainId
+      chainId,
     )
 
     // RESILIENCE: Do not exit early if:
@@ -164,32 +160,32 @@ export function generateSwapTransactionSteps(
     if (!hasBlockingReasons && hasTxRequests) {
       // No blocking reasons but we have txRequests - proceed to step generation
       // Gas fee may be missing but that's OK for on-chain-only (will be estimated at execution)
-            boundaryLog(
-              '[GENERATE-STEPS] proceeding despite invalid context (no blocking reasons, has txRequests)',
-              {
-                tags: { file: 'generateSwapTransactionSteps', function: 'generateSwapTransactionSteps' },
-                extra: {
-                  txRequestsLength,
-                  reasonsLength: reasons.length,
-                },
-              },
-              chainId
-            )
+      boundaryLog(
+        '[GENERATE-STEPS] proceeding despite invalid context (no blocking reasons, has txRequests)',
+        {
+          tags: { file: 'generateSwapTransactionSteps', function: 'generateSwapTransactionSteps' },
+          extra: {
+            txRequestsLength,
+            reasonsLength: reasons.length,
+          },
+        },
+        chainId,
+      )
       isValidSwap = true // Override validation to allow step generation
     } else if (isOnChainOnly && hasOnlyGasFeeIssue && hasTxRequests) {
       // On-chain-only: allow proceeding if only issue is gas fee (STF/estimation failure)
       // Steps can be generated; gas will be estimated at execution time
-            boundaryLog(
-              '[GENERATE-STEPS] proceeding despite gas fee issue (on-chain-only, has txRequests)',
-              {
-                tags: { file: 'generateSwapTransactionSteps', function: 'generateSwapTransactionSteps' },
-                extra: {
-                  txRequestsLength,
-                  firstReason,
-                },
-              },
-              chainId
-            )
+      boundaryLog(
+        '[GENERATE-STEPS] proceeding despite gas fee issue (on-chain-only, has txRequests)',
+        {
+          tags: { file: 'generateSwapTransactionSteps', function: 'generateSwapTransactionSteps' },
+          extra: {
+            txRequestsLength,
+            firstReason,
+          },
+        },
+        chainId,
+      )
       isValidSwap = true // Override validation to allow step generation
     } else if (firstReason === 'CLASSIC_MISSING_TX_REQUESTS' && chainId === 84532 && routing === 'CLASSIC') {
       // If firstReason is CLASSIC_MISSING_TX_REQUESTS, try to fix it
@@ -216,14 +212,14 @@ export function generateSwapTransactionSteps(
                   txRequestsLength: (normalizedContext as any)?.txRequests?.length ?? 0,
                 },
               },
-              chainId
+              chainId,
             )
             // Continue with fixed context - proceed to step building below
           } else {
             boundaryLog(
               '[GENERATE-STEPS] exit-early',
               { chainId, reason: 'INVALID_SWAP_TX_CONTEXT (fix failed)' },
-              chainId
+              chainId,
             )
             return []
           }
@@ -231,7 +227,7 @@ export function generateSwapTransactionSteps(
           boundaryLog(
             '[GENERATE-STEPS] exit-early',
             { chainId, reason: 'INVALID_SWAP_TX_CONTEXT (revalidation failed)' },
-            chainId
+            chainId,
           )
           return []
         }
@@ -239,7 +235,7 @@ export function generateSwapTransactionSteps(
         boundaryLog(
           '[GENERATE-STEPS] exit-early',
           { chainId, reason: 'INVALID_SWAP_TX_CONTEXT (no txRequests to fix)' },
-          chainId
+          chainId,
         )
         return []
       }
@@ -248,7 +244,7 @@ export function generateSwapTransactionSteps(
       boundaryLog(
         '[GENERATE-STEPS] exit-early',
         { chainId, reason: 'INVALID_SWAP_TX_CONTEXT (missing txRequests)' },
-        chainId
+        chainId,
       )
       return []
     } else {
@@ -256,7 +252,7 @@ export function generateSwapTransactionSteps(
       boundaryLog(
         '[GENERATE-STEPS] exit-early',
         { chainId, reason: `INVALID_SWAP_TX_CONTEXT (${firstReason})` },
-        chainId
+        chainId,
       )
       return []
     }
@@ -270,7 +266,7 @@ export function generateSwapTransactionSteps(
     const { trade, approveTxRequest, revocationTxRequest } = txContextToUse
 
     if (!trade) {
-      // eslint-disable-next-line no-console
+       
       console.log('[GENERATE-STEPS] EARLY-RETURN', {
         reason: 'MISSING_TRADE',
         chainId,
@@ -280,11 +276,11 @@ export function generateSwapTransactionSteps(
     }
 
     const revocation = createRevocationTransactionStep(revocationTxRequest, trade.inputAmount.currency.wrapped)
-    
+
     // Boundary log C: Before calling generateSwapTransactionSteps (inside the function, right before approval step creation)
     // CRITICAL: Ensure approveTxRequest is present and has required fields
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-      // eslint-disable-next-line no-console
+       
       console.log('[SWAP-SAGA] before-generate', {
         chainId,
         txRequestsLength: txRequests?.length ?? 0,
@@ -293,26 +289,26 @@ export function generateSwapTransactionSteps(
         approveTxRequestChainId: approveTxRequest?.chainId,
         approveTxRequestDataLen: (approveTxRequest?.data as string | undefined)?.length,
         hasAmountIn: !!trade.inputAmount,
-        amountInValue: trade.inputAmount?.quotient?.toString(),
+        amountInValue: trade.inputAmount.quotient.toString(),
       })
     }
-    
+
     // CRITICAL FIX: Ensure amountIn is available for approval step creation
     // For on-chain-only swaps, trade.inputAmount should always be present, but add fallback
     const amountIn = trade.inputAmount ?? (trade as any)?.inputAmount ?? undefined
-    
+
     const approval = createApprovalTransactionStep({ txRequest: approveTxRequest, amountIn })
 
     // Debug logging for approval step creation (Base Sepolia on-chain-only)
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-      // eslint-disable-next-line no-console
+       
       console.log('[GENERATE-STEPS] approval step creation', {
         chainId,
         hasApproveTxRequest: !!approveTxRequest,
         approveTxRequestTo: approveTxRequest?.to,
         approveTxRequestDataLen: (approveTxRequest?.data as string | undefined)?.length,
         hasAmountIn: !!trade.inputAmount,
-        amountInValue: trade.inputAmount?.quotient?.toString(),
+        amountInValue: trade.inputAmount.quotient.toString(),
         approvalStepCreated: !!approval,
         approvalStepType: approval?.type,
         approvalStepSpender: approval?.spender,
@@ -324,7 +320,7 @@ export function generateSwapTransactionSteps(
 
       if (txContextToUse.unsigned) {
         if (!txContextToUse.permit || txContextToUse.permit.method !== 'TypedData') {
-          // eslint-disable-next-line no-console
+           
           console.log('[GENERATE-STEPS] EARLY-RETURN', {
             reason: 'UNSIGNED_WITHOUT_PERMIT',
             chainId,
@@ -334,7 +330,7 @@ export function generateSwapTransactionSteps(
           return []
         }
         if (!swapRequestArgs) {
-          // eslint-disable-next-line no-console
+           
           console.log('[GENERATE-STEPS] EARLY-RETURN', {
             reason: 'UNSIGNED_WITHOUT_SWAP_REQUEST_ARGS',
             chainId,
@@ -357,7 +353,7 @@ export function generateSwapTransactionSteps(
       }
 
       if (!txRequestsArray || txRequestsArray.length === 0) {
-        // eslint-disable-next-line no-console
+         
         console.log('[GENERATE-STEPS] EARLY-RETURN', {
           reason: 'MISSING_TX_REQUEST',
           chainId,
@@ -377,7 +373,7 @@ export function generateSwapTransactionSteps(
 
       // Log classic components before ordering (Base Sepolia only)
       if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-        // eslint-disable-next-line no-console
+         
         console.log('[GENERATE-STEPS] classic-components', {
           chainId,
           hasApprovalStep: !!approval,
@@ -405,21 +401,21 @@ export function generateSwapTransactionSteps(
             stepsTypes: steps.map((s: any) => s.type),
           },
         },
-        chainId
+        chainId,
       )
 
       return steps
     } else if (isUniswapX(txContextToUse)) {
       if (!txContextToUse.permit) {
-        // eslint-disable-next-line no-console
+         
         console.log('[GENERATE-STEPS] EARLY-RETURN', {
           reason: 'UNISWAPX_WITHOUT_PERMIT',
           chainId,
         })
         return []
       }
-      if (!trade.quote?.quote) {
-        // eslint-disable-next-line no-console
+      if (!trade.quote.quote) {
+         
         console.log('[GENERATE-STEPS] EARLY-RETURN', {
           reason: 'UNISWAPX_WITHOUT_QUOTE',
           chainId,
@@ -434,7 +430,7 @@ export function generateSwapTransactionSteps(
       })
     } else if (isBridge(txContextToUse)) {
       if (!txContextToUse.txRequests || txContextToUse.txRequests.length === 0) {
-        // eslint-disable-next-line no-console
+         
         console.log('[GENERATE-STEPS] EARLY-RETURN', {
           reason: 'BRIDGE_WITHOUT_TX_REQUESTS',
           chainId,
@@ -456,11 +452,11 @@ export function generateSwapTransactionSteps(
         swap: createSwapTransactionStep(txContextToUse.txRequests[0]),
       })
     } else {
-      // eslint-disable-next-line no-console
+       
       console.log('[GENERATE-STEPS] EARLY-RETURN', {
         reason: 'UNSUPPORTED_ROUTING',
         chainId,
-        routing: trade?.routing ? String(trade.routing) : undefined,
+        routing: trade.routing ? String(trade.routing) : undefined,
         isClassic: isClassic(txContextToUse),
         isUniswapX: isUniswapX(txContextToUse),
         isBridge: isBridge(txContextToUse),
@@ -470,7 +466,7 @@ export function generateSwapTransactionSteps(
   }
 
   // This should not be reached if we logged INVALID_SWAP_TX_CONTEXT above, but keeping for safety
-  // eslint-disable-next-line no-console
+   
   console.log('[GENERATE-STEPS] EARLY-RETURN', {
     reason: 'NOT_VALID_SWAP',
     chainId,

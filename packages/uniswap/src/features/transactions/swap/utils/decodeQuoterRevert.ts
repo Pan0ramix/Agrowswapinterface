@@ -1,12 +1,11 @@
 /**
  * Quoter Revert Reason Decoder
- * 
+ *
  * Decodes revert reasons from Quoter contract calls with comprehensive diagnostics.
  * Supports Error(string), Panic(uint256), and custom errors.
  */
 
-import { decodeErrorResult, Abi } from 'viem'
-import { logger } from 'utilities/src/logger/logger'
+import { Abi, decodeErrorResult } from 'viem'
 
 /**
  * Panic code mappings (from Solidity docs)
@@ -87,7 +86,7 @@ const RESTRICTION_ERROR_ABI = [
 
 /**
  * Decode revert data from error
- * 
+ *
  * @param revertData - Hex string of revert data (0x...)
  * @returns Decoded revert reason with details
  */
@@ -228,7 +227,7 @@ export function extractRevertData(error: unknown): string | null {
 
   // Try various error formats
   const errorObj = error as any
-  
+
   // viem readContract format - data might be in error.data directly
   if (errorObj.data) {
     if (typeof errorObj.data === 'string' && errorObj.data.startsWith('0x')) {
@@ -307,7 +306,7 @@ export function decodeQuoterRevert(
   context: typeof context
 } {
   const revertData = extractRevertData(error)
-  
+
   if (!revertData) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     return {
@@ -321,10 +320,9 @@ export function decodeQuoterRevert(
   }
 
   const decoded = decodeRevertData(revertData)
-  
+
   return {
     ...decoded,
     context,
   }
 }
-

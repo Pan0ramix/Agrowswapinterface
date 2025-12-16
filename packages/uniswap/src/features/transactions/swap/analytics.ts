@@ -23,12 +23,12 @@ import { getSwapFeeUsd } from 'uniswap/src/features/transactions/swap/utils/getS
 import { isChained, isClassic, isJupiter, isUniswapX } from 'uniswap/src/features/transactions/swap/utils/routing'
 import { SwapEventType, timestampTracker } from 'uniswap/src/features/transactions/swap/utils/SwapEventTimestampTracker'
 import { getProtocolVersionFromTrade } from 'uniswap/src/features/transactions/swap/utils/trade'
-import { swapError } from 'uniswap/src/utils/swapDebug'
 import { getClassicQuoteFromResponse } from 'uniswap/src/features/transactions/swap/utils/tradingApi'
 import { TransactionOriginType } from 'uniswap/src/features/transactions/types/transactionDetails'
 import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 import { CurrencyField } from 'uniswap/src/types/currency'
 import { getCurrencyAddressForAnalytics } from 'uniswap/src/utils/currencyId'
+import { swapError } from 'uniswap/src/utils/swapDebug'
 import { NumberType } from 'utilities/src/format/types'
 import { logger } from 'utilities/src/logger/logger'
 import type { ITraceContext } from 'utilities/src/telemetry/trace/TraceContext'
@@ -193,7 +193,11 @@ export function getPriceImpact(trade: Trade | null | undefined): string | undefi
     return undefined
   }
   // Defensive: ensure priceImpact is a Percent-like object with multiply and toSignificant
-  if (!trade.priceImpact || typeof trade.priceImpact.multiply !== 'function' || typeof trade.priceImpact.toSignificant !== 'function') {
+  if (
+    !trade.priceImpact ||
+    typeof trade.priceImpact.multiply !== 'function' ||
+    typeof trade.priceImpact.toSignificant !== 'function'
+  ) {
     return undefined
   }
   const multiplied = trade.priceImpact.multiply(100)
@@ -263,7 +267,7 @@ function getAnalyticsProtocolType(trade: Trade): string | undefined {
     swapError(undefined, '[ANALYTICS] getAnalyticsProtocolType failed', {
       error,
       tradeKeys: Object.keys(trade ?? {}),
-      hasQuote: !!trade?.quote,
+      hasQuote: !!trade.quote,
     })
     return undefined
   }
@@ -292,7 +296,7 @@ export function useSwapAnalytics(derivedSwapInfo: DerivedSwapInfo): void {
   const {
     trade: { trade },
   } = derivedSwapInfo
-  const quoteId = trade?.quote?.requestId
+  const quoteId = trade?.quote.requestId
 
   // CRITICAL: Early return check happens AFTER all hooks
   // If no trade or quoteId, still call useEffect but guard inside it
@@ -373,7 +377,7 @@ export function getBaseTradeAnalyticsProperties({
   const portionAmount = trade.swapFee?.amount
 
   const feeCurrencyAmount =
-    trade.outputAmount?.currency && portionAmount
+    trade.outputAmount.currency && portionAmount
       ? getCurrencyAmount({
           value: portionAmount,
           valueType: ValueType.Raw,
@@ -382,9 +386,7 @@ export function getBaseTradeAnalyticsProperties({
       : undefined
 
   const finalOutputAmount =
-    trade.outputAmount && feeCurrencyAmount
-      ? trade.outputAmount.subtract(feeCurrencyAmount)
-      : trade.outputAmount
+    trade.outputAmount && feeCurrencyAmount ? trade.outputAmount.subtract(feeCurrencyAmount) : trade.outputAmount
 
   // Defensive: wrap analytics computation in try/catch to prevent swap flow crashes
   let protocol: string | undefined
@@ -400,8 +402,8 @@ export function getBaseTradeAnalyticsProperties({
     swapError(undefined, '[ANALYTICS] getBaseTradeAnalyticsProperties failed', {
       error,
       tradeKeys: Object.keys(trade ?? {}),
-      hasQuote: !!trade?.quote,
-      hasRouting: !!trade?.routing,
+      hasQuote: !!trade.quote,
+      hasRouting: !!trade.routing,
     })
     // Use safe defaults
     protocol = undefined
@@ -413,21 +415,19 @@ export function getBaseTradeAnalyticsProperties({
     routing,
     protocol,
     total_balances_usd: portfolioBalanceUsd,
-    token_in_symbol: trade.inputAmount?.currency?.symbol ?? '',
-    token_out_symbol: trade.outputAmount?.currency?.symbol ?? '',
-    token_in_address: trade.inputAmount?.currency ? getCurrencyAddressForAnalytics(trade.inputAmount.currency) : '',
-    token_out_address: trade.outputAmount?.currency ? getCurrencyAddressForAnalytics(trade.outputAmount.currency) : '',
+    token_in_symbol: trade.inputAmount.currency.symbol ?? '',
+    token_out_symbol: trade.outputAmount.currency.symbol ?? '',
+    token_in_address: trade.inputAmount.currency ? getCurrencyAddressForAnalytics(trade.inputAmount.currency) : '',
+    token_out_address: trade.outputAmount.currency ? getCurrencyAddressForAnalytics(trade.outputAmount.currency) : '',
     price_impact_basis_points: getPriceImpact(trade),
     chain_id:
-      trade.inputAmount?.currency?.chainId === trade.outputAmount?.currency?.chainId
-        ? trade.inputAmount?.currency?.chainId
+      trade.inputAmount.currency.chainId === trade.outputAmount.currency.chainId
+        ? trade.inputAmount.currency.chainId
         : undefined,
-    chain_id_in: trade.inputAmount?.currency?.chainId,
-    chain_id_out: trade.outputAmount?.currency?.chainId,
+    chain_id_in: trade.inputAmount.currency.chainId,
+    chain_id_out: trade.outputAmount.currency.chainId,
     token_in_amount:
-      trade.inputAmount && typeof trade.inputAmount.toExact === 'function'
-        ? trade.inputAmount.toExact()
-        : '',
+      trade.inputAmount && typeof trade.inputAmount.toExact === 'function' ? trade.inputAmount.toExact() : '',
     token_out_amount: formatter.formatCurrencyAmount({
       value: finalOutputAmount,
       type: NumberType.SwapTradeAmount,

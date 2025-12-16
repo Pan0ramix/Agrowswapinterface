@@ -1,19 +1,19 @@
 /**
  * On-Chain LP Approval Hook
- * 
+ *
  * Checks ERC20 approval status for LP position minting.
  * Uses on-chain data only, no Trading API.
  */
 
 import { CurrencyAmount, Token } from '@uniswap/sdk-core'
 import { useEffect, useMemo } from 'react'
-import { useReadContract, useWatchContractEvent } from 'wagmi'
-import { erc20Abi, type Address } from 'viem'
-import { getPositionManagerAddress } from 'uniswap/src/constants/v3Addresses'
 import { AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
+import { getPositionManagerAddress } from 'uniswap/src/constants/v3Addresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { useTriggerOnTransactionType } from 'uniswap/src/features/transactions/hooks/useTriggerOnTransactionType'
 import { TransactionType } from 'uniswap/src/features/transactions/types/transactionDetails'
+import { type Address, erc20Abi } from 'viem'
+import { useReadContract, useWatchContractEvent } from 'wagmi'
 
 /**
  * Helper to cast string to Address type (for wagmi compatibility)
@@ -48,7 +48,10 @@ interface UseOnChainLpApprovalParams {
 function getPositionManagerAddressForApproval(chainId: EVMUniverseChainId): string | undefined {
   // Try Agroswap addresses first
   if (chainId === 84532) {
-    const address = AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[chainId as keyof typeof AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES]
+    const address =
+      AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[
+        chainId as keyof typeof AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES
+      ]
     if (address) {
       return address
     }
@@ -65,13 +68,11 @@ function getPositionManagerAddressForApproval(chainId: EVMUniverseChainId): stri
 
 /**
  * Check approval status for LP position minting
- * 
+ *
  * @param params - Approval parameters
  * @returns Approval state for both tokens
  */
-export function useOnChainLpApproval(
-  params: UseOnChainLpApprovalParams,
-): {
+export function useOnChainLpApproval(params: UseOnChainLpApprovalParams): {
   approvalState0: ApprovalState
   approvalState1: ApprovalState
   needsApproval0: boolean
@@ -89,13 +90,17 @@ export function useOnChainLpApproval(
 
   // Check token0 allowance
   const queryEnabled0 = !!owner && !!spender && !!amount0?.currency
-  const { data: rawAllowance0, isLoading: isLoading0, refetch: refetchAllowance0 } = useReadContract({
+  const {
+    data: rawAllowance0,
+    isLoading: isLoading0,
+    refetch: refetchAllowance0,
+  } = useReadContract({
     address: toAddress(amount0?.currency.address),
     chainId: amount0?.currency.chainId,
     abi: erc20Abi,
     functionName: 'allowance',
     args: queryEnabled0 ? [toAddress(owner), toAddress(spender)] : undefined,
-    query: { 
+    query: {
       enabled: queryEnabled0,
       refetchOnMount: true,
       refetchOnWindowFocus: true,
@@ -145,13 +150,17 @@ export function useOnChainLpApproval(
 
   // Check token1 allowance
   const queryEnabled1 = !!owner && !!spender && !!amount1?.currency
-  const { data: rawAllowance1, isLoading: isLoading1, refetch: refetchAllowance1 } = useReadContract({
+  const {
+    data: rawAllowance1,
+    isLoading: isLoading1,
+    refetch: refetchAllowance1,
+  } = useReadContract({
     address: toAddress(amount1?.currency.address),
     chainId: amount1?.currency.chainId,
     abi: erc20Abi,
     functionName: 'allowance',
     args: queryEnabled1 ? [toAddress(owner), toAddress(spender)] : undefined,
-    query: { 
+    query: {
       enabled: queryEnabled1,
       refetchOnMount: true,
       refetchOnWindowFocus: true,
@@ -210,27 +219,33 @@ export function useOnChainLpApproval(
     }
     // Check if allowance is less than required amount
     const needs = allowance0.lessThan(amount0)
-    
+
     // Dev-only: log approval check for token0
     if (process.env.NODE_ENV !== 'production') {
       console.log('[useOnChainLpApproval] Token0 approval check', {
-        amount0: amount0 ? {
-          raw: amount0.quotient.toString(),
-          human: amount0.toExact(),
-          currency: amount0.currency.symbol,
-          address: amount0.currency.address,
-          decimals: amount0.currency.decimals,
-        } : undefined,
-        allowance0: allowance0 ? {
-          raw: allowance0.quotient.toString(),
-          human: allowance0.toExact(),
-          isMaxUint256: allowance0.quotient.toString() === '115792089237316195423570985008687907853269984665640564039457584007913129639935',
-        } : undefined,
+        amount0: amount0
+          ? {
+              raw: amount0.quotient.toString(),
+              human: amount0.toExact(),
+              currency: amount0.currency.symbol,
+              address: amount0.currency.address,
+              decimals: amount0.currency.decimals,
+            }
+          : undefined,
+        allowance0: allowance0
+          ? {
+              raw: allowance0.quotient.toString(),
+              human: allowance0.toExact(),
+              isMaxUint256:
+                allowance0.quotient.toString() ===
+                '115792089237316195423570985008687907853269984665640564039457584007913129639935',
+            }
+          : undefined,
         spender,
         needsApproval: needs,
       })
     }
-    
+
     return needs
   }, [amount0, allowance0, spender])
 
@@ -243,27 +258,33 @@ export function useOnChainLpApproval(
     }
     // Check if allowance is less than required amount
     const needs = allowance1.lessThan(amount1)
-    
+
     // Dev-only: log approval check for token1
     if (process.env.NODE_ENV !== 'production') {
       console.log('[useOnChainLpApproval] Token1 approval check', {
-        amount1: amount1 ? {
-          raw: amount1.quotient.toString(),
-          human: amount1.toExact(),
-          currency: amount1.currency.symbol,
-          address: amount1.currency.address,
-          decimals: amount1.currency.decimals,
-        } : undefined,
-        allowance1: allowance1 ? {
-          raw: allowance1.quotient.toString(),
-          human: allowance1.toExact(),
-          isMaxUint256: allowance1.quotient.toString() === '115792089237316195423570985008687907853269984665640564039457584007913129639935',
-        } : undefined,
+        amount1: amount1
+          ? {
+              raw: amount1.quotient.toString(),
+              human: amount1.toExact(),
+              currency: amount1.currency.symbol,
+              address: amount1.currency.address,
+              decimals: amount1.currency.decimals,
+            }
+          : undefined,
+        allowance1: allowance1
+          ? {
+              raw: allowance1.quotient.toString(),
+              human: allowance1.toExact(),
+              isMaxUint256:
+                allowance1.quotient.toString() ===
+                '115792089237316195423570985008687907853269984665640564039457584007913129639935',
+            }
+          : undefined,
         spender,
         needsApproval: needs,
       })
     }
-    
+
     return needs
   }, [amount1, allowance1, spender])
 
@@ -322,4 +343,3 @@ export function useOnChainLpApproval(
     isLoading,
   }
 }
-

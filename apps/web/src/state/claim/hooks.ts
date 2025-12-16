@@ -7,7 +7,7 @@ import { useContract } from 'hooks/useContract'
 import JSBI from 'jsbi'
 import { useEffect, useState } from 'react'
 import { useTransactionAdder } from 'state/transactions/hooks'
-import { UNI } from 'uniswap/src/constants/tokens'
+import { AGX } from 'uniswap/src/constants/tokens'
 import { normalizeTokenAddressForCache } from 'uniswap/src/data/cache'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { Platform } from 'uniswap/src/features/platforms/types/Platform'
@@ -170,7 +170,7 @@ function useUserClaimData(account: string | null | undefined): UserClaimData | n
   return account && chainId === 1 ? claimInfo[account] : null
 }
 
-// check if user is in blob and has not yet claimed UNI
+// check if user is in blob and has not yet claimed AGX
 export function useUserHasAvailableClaim(account: string | null | undefined): boolean {
   const userClaimData = useUserClaimData(account)
 
@@ -192,7 +192,7 @@ export function useUserUnclaimedAmount(account: string | null | undefined): Curr
   const userClaimData = useUserClaimData(account)
   const canClaim = useUserHasAvailableClaim(account)
 
-  const uni = chainId ? (UNI as { [chainId: number]: Token })[chainId] : undefined
+  const uni = chainId ? (AGX as { [chainId: number]: Token })[chainId] : undefined
   if (!uni) {
     return undefined
   }

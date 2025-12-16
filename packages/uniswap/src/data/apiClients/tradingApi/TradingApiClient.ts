@@ -157,7 +157,7 @@ export async function checkWalletDelegation(
 
   // Filter out SVM chains - check_delegation only supports EVM chains
   let evmChainIds = filterChainIdsByPlatform(chainIds, Platform.EVM)
-  
+
   // Filter out on-chain-only chains (Trading API disabled for these)
   const { isOnChainOnlyChain } = await import('uniswap/src/features/transactions/swap/services/onchainRouter/config')
   evmChainIds = evmChainIds.filter((chainId) => !isOnChainOnlyChain(chainId))

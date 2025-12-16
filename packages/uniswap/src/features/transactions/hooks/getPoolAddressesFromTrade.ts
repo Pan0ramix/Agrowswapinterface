@@ -3,13 +3,12 @@
  * For multi-hop swaps, extracts all V3 pool addresses from the route
  */
 
-import { Address } from 'viem'
 import { Token } from '@uniswap/sdk-core'
-import { Pool, Route as V3Route } from '@uniswap/v3-sdk'
-import { ClassicTrade } from 'uniswap/src/features/transactions/swap/types/trade'
-import { computePoolAddress, FeeAmount } from '@uniswap/v3-sdk'
+import { computePoolAddress, FeeAmount, Pool, Route as V3Route } from '@uniswap/v3-sdk'
 import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { ClassicTrade } from 'uniswap/src/features/transactions/swap/types/trade'
+import { Address } from 'viem'
 
 /**
  * Extract all V3 pool addresses from a ClassicTrade route
@@ -31,9 +30,10 @@ export function getPoolAddressesFromTrade(
         for (const pool of swap.route.pools) {
           if (pool instanceof Pool) {
             // Pool has an address property
-            const poolAddress = (pool as any).token0?.address && (pool as any).token1?.address
-              ? computePoolAddressFromPool(pool as Pool, chainId)
-              : undefined
+            const poolAddress =
+              (pool as any).token0?.address && (pool as any).token1?.address
+                ? computePoolAddressFromPool(pool as Pool, chainId)
+                : undefined
             if (poolAddress && !poolAddresses.includes(poolAddress)) {
               poolAddresses.push(poolAddress)
             }
@@ -86,4 +86,3 @@ function computePoolAddressFromPool(pool: Pool, chainId: EVMUniverseChainId): Ad
     return undefined
   }
 }
-

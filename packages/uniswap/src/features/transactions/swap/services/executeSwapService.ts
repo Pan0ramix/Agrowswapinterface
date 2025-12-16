@@ -1,4 +1,5 @@
 import type { PresetPercentage } from 'uniswap/src/components/CurrencyInputPanel/AmountInputPresets/types'
+import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import type { SwapTxStoreState } from 'uniswap/src/features/transactions/swap/stores/swapTxStore/createSwapTxStore'
 import type { DerivedSwapInfo } from 'uniswap/src/features/transactions/swap/types/derivedSwapInfo'
 import type { SwapCallbackParams } from 'uniswap/src/features/transactions/swap/types/swapCallback'
@@ -8,16 +9,10 @@ import type {
 } from 'uniswap/src/features/transactions/swap/types/swapHandlers'
 import type { SwapTxAndGasInfo } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
 import { isValidSwapTxContext } from 'uniswap/src/features/transactions/swap/types/swapTxAndGasInfo'
-import { isOnChainOnlyChain } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { isClassic } from 'uniswap/src/features/transactions/swap/utils/routing'
 import { AccountDetails, isSignerMnemonicAccountDetails } from 'uniswap/src/features/wallet/types/AccountDetails'
 import { CurrencyField } from 'uniswap/src/types/currency'
-import {
-  swapDebug,
-  swapError,
-  summarizeGasFee,
-  summarizeTxRequest,
-} from 'uniswap/src/utils/swapDebug'
+import { summarizeGasFee, summarizeTxRequest, swapDebug, swapError } from 'uniswap/src/utils/swapDebug'
 
 type ExecuteSwap = () => Promise<void> | void
 
@@ -64,10 +59,7 @@ export function createExecuteSwapService(ctx: {
       // Check for on-chain-only fast path
       const isOnChainOnly = chainId ? isOnChainOnlyChain(chainId) : false
       const hasOnChainOnlyTx =
-        isOnChainOnly &&
-        swapTxContext &&
-        isClassic(swapTxContext) &&
-        !!(swapTxContext as any).txRequests?.length
+        isOnChainOnly && swapTxContext && isClassic(swapTxContext) && !!(swapTxContext as any).txRequests?.length
 
       const validSwapTxContext = swapTxContext ? isValidSwapTxContext(swapTxContext) : false
 
@@ -106,9 +98,7 @@ export function createExecuteSwapService(ctx: {
           reason: 'NO_ACCOUNT',
           accountAddress: account?.address,
           connectorName: connector?.name,
-          hasTxRequests: isClassic(swapTxContext)
-            ? Boolean(swapTxContext?.txRequests?.length)
-            : false,
+          hasTxRequests: isClassic(swapTxContext) ? Boolean(swapTxContext.txRequests?.length) : false,
           isValidSwapTxContext: validSwapTxContext,
           hasOnChainOnlyTx,
         })
@@ -119,7 +109,7 @@ export function createExecuteSwapService(ctx: {
       if (!swapTxContext) {
         swapDebug(chainId, '[EXECUTE-SWAP] EARLY_RETURN', {
           reason: 'NO_SWAP_TX_CONTEXT',
-          accountAddress: account?.address,
+          accountAddress: account.address,
           connectorName: connector?.name,
           hasTxRequests: false,
           isValidSwapTxContext: false,
@@ -132,11 +122,9 @@ export function createExecuteSwapService(ctx: {
       if (!isSignerMnemonicAccountDetails(account)) {
         swapDebug(chainId, '[EXECUTE-SWAP] EARLY_RETURN', {
           reason: 'INVALID_ACCOUNT_TYPE',
-          accountAddress: account?.address,
+          accountAddress: account.address,
           connectorName: connector?.name,
-          hasTxRequests: isClassic(swapTxContext)
-            ? Boolean(swapTxContext.txRequests?.length)
-            : false,
+          hasTxRequests: isClassic(swapTxContext) ? Boolean(swapTxContext.txRequests?.length) : false,
           isValidSwapTxContext: validSwapTxContext,
           hasOnChainOnlyTx,
         })
@@ -147,14 +135,12 @@ export function createExecuteSwapService(ctx: {
       if (!validSwapTxContext && !hasOnChainOnlyTx) {
         swapDebug(chainId, '[EXECUTE-SWAP] EARLY_RETURN', {
           reason: 'INVALID_SWAP_TX_CONTEXT',
-          accountAddress: account?.address,
+          accountAddress: account.address,
           connectorName: connector?.name,
-          hasTxRequests: isClassic(swapTxContext)
-            ? Boolean(swapTxContext.txRequests?.length)
-            : false,
+          hasTxRequests: isClassic(swapTxContext) ? Boolean(swapTxContext.txRequests?.length) : false,
           isValidSwapTxContext: validSwapTxContext,
           hasOnChainOnlyTx,
-          gasFeeSummary: summarizeGasFee(swapTxContext?.gasFee),
+          gasFeeSummary: summarizeGasFee(swapTxContext.gasFee),
         })
         ctx.onFailure(new Error('Invalid swap transaction context'))
         return
@@ -163,7 +149,7 @@ export function createExecuteSwapService(ctx: {
       // Log before submitting (reuse txRequests and firstTxRequest from above)
       swapDebug(chainId, '[EXECUTE-SWAP] SUBMITTING', {
         firstTxRequestSummary: summarizeTxRequest(firstTxRequest),
-        swapTxContextRouting: swapTxContext?.routing ? String(swapTxContext.routing) : undefined,
+        swapTxContextRouting: swapTxContext.routing ? String(swapTxContext.routing) : undefined,
       })
 
       const { presetPercentage, preselectAsset } = ctx.getPresetInfo()
@@ -189,10 +175,10 @@ export function createExecuteSwapService(ctx: {
 
       // Reuse txRequests and firstTxRequest from earlier declaration
       swapDebug(chainId, '[EXECUTE-SWAP] dispatching-action', {
-        accountAddress: account?.address,
+        accountAddress: account.address,
         connectorName: connector?.name,
         txRequestSummary: summarizeTxRequest(firstTxRequest),
-        routing: swapTxContext?.routing ? String(swapTxContext.routing) : undefined,
+        routing: swapTxContext.routing ? String(swapTxContext.routing) : undefined,
         hasOnExecuteSwap: typeof ctx.onExecuteSwap === 'function',
       })
 
@@ -207,29 +193,28 @@ export function createExecuteSwapService(ctx: {
 
         if (isPromise) {
           // Attach logging to promise and propagate rejection (don't swallow)
-          return result
-            .then(
-              (value) => {
-                swapDebug(chainId, '[EXECUTE-SWAP] dispatch-promise-resolved', {
-                  resolvedValueType: value === undefined ? 'undefined' : typeof value,
-                })
-                return value
-              },
-              (error) => {
-                // Log the real error with full context including action type and IDs
-                swapError(chainId, '[EXECUTE-SWAP] dispatch-promise-rejected', {
-                  error,
-                  accountAddress: account?.address,
-                  connectorName: connector?.name,
-                  routing: swapTxContext?.routing ? String(swapTxContext.routing) : undefined,
-                  txRequestSummary: summarizeTxRequest(firstTxRequest),
-                  txId,
-                  actionType: 'onExecuteSwap',
-                })
-                // Re-throw to propagate to caller's catch block
-                throw error
-              },
-            )
+          return result.then(
+            (value) => {
+              swapDebug(chainId, '[EXECUTE-SWAP] dispatch-promise-resolved', {
+                resolvedValueType: value === undefined ? 'undefined' : typeof value,
+              })
+              return value
+            },
+            (error) => {
+              // Log the real error with full context including action type and IDs
+              swapError(chainId, '[EXECUTE-SWAP] dispatch-promise-rejected', {
+                error,
+                accountAddress: account.address,
+                connectorName: connector?.name,
+                routing: swapTxContext.routing ? String(swapTxContext.routing) : undefined,
+                txRequestSummary: summarizeTxRequest(firstTxRequest),
+                txId,
+                actionType: 'onExecuteSwap',
+              })
+              // Re-throw to propagate to caller's catch block
+              throw error
+            },
+          )
         } else {
           // If it's not a promise, return it as-is (synchronous result)
           return result
@@ -240,17 +225,17 @@ export function createExecuteSwapService(ctx: {
 
         swapError(chainId, '[EXECUTE-SWAP] SUBMIT threw', {
           error: errorObj,
-          accountAddress: account?.address,
+          accountAddress: account.address,
           connectorName: connector?.name,
           txId,
-          routing: swapTxContext?.routing ? String(swapTxContext.routing) : undefined,
+          routing: swapTxContext.routing ? String(swapTxContext.routing) : undefined,
         })
 
         // Rethrow after logging so caller can handle it
         throw error
       } finally {
         swapDebug(chainId, '[EXECUTE-SWAP] SUBMIT finally', {
-          accountAddress: account?.address,
+          accountAddress: account.address,
         })
       }
     },

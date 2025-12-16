@@ -7,8 +7,8 @@ import { MAX_DEFAULT_TRENDING_TOKEN_RESULTS_AMOUNT } from 'uniswap/src/component
 import { useRecentlySearchedTokens } from 'uniswap/src/components/TokenSelector/hooks/useRecentlySearchedTokens'
 import { useTrendingTokensOptions } from 'uniswap/src/components/TokenSelector/hooks/useTrendingTokensOptions'
 import { TokenSectionsHookProps } from 'uniswap/src/components/TokenSelector/types'
-import { ClearRecentSearchesButton } from 'uniswap/src/features/search/ClearRecentSearchesButton'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
+import { ClearRecentSearchesButton } from 'uniswap/src/features/search/ClearRecentSearchesButton'
 
 export function useTokenSectionsForEmptySearch({
   evmAddress,

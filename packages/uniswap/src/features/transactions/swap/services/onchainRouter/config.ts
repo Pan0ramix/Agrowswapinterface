@@ -1,6 +1,6 @@
 /**
  * On-Chain Router Configuration
- * 
+ *
  * Single source of truth for on-chain router enabled chains.
  * All other files should import from here instead of duplicating the array.
  */
@@ -22,7 +22,7 @@ export const ONCHAIN_ONLY_CHAINS = [84532] as const
 
 /**
  * Check if on-chain router is enabled for a given chain ID
- * 
+ *
  * @param chainId - Chain ID to check
  * @returns true if on-chain router is enabled for this chain
  */
@@ -39,4 +39,3 @@ export function isOnChainRouterEnabled(chainId?: number): boolean {
 export function isOnChainOnlyChain(chainId?: number): boolean {
   return !!chainId && ONCHAIN_ONLY_CHAINS.includes(chainId as any)
 }
-

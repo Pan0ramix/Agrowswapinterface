@@ -1,15 +1,15 @@
 /**
  * Update deadline in V3 mint transaction calldata
- * 
+ *
  * This utility function updates the deadline parameter in an already-encoded
  * NonfungiblePositionManager.mint() calldata. This is necessary because the
  * deadline must be fresh when the transaction is actually submitted, not when
  * the query result is cached.
- * 
+ *
  * Following Uniswap's pattern of computing deadlines at transaction submission time.
  * The deadline value MUST be computed using the same helper as swaps (timestampToDeadline
  * from useTransactionDeadline.ts) to ensure identical behavior.
- * 
+ *
  * This is pure glue code - it does NOT compute deadlines, read user settings, or
  * introduce any new TTL semantics. It only decodes, updates, and re-encodes calldata.
  */
@@ -58,11 +58,11 @@ const MINT_INTERFACE = new Interface(MINT_FUNCTION_ABI)
 
 /**
  * Updates the deadline in a V3 mint transaction calldata
- * 
+ *
  * This function decodes the mint calldata, updates ONLY the deadline parameter,
  * and re-encodes it. The deadline should be computed using Uniswap's shared
  * deadline helper (timestampToDeadline) to ensure consistency with swap behavior.
- * 
+ *
  * @param calldata - The encoded mint calldata (0x88316456...)
  * @param newDeadline - The new deadline value (in seconds, as a number)
  *                      Should be computed using timestampToDeadline from useTransactionDeadline.ts
@@ -127,4 +127,3 @@ export function updateMintDeadline(calldata: string, newDeadline: number | undef
     return calldata
   }
 }
-

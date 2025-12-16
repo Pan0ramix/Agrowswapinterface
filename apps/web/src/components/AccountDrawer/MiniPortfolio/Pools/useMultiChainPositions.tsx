@@ -1,6 +1,6 @@
 import { BigNumber } from '@ethersproject/bignumber'
+import { PositionStatus, ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
 import { CurrencyAmount, V3_CORE_FACTORY_ADDRESSES as SDK_V3_CORE_FACTORY_ADDRESSES, Token } from '@uniswap/sdk-core'
-import { ProtocolVersion, PositionStatus } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
 import IUniswapV3PoolStateJSON from '@uniswap/v3-core/artifacts/contracts/interfaces/pool/IUniswapV3PoolState.sol/IUniswapV3PoolState.json'
 import { computePoolAddress, Pool, Position } from '@uniswap/v3-sdk'
 import {
@@ -15,14 +15,14 @@ import {
   usePoolPriceMap,
   useV3ManagerContracts,
 } from 'components/AccountDrawer/MiniPortfolio/Pools/hooks'
+import { RPC_PROVIDERS } from 'constants/providers'
 import { Interface } from 'ethers/lib/utils'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PositionDetails } from 'types/position'
+import ERC20_ABI from 'uniswap/src/abis/erc20.json'
 import { NonfungiblePositionManager, UniswapInterfaceMulticall } from 'uniswap/src/abis/types/v3'
 import { UniswapV3PoolInterface } from 'uniswap/src/abis/types/v3/UniswapV3Pool'
-import ERC20_ABI from 'uniswap/src/abis/erc20.json'
 import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
-import { RPC_PROVIDERS } from 'constants/providers'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
 import { logger } from 'utilities/src/logger/logger'
@@ -229,7 +229,7 @@ export default function useMultiChainPositions(
       const poolInterface = new Interface(IUniswapV3PoolStateJSON.abi) as UniswapV3PoolInterface
 
       // Fetch tokens - use standard multicall-based token fetching first
-      let tokens: { [key: string]: Token | undefined } = await getTokens(
+      const tokens: { [key: string]: Token | undefined } = await getTokens(
         positionDetails.flatMap((details) => [details.token0, details.token1]),
         chainId,
       )
@@ -239,10 +239,10 @@ export default function useMultiChainPositions(
         new Set(positionDetails.flatMap((details) => [details.token0, details.token1])),
       )
       const missingTokenAddresses = uniqueTokenAddresses.filter((addr) => !tokens[addr])
-      
+
       // Fetch missing tokens if any - try multicall provider first, then RPC provider
       if (missingTokenAddresses.length > 0) {
-        const provider = multicall?.provider ?? RPC_PROVIDERS[chainId]
+        const provider = multicall.provider ?? RPC_PROVIDERS[chainId]
         if (provider) {
           logger.debug('useMultiChainPositions', 'fetchPositionInfo', 'Fetching missing tokens', {
             missingCount: missingTokenAddresses.length,
@@ -272,7 +272,7 @@ export default function useMultiChainPositions(
         // Ensure we have complete token data before creating positions
         const tokenA = tokens[details.token0]
         const tokenB = tokens[details.token1]
-        
+
         // Skip positions with missing token data
         if (!tokenA || !tokenB) {
           logger.debug('useMultiChainPositions', 'fetchPositionInfo', 'Skipping position with missing token data', {

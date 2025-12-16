@@ -1,14 +1,14 @@
 /* eslint-disable max-lines */
 import { PositionStatus, ProtocolVersion } from '@uniswap/client-data-api/dist/data/v1/poolTypes_pb'
 import { Currency, CurrencyAmount, V3_CORE_FACTORY_ADDRESSES as SDK_V3_CORE_FACTORY_ADDRESSES } from '@uniswap/sdk-core'
-import { Pool as V3Pool, Position as V3Position, computePoolAddress } from '@uniswap/v3-sdk'
+import { computePoolAddress, Pool as V3Pool, Position as V3Position } from '@uniswap/v3-sdk'
 import { FeatureFlags, useFeatureFlag } from '@universe/gating'
 import PROVIDE_LIQUIDITY from 'assets/images/provideLiquidity.png'
 import tokenLogo from 'assets/images/token-logo.png'
 import V4_HOOK from 'assets/images/v4Hooks.png'
 import { ExpandoRow } from 'components/AccountDrawer/MiniPortfolio/ExpandoRow'
-import useMultiChainPositions from 'components/AccountDrawer/MiniPortfolio/Pools/useMultiChainPositions'
 import { useAccountDrawer } from 'components/AccountDrawer/MiniPortfolio/hooks'
+import useMultiChainPositions from 'components/AccountDrawer/MiniPortfolio/Pools/useMultiChainPositions'
 import { MenuStateVariant, useSetMenu } from 'components/AccountDrawer/menuState'
 import { ExternalArrowLink } from 'components/Liquidity/ExternalArrowLink'
 import { LiquidityPositionCard, LiquidityPositionCardLoader } from 'components/Liquidity/LiquidityPositionCard'
@@ -34,6 +34,8 @@ import { CloseIconWithHover } from 'ui/src/components/icons/CloseIconWithHover'
 import { InfoCircleFilled } from 'ui/src/components/icons/InfoCircleFilled'
 import { Pools } from 'ui/src/components/icons/Pools'
 import { Wallet } from 'ui/src/components/icons/Wallet'
+import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
+import { DEFAULT_TICK_SPACING } from 'uniswap/src/constants/pools'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
 import { useGetPositionsInfiniteQuery } from 'uniswap/src/data/rest/getPositions'
 import { useEnabledChains } from 'uniswap/src/features/chains/hooks/useEnabledChains'
@@ -45,8 +47,6 @@ import Trace from 'uniswap/src/features/telemetry/Trace'
 import { useIsMissingPlatformWallet } from 'uniswap/src/features/transactions/swap/components/SwapFormButton/hooks/useIsMissingPlatformWallet'
 import { usePositionVisibilityCheck } from 'uniswap/src/features/visibility/hooks/usePositionVisibilityCheck'
 import { useInfiniteScroll } from 'utilities/src/react/useInfiniteScroll'
-import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
-import { DEFAULT_TICK_SPACING } from 'uniswap/src/constants/pools'
 
 // The BE limits the number of positions by chain and protocol version.
 // PAGE_SIZE=25 means the limit is at most 25 positions * x chains * y protocol versions.
@@ -307,10 +307,9 @@ export default function Pool() {
 
   const isPositionVisible = usePositionVisibilityCheck()
   const [showHiddenPositions, setShowHiddenPositions] = useState(false)
-  const { positions: onChainPositionsRaw, loading: onChainPositionsLoading } = useMultiChainPositions(
-    address ?? '',
-    { includeTestnets: true },
-  )
+  const { positions: onChainPositionsRaw, loading: onChainPositionsLoading } = useMultiChainPositions(address ?? '', {
+    includeTestnets: true,
+  })
 
   const {
     isPendingTransaction,
@@ -323,16 +322,8 @@ export default function Pool() {
     hasCollectedRewards,
   } = useLpIncentives()
 
-  const {
-    data,
-    isPlaceholderData,
-    refetch,
-    isLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetching,
-    isError,
-  } = useGetPositionsInfiniteQuery(
+  const { data, isPlaceholderData, refetch, isLoading, fetchNextPage, hasNextPage, isFetching, isError } =
+    useGetPositionsInfiniteQuery(
       {
         address,
         chainIds: chainFilter ? [chainFilter] : currentModeChains,
@@ -455,13 +446,13 @@ export default function Pool() {
       .filter((position): position is PositionInfo => !!position)
 
     return [...parsedApiPositions, ...onChainPositions].reduce<PositionInfo[]>((unique, position) => {
-        const positionId = `${position.poolId}-${position.tokenId}-${position.chainId}`
-        const exists = unique.some((p) => `${p.poolId}-${p.tokenId}-${p.chainId}` === positionId)
-        if (!exists) {
-          unique.push(position)
-        }
-        return unique
-      }, [])
+      const positionId = `${position.poolId}-${position.tokenId}-${position.chainId}`
+      const exists = unique.some((p) => `${p.poolId}-${p.tokenId}-${p.chainId}` === positionId)
+      if (!exists) {
+        unique.push(position)
+      }
+      return unique
+    }, [])
   }, [loadedPositions, savedPositions, chainFilter, statusFilter, versionFilter, onChainPositions])
 
   const { visiblePositions, hiddenPositions } = useMemo(() => {

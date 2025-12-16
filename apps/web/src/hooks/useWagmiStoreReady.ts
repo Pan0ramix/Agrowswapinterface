@@ -1,15 +1,15 @@
 /**
  * Wagmi Store Readiness Hook
- * 
+ *
  * Checks if Wagmi store is ready by accessing the internal store state.
  * This prevents React dependency comparison errors when store isn't initialized.
- * 
+ *
  * IMPORTANT: This hook must be called unconditionally (React rules of hooks).
  * It checks readiness but doesn't prevent hook calls - that's handled in the safe wrappers.
  */
 
-import { useSyncExternalStore, useRef, useEffect, useState } from 'react'
 import { wagmiConfig } from 'components/Web3Provider/wagmiConfig'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * Check if Wagmi store is ready by attempting to read its state
@@ -24,13 +24,13 @@ function checkWagmiStoreReady(): boolean {
     if (!store) {
       return false
     }
-    
+
     // Try to get state - if this succeeds, store is ready
     // getState should exist on the store object
     if (typeof store.getState !== 'function') {
       return false
     }
-    
+
     // Try to call getState - if it doesn't throw, store is ready
     const state = store.getState()
     return state !== undefined && state !== null
@@ -43,11 +43,11 @@ function checkWagmiStoreReady(): boolean {
 /**
  * Hook to check if Wagmi store is ready
  * Uses a polling approach to detect when store becomes ready
- * 
+ *
  * This hook can be called unconditionally and will return false until store is ready.
  * It uses a simple polling mechanism to avoid issues with useSyncExternalStore
  * when the store itself isn't ready yet.
- * 
+ *
  * SAFETY: This hook always returns a stable boolean value, ensuring React's
  * dependency comparison never fails due to undefined or unstable values.
  */
@@ -61,24 +61,24 @@ export function useWagmiStoreReady(): boolean {
     }
   })
   const readyRef = useRef(isReady)
-  
+
   useEffect(() => {
     // If already ready, no need to poll
     if (isReady) {
       readyRef.current = true
       return
     }
-    
+
     // Poll to check if store becomes ready
     // Use a short interval initially, then back off
     let attempts = 0
     const maxAttempts = 50 // Check for up to 5 seconds (50 * 100ms)
-    
+
     const checkInterval = setInterval(() => {
       attempts++
       try {
         const ready = checkWagmiStoreReady()
-        
+
         if (ready && !readyRef.current) {
           readyRef.current = true
           setIsReady(true)
@@ -94,10 +94,10 @@ export function useWagmiStoreReady(): boolean {
         }
       }
     }, 100) // Check every 100ms
-    
+
     return () => clearInterval(checkInterval)
   }, [isReady])
-  
+
   // Also try to subscribe to store changes if store exists (for immediate updates)
   useEffect(() => {
     try {
@@ -120,8 +120,7 @@ export function useWagmiStoreReady(): boolean {
       // Store not ready, ignore
     }
   }, [isReady])
-  
+
   // Always return a stable boolean (never undefined)
   return isReady
 }
-

@@ -10,8 +10,8 @@ import { Interface } from 'ethers/lib/utils'
 import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
 import { getSwapRouterAddress } from 'uniswap/src/constants/v3Addresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { logger } from 'utilities/src/logger/logger'
 import { ValidatedRoute } from 'uniswap/src/features/transactions/swap/services/onchainRouter/validateRouteWithQuoter'
+import { logger } from 'utilities/src/logger/logger'
 
 /**
  * Transaction payload for swap
@@ -160,7 +160,220 @@ function encodePath(hops: ValidatedRoute['route']['hops']): `0x${string}` {
 }
 
 /**
- * Build swap transaction payload
+ * Error codes for transaction building failures
+ */
+export enum BuildSwapTxErrorCode {
+  INVALID_SLIPPAGE = 'INVALID_SLIPPAGE',
+  INVALID_AMOUNT = 'INVALID_AMOUNT',
+  ROUTE_NOT_FOUND = 'ROUTE_NOT_FOUND',
+  TX_BUILD_INVARIANT = 'TX_BUILD_INVARIANT',
+  UNKNOWN = 'UNKNOWN',
+}
+
+/**
+ * Unified error type for transaction building failures
+ */
+export interface BuildSwapTxError {
+  code: BuildSwapTxErrorCode
+  message: string
+  details?: unknown
+}
+
+/**
+ * Legacy error class (preserved for backwards compatibility)
+ * @deprecated Use BuildSwapTxError type instead
+ */
+export class InvalidSlippageTxBuildError extends Error {
+  constructor(
+    message: string,
+    public readonly slippageError: unknown,
+  ) {
+    super(message)
+    this.name = 'InvalidSlippageTxBuildError'
+  }
+}
+
+/**
+ * Helper to create BuildSwapTxError from error code
+ */
+function createBuildSwapTxError(code: BuildSwapTxErrorCode, message: string, details?: unknown): BuildSwapTxError {
+  return { code, message, details }
+}
+
+/**
+ * Result type for tx builder
+ */
+export type BuildSwapTxResult = { ok: true; value: SwapTransactionPayload } | { ok: false; error: BuildSwapTxError }
+
+/**
+ * Build swap transaction payload (STRICT - enforces slippage validation and invariants)
+ *
+ * FAIL-CLOSED: Validates minAmountOut/maxAmountIn using strict slippage calculation and enforces invariants.
+ * If slippage is invalid or invariants fail, returns error - swap tx cannot be built.
+ *
+ * Invariants enforced:
+ * - minAmountOut >= 0 (for exact input)
+ * - minAmountOut <= expectedAmountOut (for exact input)
+ * - maxAmountIn >= 0 (for exact output)
+ * - maxAmountIn >= expectedAmountIn (for exact output)
+ * - Currency consistency: minOut currency matches output, maxIn currency matches input
+ *
+ * @param params - Swap parameters (minAmountOut should be validated via calculateAmountOutMinimumStrict)
+ * @returns Result with transaction payload on success, or error on failure
+ */
+export function buildSwapTxStrict(params: BuildSwapTxParams): BuildSwapTxResult {
+  const { route, amountIn, minAmountOut, maxAmountIn } = params
+  const isExactOut = !!maxAmountIn && !minAmountOut
+
+  // Invariant 1: Validate minAmountOut (for exact input)
+  if (minAmountOut) {
+    try {
+      const minOutQuotient = BigInt(minAmountOut.quotient.toString())
+      const expectedAmountOut = route.amountOutCurrency ? BigInt(route.amountOutCurrency.quotient.toString()) : null
+
+      // Invariant 1a: minAmountOut >= 0
+      if (minOutQuotient < 0n) {
+        return {
+          ok: false,
+          error: createBuildSwapTxError(BuildSwapTxErrorCode.TX_BUILD_INVARIANT, 'minAmountOut cannot be negative', {
+            minAmountOut: minAmountOut.toExact(),
+            quotient: minOutQuotient.toString(),
+          }),
+        }
+      }
+
+      // Invariant 1b: minAmountOut <= expectedAmountOut
+      if (expectedAmountOut !== null && minOutQuotient > expectedAmountOut) {
+        return {
+          ok: false,
+          error: createBuildSwapTxError(
+            BuildSwapTxErrorCode.TX_BUILD_INVARIANT,
+            `minAmountOut (${minAmountOut.toExact()}) cannot exceed expected amountOut (${route.amountOutCurrency?.toExact()})`,
+            {
+              minAmountOut: minAmountOut.toExact(),
+              expectedAmountOut: route.amountOutCurrency?.toExact(),
+            },
+          ),
+        }
+      }
+
+      // Invariant 1c: Currency consistency - minOut currency must match output currency
+      if (route.amountOutCurrency && minAmountOut.currency.address !== route.amountOutCurrency.currency.address) {
+        return {
+          ok: false,
+          error: createBuildSwapTxError(
+            BuildSwapTxErrorCode.TX_BUILD_INVARIANT,
+            `minAmountOut currency (${minAmountOut.currency.symbol}) does not match output currency (${route.amountOutCurrency.currency.symbol})`,
+            {
+              minOutCurrency: minAmountOut.currency.symbol,
+              outputCurrency: route.amountOutCurrency.currency.symbol,
+            },
+          ),
+        }
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        error: createBuildSwapTxError(
+          BuildSwapTxErrorCode.INVALID_AMOUNT,
+          `Invalid minAmountOut: ${error instanceof Error ? error.message : String(error)}`,
+          error,
+        ),
+      }
+    }
+  }
+
+  // Invariant 2: Validate maxAmountIn (for exact output)
+  if (maxAmountIn) {
+    try {
+      const maxInQuotient = BigInt(maxAmountIn.quotient.toString())
+      const expectedAmountIn = BigInt(amountIn.quotient.toString())
+
+      // Invariant 2a: maxAmountIn >= 0
+      if (maxInQuotient < 0n) {
+        return {
+          ok: false,
+          error: createBuildSwapTxError(BuildSwapTxErrorCode.TX_BUILD_INVARIANT, 'maxAmountIn cannot be negative', {
+            maxAmountIn: maxAmountIn.toExact(),
+            quotient: maxInQuotient.toString(),
+          }),
+        }
+      }
+
+      // Invariant 2b: maxAmountIn >= expectedAmountIn (for exact output, maxIn should allow more than expected)
+      // Actually, for exact output, maxAmountIn should be >= amountIn (we allow more input)
+      // But we should check it's reasonable - typically maxIn = amountIn * (1 + slippage)
+      // This invariant ensures maxAmountIn is at least as large as the expected input
+      if (maxInQuotient < expectedAmountIn) {
+        return {
+          ok: false,
+          error: createBuildSwapTxError(
+            BuildSwapTxErrorCode.TX_BUILD_INVARIANT,
+            `maxAmountIn (${maxAmountIn.toExact()}) must be at least expected amountIn (${amountIn.toExact()})`,
+            {
+              maxAmountIn: maxAmountIn.toExact(),
+              expectedAmountIn: amountIn.toExact(),
+            },
+          ),
+        }
+      }
+
+      // Invariant 2c: Currency consistency - maxIn currency must match input currency
+      if (maxAmountIn.currency.address !== amountIn.currency.address) {
+        return {
+          ok: false,
+          error: createBuildSwapTxError(
+            BuildSwapTxErrorCode.TX_BUILD_INVARIANT,
+            `maxAmountIn currency (${maxAmountIn.currency.symbol}) does not match input currency (${amountIn.currency.symbol})`,
+            {
+              maxInCurrency: maxAmountIn.currency.symbol,
+              inputCurrency: amountIn.currency.symbol,
+            },
+          ),
+        }
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        error: createBuildSwapTxError(
+          BuildSwapTxErrorCode.INVALID_AMOUNT,
+          `Invalid maxAmountIn: ${error instanceof Error ? error.message : String(error)}`,
+          error,
+        ),
+      }
+    }
+  }
+
+  // Build the transaction
+  try {
+    const payload = buildSwapTx(params)
+    return { ok: true, value: payload }
+  } catch (error) {
+    // If building fails for any reason, return error (fail-closed)
+    // Check if it's a route-related error
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (errorMessage.includes('route') || errorMessage.includes('Route')) {
+      return {
+        ok: false,
+        error: createBuildSwapTxError(BuildSwapTxErrorCode.ROUTE_NOT_FOUND, `Route error: ${errorMessage}`, error),
+      }
+    }
+    return {
+      ok: false,
+      error: createBuildSwapTxError(
+        BuildSwapTxErrorCode.UNKNOWN,
+        `Failed to build swap transaction: ${errorMessage}`,
+        error,
+      ),
+    }
+  }
+}
+
+/**
+ * Build swap transaction payload (legacy - for backwards compatibility)
+ *
+ * @deprecated Use buildSwapTxStrict() for fail-closed validation
+ * This function is maintained for backwards compatibility.
  *
  * @param params - Swap parameters
  * @returns Transaction payload with to, data, and value
@@ -317,25 +530,25 @@ export function buildSwapTx(params: BuildSwapTxParams): SwapTransactionPayload {
 
 /**
  * Calculate minimum amount out with slippage tolerance
+ *
+ * Delegates to centralized slippage utility with strict mode (fail closed on invalid slippage).
+ *
+ * @deprecated Import calculateAmountOutMinimumStrict directly from 'uniswap/src/features/transactions/utils/slippage'
+ * This wrapper is maintained for backwards compatibility but will throw on invalid slippage.
  */
 export function calculateAmountOutMinimum(
   amountOut: CurrencyAmount<Currency>,
   slippageTolerance: Percent | { numerator?: bigint | number; denominator?: bigint | number } | number,
 ): CurrencyAmount<Currency> {
-  // Guard against malformed slippage inputs (e.g. plain numbers or dehydrated objects)
-  const percent =
-    slippageTolerance instanceof Percent
-      ? slippageTolerance
-      : new Percent(
-          (slippageTolerance as any)?.numerator ?? Math.round((Number(slippageTolerance) || 0.5) * 100),
-          (slippageTolerance as any)?.denominator ?? 10_000,
-        )
+  // Import here to avoid circular dependencies
+  const { calculateAmountOutMinimumStrict } = require('uniswap/src/features/transactions/utils/slippage')
 
-  // complement() = (1 - slippage); if complement is unavailable, fall back to no slippage
-  const complement =
-    typeof (percent as any).complement === 'function' ? (percent as any).complement() : new Percent(1, 1)
-
-  return amountOut.multiply(complement)
+  // Delegate to strict utility (fail closed on invalid slippage)
+  const result = calculateAmountOutMinimumStrict(amountOut, slippageTolerance)
+  if (!result.ok) {
+    throw result.error // Backwards compatibility: throw error
+  }
+  return result.value
 }
 
 /**

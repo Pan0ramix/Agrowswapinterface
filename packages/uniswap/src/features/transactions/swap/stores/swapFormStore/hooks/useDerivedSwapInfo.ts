@@ -293,7 +293,13 @@ export function useDerivedSwapInfo({
   // Merge on-chain quote with trade results
   const mergedTrade = useMemo(() => {
     // If we have a successful on-chain quote, use it instead of Trading API trade
-    if (useOnChainQuote && onChainQuote.data) {
+    // Check if quote is blocked (invalid slippage, etc.) - if blocked, don't use it
+    if (
+      useOnChainQuote &&
+      onChainQuote.data &&
+      onChainQuote.data.isValid !== false &&
+      !onChainQuote.data.blockedReason
+    ) {
       const { quoteAmountIn, quoteAmountOut, txPayload, route: routeResult, priceImpact } = onChainQuote.data
 
       // For exact output, quoteAmountIn is the calculated input; for exact input, quoteAmountOut is the calculated output
@@ -529,6 +535,30 @@ export function useDerivedSwapInfo({
       }
     }
 
+    // When on-chain is enabled but quote is blocked (invalid slippage, etc.), return blocked trade
+    if (
+      useOnChainQuote &&
+      onChainQuote.data &&
+      (onChainQuote.data.isValid === false || onChainQuote.data.blockedReason)
+    ) {
+      if (process.env.NODE_ENV !== 'production' && chainId === UniverseChainId.BaseSepolia) {
+        logger.debug('useDerivedSwapInfo', 'useDerivedSwapInfo', 'On-chain quote blocked', {
+          chainId,
+          blockedReason: onChainQuote.data.blockedReason,
+        })
+      }
+      // Return trade with null to indicate blocked (swap button will be disabled)
+      return {
+        ...trade,
+        trade: null, // No valid trade when blocked
+        isLoading: onChainQuote.isLoading,
+        isFetching: onChainQuote.isLoading,
+        error: onChainQuote.data.blockedReason
+          ? new Error(onChainQuote.data.blockedReason.message)
+          : onChainQuote.error,
+      }
+    }
+
     // Otherwise, use the regular trade (Trading API or no trade)
     // When on-chain is enabled but quote failed, still show error from on-chain hook
     if (useOnChainQuote && onChainQuote.isError) {
@@ -622,7 +652,11 @@ export function useDerivedSwapInfo({
     }
   }, [tokenInBalance, tokenOutBalance])
 
-  const finalOnChainQuote = useOnChainQuote && onChainQuote.data ? onChainQuote.data : undefined
+  // Only expose onChainQuote if it's valid (not blocked)
+  const finalOnChainQuote =
+    useOnChainQuote && onChainQuote.data && onChainQuote.data.isValid !== false && !onChainQuote.data.blockedReason
+      ? onChainQuote.data
+      : undefined
 
   // Debug logging for Base Sepolia
   if (chainId === 84532) {

@@ -22,8 +22,13 @@ export {
 
 export {
   type BuildExactInputSingleSwapParams,
+  type BuildSwapTxError,
+  type BuildSwapTxErrorCode,
+  type BuildSwapTxResult,
   buildExactInputSingleSwapTx,
+  buildExactInputSingleSwapTxStrict,
   calculateAmountOutMinimum,
   getDeadline,
+  type InvalidSlippageTxBuildError,
   type SwapTransactionPayload,
 } from './v3SwapTxBuilder'

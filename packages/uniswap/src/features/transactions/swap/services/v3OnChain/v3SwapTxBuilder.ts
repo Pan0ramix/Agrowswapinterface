@@ -11,6 +11,7 @@ import { Interface } from 'ethers/lib/utils'
 import { getAgroswapSwapRouterAddress } from 'uniswap/src/constants/agroswapAddresses'
 import { getSwapRouterAddress } from 'uniswap/src/constants/v3Addresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { calculateAmountOutMinimumStrict } from 'uniswap/src/features/transactions/utils/slippage'
 
 /**
  * Transaction payload for swap
@@ -86,7 +87,190 @@ const SWAP_ROUTER_ABI = [
 ]
 
 /**
- * Builds exact input single swap transaction payload
+ * Error codes for transaction building failures
+ */
+export enum BuildSwapTxErrorCode {
+  INVALID_SLIPPAGE = 'INVALID_SLIPPAGE',
+  INVALID_AMOUNT = 'INVALID_AMOUNT',
+  ROUTE_NOT_FOUND = 'ROUTE_NOT_FOUND',
+  TX_BUILD_INVARIANT = 'TX_BUILD_INVARIANT',
+  UNKNOWN = 'UNKNOWN',
+}
+
+/**
+ * Unified error type for transaction building failures
+ */
+export interface BuildSwapTxError {
+  code: BuildSwapTxErrorCode
+  message: string
+  details?: unknown
+}
+
+/**
+ * Legacy error class (preserved for backwards compatibility)
+ * @deprecated Use BuildSwapTxError type instead
+ */
+export class InvalidSlippageTxBuildError extends Error {
+  constructor(
+    message: string,
+    public readonly slippageError: unknown,
+  ) {
+    super(message)
+    this.name = 'InvalidSlippageTxBuildError'
+  }
+}
+
+/**
+ * Helper to create BuildSwapTxError from error code
+ */
+function createBuildSwapTxError(code: BuildSwapTxErrorCode, message: string, details?: unknown): BuildSwapTxError {
+  return { code, message, details }
+}
+
+/**
+ * Result type for tx builder
+ */
+export type BuildSwapTxResult = { ok: true; value: SwapTransactionPayload } | { ok: false; error: BuildSwapTxError }
+
+/**
+ * Extended parameters for strict validation (includes expected output for invariant checks)
+ */
+export interface BuildExactInputSingleSwapParamsStrict extends BuildExactInputSingleSwapParams {
+  expectedAmountOut?: CurrencyAmount<Currency> // Expected output amount (for invariant validation)
+}
+
+/**
+ * Build exact input single swap transaction payload (STRICT - enforces slippage validation and invariants)
+ *
+ * FAIL-CLOSED: Validates amountOutMinimum using strict slippage calculation and enforces invariants.
+ * If slippage is invalid or invariants fail, returns error - swap tx cannot be built.
+ *
+ * Invariants enforced:
+ * - amountOutMinimum >= 0
+ * - amountOutMinimum <= expectedAmountOut (if provided)
+ * - Currency consistency: amountOutMinimum currency matches output currency
+ *
+ * @param params - Swap parameters (amountOutMinimum should be validated via calculateAmountOutMinimumStrict)
+ * @returns Result with transaction payload on success, or error on failure
+ */
+export function buildExactInputSingleSwapTxStrict(params: BuildExactInputSingleSwapParamsStrict): BuildSwapTxResult {
+  const { tokenIn, tokenOut, amountIn, amountOutMinimum, expectedAmountOut } = params
+
+  // Invariant 1: amountOutMinimum >= 0
+  try {
+    const minOutQuotient = BigInt(amountOutMinimum.quotient.toString())
+    if (minOutQuotient < 0n) {
+      return {
+        ok: false,
+        error: createBuildSwapTxError(BuildSwapTxErrorCode.TX_BUILD_INVARIANT, 'amountOutMinimum cannot be negative', {
+          amountOutMinimum: amountOutMinimum.toExact(),
+          quotient: minOutQuotient.toString(),
+        }),
+      }
+    }
+
+    // Invariant 2: amountOutMinimum <= expectedAmountOut (if provided)
+    if (expectedAmountOut) {
+      const expectedQuotient = BigInt(expectedAmountOut.quotient.toString())
+      if (minOutQuotient > expectedQuotient) {
+        return {
+          ok: false,
+          error: createBuildSwapTxError(
+            BuildSwapTxErrorCode.TX_BUILD_INVARIANT,
+            `amountOutMinimum (${amountOutMinimum.toExact()}) cannot exceed expected amountOut (${expectedAmountOut.toExact()})`,
+            {
+              amountOutMinimum: amountOutMinimum.toExact(),
+              expectedAmountOut: expectedAmountOut.toExact(),
+            },
+          ),
+        }
+      }
+
+      // Invariant 3: Currency consistency - amountOutMinimum currency must match output currency
+      if (amountOutMinimum.currency.address !== expectedAmountOut.currency.address) {
+        return {
+          ok: false,
+          error: createBuildSwapTxError(
+            BuildSwapTxErrorCode.TX_BUILD_INVARIANT,
+            `amountOutMinimum currency (${amountOutMinimum.currency.symbol}) does not match output currency (${expectedAmountOut.currency.symbol})`,
+            {
+              minOutCurrency: amountOutMinimum.currency.symbol,
+              outputCurrency: expectedAmountOut.currency.symbol,
+            },
+          ),
+        }
+      }
+    }
+
+    // Invariant 4: Currency consistency - amountOutMinimum currency must match tokenOut
+    if (amountOutMinimum.currency.address !== tokenOut.wrapped.address) {
+      return {
+        ok: false,
+        error: createBuildSwapTxError(
+          BuildSwapTxErrorCode.TX_BUILD_INVARIANT,
+          `amountOutMinimum currency (${amountOutMinimum.currency.symbol}) does not match tokenOut (${tokenOut.symbol})`,
+          {
+            minOutCurrency: amountOutMinimum.currency.symbol,
+            tokenOut: tokenOut.symbol,
+          },
+        ),
+      }
+    }
+
+    // Invariant 5: Currency consistency - amountIn currency must match tokenIn
+    if (amountIn.currency.address !== tokenIn.wrapped.address) {
+      return {
+        ok: false,
+        error: createBuildSwapTxError(
+          BuildSwapTxErrorCode.TX_BUILD_INVARIANT,
+          `amountIn currency (${amountIn.currency.symbol}) does not match tokenIn (${tokenIn.symbol})`,
+          {
+            amountInCurrency: amountIn.currency.symbol,
+            tokenIn: tokenIn.symbol,
+          },
+        ),
+      }
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error: createBuildSwapTxError(
+        BuildSwapTxErrorCode.INVALID_AMOUNT,
+        `Invalid amountOutMinimum: ${error instanceof Error ? error.message : String(error)}`,
+        error,
+      ),
+    }
+  }
+
+  // Build the transaction
+  try {
+    const payload = buildExactInputSingleSwapTx(params)
+    return { ok: true, value: payload }
+  } catch (error) {
+    // If building fails, return error (fail-closed)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (errorMessage.includes('route') || errorMessage.includes('Route')) {
+      return {
+        ok: false,
+        error: createBuildSwapTxError(BuildSwapTxErrorCode.ROUTE_NOT_FOUND, `Route error: ${errorMessage}`, error),
+      }
+    }
+    return {
+      ok: false,
+      error: createBuildSwapTxError(
+        BuildSwapTxErrorCode.UNKNOWN,
+        `Failed to build swap transaction: ${errorMessage}`,
+        error,
+      ),
+    }
+  }
+}
+
+/**
+ * Builds exact input single swap transaction payload (legacy - for backwards compatibility)
+ *
+ * @deprecated Use buildExactInputSingleSwapTxStrict() for fail-closed validation
+ * This function is maintained for backwards compatibility.
  *
  * @param params - Swap parameters
  * @returns Transaction payload with to, data, and value
@@ -129,14 +313,20 @@ export function buildExactInputSingleSwapTx(params: BuildExactInputSingleSwapPar
 
 /**
  * Calculate minimum amount out with slippage tolerance
- * Uses SDK's Percent.complement() helper to avoid JSBI directly
+ *
+ * @deprecated Import calculateAmountOutMinimumStrict directly from 'uniswap/src/features/transactions/utils/slippage'
+ * This wrapper maintains backwards compatibility but will throw on invalid slippage (fail-closed behavior).
  */
 export function calculateAmountOutMinimum(
   amountOut: CurrencyAmount<Currency>,
   slippageTolerance: Percent,
 ): CurrencyAmount<Currency> {
-  // complement() = (1 - slippage), which is exactly what we need
-  return amountOut.multiply(slippageTolerance.complement())
+  // Delegate to strict utility (fail closed on invalid slippage)
+  const result = calculateAmountOutMinimumStrict(amountOut, slippageTolerance)
+  if (!result.ok) {
+    throw result.error // Backwards compatibility: throw error (caller should migrate to Result-based API)
+  }
+  return result.value
 }
 
 /**

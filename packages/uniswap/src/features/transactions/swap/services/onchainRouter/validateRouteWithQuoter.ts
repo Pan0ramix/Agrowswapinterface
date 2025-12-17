@@ -12,10 +12,10 @@ import JSBI from 'jsbi'
 import { AGROSWAP_QUOTER_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 import { getQuoterV2Address, getV3FactoryAddress } from 'uniswap/src/constants/v3Addresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { CandidateRoute } from 'uniswap/src/features/transactions/swap/services/onchainRouter/generateCandidateRoutes'
 import { decodeQuoterRevert } from 'uniswap/src/features/transactions/swap/utils/decodeQuoterRevert'
 import { logger } from 'utilities/src/logger/logger'
 import { Address, PublicClient } from 'viem'
-import { CandidateRoute } from 'uniswap/src/features/transactions/swap/services/onchainRouter/generateCandidateRoutes'
 
 // ABI for checking token restrictions (ERC20Restricted from OpenZeppelin)
 const RESTRICTION_ABI = [

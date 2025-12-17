@@ -118,7 +118,7 @@ export function swapError(chainId: number | undefined, message: string, context?
     })
   } catch {
     // If swapError itself fails, silently fail (never throw from error logging)
-     
+
     console.error('[swapError] Failed to log error', { chainId, message })
   }
 }

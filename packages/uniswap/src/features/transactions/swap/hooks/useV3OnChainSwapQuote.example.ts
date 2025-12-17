@@ -14,7 +14,6 @@ import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
 import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { logger } from 'utilities/src/logger/logger'
 import {
   buildExactInputSingleSwapTx,
   calculateAmountOutMinimum,
@@ -23,6 +22,7 @@ import {
   parseQuoteError,
   quoteExactInputSingle,
 } from 'uniswap/src/features/transactions/services/v3OnChain'
+import { logger } from 'utilities/src/logger/logger'
 
 /**
  * Hook parameters

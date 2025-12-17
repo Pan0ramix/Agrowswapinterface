@@ -8,8 +8,11 @@
 import { Currency, CurrencyAmount, Percent } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import {
+  type UseV3MintPositionReturn,
+  useV3MintPosition,
+} from 'uniswap/src/features/transactions/liquidity/hooks/useV3MintPosition'
 import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/liquidity/swap/services/onchainRouter/config'
-import { type UseV3MintPositionReturn, useV3MintPosition } from 'uniswap/src/features/transactions/liquidity/hooks/useV3MintPosition'
 
 /**
  * Hook parameters

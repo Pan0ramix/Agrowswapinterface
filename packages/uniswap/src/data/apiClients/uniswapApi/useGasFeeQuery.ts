@@ -5,6 +5,7 @@ import {
   useQueryWithImmediateGarbageCollection,
 } from '@universe/api'
 import { useStatsigClientStatus } from '@universe/gating'
+import { config } from 'uniswap/src/config'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
 import {
   createFetchGasFee,
@@ -12,6 +13,7 @@ import {
 } from 'uniswap/src/data/apiClients/uniswapApi/UniswapApiClient'
 import { getActiveGasStrategy } from 'uniswap/src/features/gas/utils'
 import { ReactQueryCacheKey } from 'utilities/src/reactQuery/cache'
+import { useMemo } from 'react'
 
 export function useGasFeeQuery({
   params,
@@ -23,13 +25,29 @@ export function useGasFeeQuery({
   GasFeeResultWithoutState
 > & { shouldUsePreviousValueDuringLoading?: boolean }): UseQueryResult<GasFeeResultWithoutState> {
   const { isStatsigReady } = useStatsigClientStatus()
+  
+  // Gate: Check if Uniswap API is configured (not localhost/dev)
+  // Disable query if API not configured to prevent 400 errors
+  const isApiConfigured = useMemo(() => {
+    const apiBaseUrl = uniswapUrls.apiBaseUrl
+    return (
+      apiBaseUrl &&
+      apiBaseUrl.trim() !== '' &&
+      !apiBaseUrl.includes('localhost') &&
+      !apiBaseUrl.includes('127.0.0.1') &&
+      config.uniswapApiKey &&
+      config.uniswapApiKey.trim() !== ''
+    )
+  }, [])
+
   const queryKey = [ReactQueryCacheKey.UniswapApi, uniswapUrls.gasServicePath, params]
 
   return useQueryWithImmediateGarbageCollection<GasFeeResultWithoutState>({
     queryKey,
-    queryFn: params
+    queryFn: params && isApiConfigured
       ? (): Promise<GasFeeResultWithoutState> => fetchGasFeeQuery({ ...params, isStatsigReady })
       : skipToken,
+    enabled: isApiConfigured && (rest.enabled !== false) && !!params,
     ...(shouldUsePreviousValueDuringLoading && { placeholderData: keepPreviousData }),
     ...rest,
   })

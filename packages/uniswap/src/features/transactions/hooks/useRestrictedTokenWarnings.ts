@@ -7,11 +7,11 @@
  */
 
 import { useMemo } from 'react'
-import { Address } from 'viem'
 import {
   type UseRestrictedTokenAllowlistChecksParams,
   useRestrictedTokenAllowlistChecks,
 } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenAllowlistChecks'
+import { Address } from 'viem'
 
 export type WarningSeverity = 'blocking' | 'warning'
 

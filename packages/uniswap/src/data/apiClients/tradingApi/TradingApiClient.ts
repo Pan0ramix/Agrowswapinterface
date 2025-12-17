@@ -6,6 +6,7 @@ import { tradingApiVersionPrefix, uniswapUrls } from 'uniswap/src/constants/urls
 import { createUniswapFetchClient } from 'uniswap/src/data/apiClients/createUniswapFetchClient'
 import { filterChainIdsByPlatform } from 'uniswap/src/features/chains/utils'
 import { Platform } from 'uniswap/src/features/platforms/types/Platform'
+import { logger } from 'utilities/src/logger/logger'
 
 const TradingFetchClient = createUniswapFetchClient({
   baseUrl: uniswapUrls.tradingApiUrl,
@@ -155,15 +156,53 @@ export async function checkWalletDelegation(
 ): Promise<TradingApi.WalletCheckDelegationResponseBody> {
   const { walletAddresses, chainIds } = params
 
+  // Gate: Check if Trading API is configured (not localhost/dev)
+  // If tradingApiUrl is not configured or points to localhost, skip the API call
+  const tradingApiUrl = uniswapUrls.tradingApiUrl
+  const isTradingApiConfigured =
+    tradingApiUrl &&
+    tradingApiUrl.trim() !== '' &&
+    !tradingApiUrl.includes('localhost') &&
+    !tradingApiUrl.includes('127.0.0.1') &&
+    !tradingApiUrl.includes('trading-api-labs.interface.gateway.uniswap.org') // Legacy labs URL
+
+  if (!isTradingApiConfigured) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug(
+        '[Trading API] checkWalletDelegation: Trading API not configured (local/dev). Returning empty response to prevent CORS errors.',
+        { tradingApiUrl },
+      )
+    }
+    return {
+      requestId: '',
+      delegationDetails: {},
+    }
+  }
+
   // Filter out SVM chains - check_delegation only supports EVM chains
   let evmChainIds = filterChainIdsByPlatform(chainIds, Platform.EVM)
 
   // Filter out on-chain-only chains (Trading API disabled for these)
+  // AGROSWAP: Base Sepolia (84532) is on-chain-only and must never call Trading API
   const { isOnChainOnlyChain } = await import('uniswap/src/features/transactions/swap/services/onchainRouter/config')
   evmChainIds = evmChainIds.filter((chainId) => !isOnChainOnlyChain(chainId))
 
   // If no wallet addresses provided or if no EVM chains after filtering, return empty response
   if (!walletAddresses || walletAddresses.length === 0 || evmChainIds.length === 0) {
+    return {
+      requestId: '',
+      delegationDetails: {},
+    }
+  }
+
+  // AGROSWAP: Guardrail - ensure we never call Trading API for Base Sepolia (84532)
+  // This is a defensive check in case isOnChainOnlyChain is not properly configured
+  if (chainIds.includes(84532 as TradingApi.ChainId)) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(
+        '[AGROSWAP] checkWalletDelegation: Base Sepolia (84532) detected in chainIds but was not filtered. Returning empty response.',
+      )
+    }
     return {
       requestId: '',
       delegationDetails: {},

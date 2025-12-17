@@ -44,7 +44,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
     chainId,
   )
 
-   
   console.log('[GENERATE-STEPS] ENTER', {
     chainId,
     routing: trade?.routing ? String(trade.routing) : undefined,
@@ -266,7 +265,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
     const { trade, approveTxRequest, revocationTxRequest } = txContextToUse
 
     if (!trade) {
-       
       console.log('[GENERATE-STEPS] EARLY-RETURN', {
         reason: 'MISSING_TRADE',
         chainId,
@@ -280,7 +278,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
     // Boundary log C: Before calling generateSwapTransactionSteps (inside the function, right before approval step creation)
     // CRITICAL: Ensure approveTxRequest is present and has required fields
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-       
       console.log('[SWAP-SAGA] before-generate', {
         chainId,
         txRequestsLength: txRequests?.length ?? 0,
@@ -301,7 +298,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
 
     // Debug logging for approval step creation (Base Sepolia on-chain-only)
     if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-       
       console.log('[GENERATE-STEPS] approval step creation', {
         chainId,
         hasApproveTxRequest: !!approveTxRequest,
@@ -320,7 +316,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
 
       if (txContextToUse.unsigned) {
         if (!txContextToUse.permit || txContextToUse.permit.method !== 'TypedData') {
-           
           console.log('[GENERATE-STEPS] EARLY-RETURN', {
             reason: 'UNSIGNED_WITHOUT_PERMIT',
             chainId,
@@ -330,7 +325,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
           return []
         }
         if (!swapRequestArgs) {
-           
           console.log('[GENERATE-STEPS] EARLY-RETURN', {
             reason: 'UNSIGNED_WITHOUT_SWAP_REQUEST_ARGS',
             chainId,
@@ -353,7 +347,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
       }
 
       if (!txRequestsArray || txRequestsArray.length === 0) {
-         
         console.log('[GENERATE-STEPS] EARLY-RETURN', {
           reason: 'MISSING_TX_REQUEST',
           chainId,
@@ -373,7 +366,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
 
       // Log classic components before ordering (Base Sepolia only)
       if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
-         
         console.log('[GENERATE-STEPS] classic-components', {
           chainId,
           hasApprovalStep: !!approval,
@@ -407,7 +399,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
       return steps
     } else if (isUniswapX(txContextToUse)) {
       if (!txContextToUse.permit) {
-         
         console.log('[GENERATE-STEPS] EARLY-RETURN', {
           reason: 'UNISWAPX_WITHOUT_PERMIT',
           chainId,
@@ -415,7 +406,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
         return []
       }
       if (!trade.quote.quote) {
-         
         console.log('[GENERATE-STEPS] EARLY-RETURN', {
           reason: 'UNISWAPX_WITHOUT_QUOTE',
           chainId,
@@ -430,7 +420,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
       })
     } else if (isBridge(txContextToUse)) {
       if (!txContextToUse.txRequests || txContextToUse.txRequests.length === 0) {
-         
         console.log('[GENERATE-STEPS] EARLY-RETURN', {
           reason: 'BRIDGE_WITHOUT_TX_REQUESTS',
           chainId,
@@ -452,7 +441,6 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
         swap: createSwapTransactionStep(txContextToUse.txRequests[0]),
       })
     } else {
-       
       console.log('[GENERATE-STEPS] EARLY-RETURN', {
         reason: 'UNSUPPORTED_ROUTING',
         chainId,
@@ -466,7 +454,7 @@ export function generateSwapTransactionSteps(txContext: SwapTxAndGasInfo, v4Enab
   }
 
   // This should not be reached if we logged INVALID_SWAP_TX_CONTEXT above, but keeping for safety
-   
+
   console.log('[GENERATE-STEPS] EARLY-RETURN', {
     reason: 'NOT_VALID_SWAP',
     chainId,

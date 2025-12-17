@@ -147,7 +147,6 @@ function useSwapTransactionRequestInfo({
   if (process.env.NODE_ENV !== 'production' && isOnChainEnabled && swapRequestParams) {
     const chainId = derivedSwapInfo.chainId
     if (lastWarnedChainIdRef.current !== chainId) {
-       
       console.debug('[useTransactionRequestInfo] Trading API swap request blocked for on-chain enabled chain:', chainId)
       lastWarnedChainIdRef.current = chainId
     }

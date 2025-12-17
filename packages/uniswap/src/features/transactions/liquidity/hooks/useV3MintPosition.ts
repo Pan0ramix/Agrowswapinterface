@@ -12,11 +12,6 @@ import JSBI from 'jsbi'
 import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
-import { fetchV3PoolState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
-import { getDeadline } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3SwapTxBuilder'
-import { logger } from 'utilities/src/logger/logger'
-import { validateDecimalsSafetyMultiple } from 'uniswap/src/features/transactions/utils/validateDecimalsSafety'
 import {
   buildMintPositionTx,
   calculatePositionAmounts,
@@ -24,6 +19,12 @@ import {
   type LpTransactionPayload,
 } from 'uniswap/src/features/transactions/liquidity/services/v3OnChain'
 import { simulateTransaction } from 'uniswap/src/features/transactions/liquidity/utils/decodeRevertReason'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { fetchV3PoolState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
+import { getDeadline } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3SwapTxBuilder'
+import { calculateAmountOutMinimumLenient } from 'uniswap/src/features/transactions/utils/slippage'
+import { validateDecimalsSafetyMultiple } from 'uniswap/src/features/transactions/utils/validateDecimalsSafety'
+import { logger } from 'utilities/src/logger/logger'
 
 /**
  * Hook parameters
@@ -568,12 +569,16 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
           // Pool is undefined for new pools - not needed since contract creates it
           pool = undefined
 
-          // complement = 1 - slippage = (denominator - numerator) / denominator
-          const complementNumeratorBI = JSBI.subtract(slippageDenominatorBI, slippageNumeratorBI)
-          const slippageComplement = new Percent(complementNumeratorBI, slippageDenominatorBI)
-
-          amount0Min = amount0Desired.multiply(slippageComplement)
-          amount1Min = amount1Desired.multiply(slippageComplement)
+          // Use centralized slippage utility for consistency and safety
+          // Use lenient mode: resilient fallback that preserves protection (amountOut if invalid)
+          amount0Min = calculateAmountOutMinimumLenient(amount0Desired, slippage, {
+            feature: 'liquidity',
+            chainId,
+          })
+          amount1Min = calculateAmountOutMinimumLenient(amount1Desired, slippage, {
+            feature: 'liquidity',
+            chainId,
+          })
 
           // Dev-only: log amounts for new pool (after slippage)
           if (process.env.NODE_ENV !== 'production') {

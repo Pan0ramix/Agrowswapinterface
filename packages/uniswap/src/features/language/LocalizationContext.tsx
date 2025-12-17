@@ -75,7 +75,6 @@ export const useLocalizationContext = (): LocalizationContextState => {
     // In development, log a warning but don't crash
     // In production, return a fallback to prevent app crashes
     if (process.env.NODE_ENV !== 'production') {
-       
       console.warn(
         '`useLocalizationContext` called outside of `LocalizationContextProvider`. Using fallback. This may indicate a missing provider in the component tree.',
       )

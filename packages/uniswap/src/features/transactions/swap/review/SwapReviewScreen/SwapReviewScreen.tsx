@@ -63,7 +63,7 @@ export function SwapReviewScreenProviders({ hideContent, onSubmitSwap }: SwapRev
       },
       chainId,
     )
-  }, [])  
+  }, [])
   const { onClose, authTrigger, setScreen } = useTransactionModalContext()
   const isSubmitting = useSwapFormStore((s) => s.isSubmitting)
   const { derivedSwapInfo, getExecuteSwapService } = useSwapDependenciesStore((s) => ({

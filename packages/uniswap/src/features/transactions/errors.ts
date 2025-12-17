@@ -114,6 +114,19 @@ export class HandledTransactionInterrupt extends TransactionError {
   }
 }
 
+/** Thrown when slippage input cannot be normalized (swap mode only) */
+export class InvalidSlippageError extends TransactionError {
+  public readonly slippageInput: unknown
+  public readonly normalizedPercent: unknown
+
+  constructor(message: string, slippageInput: unknown, normalizedPercent: unknown) {
+    super(message)
+    this.name = 'InvalidSlippageError'
+    this.slippageInput = slippageInput
+    this.normalizedPercent = normalizedPercent
+  }
+}
+
 export function getErrorContent(
   t: AppTFunction,
   error: Error,

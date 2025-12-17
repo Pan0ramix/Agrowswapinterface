@@ -14,9 +14,10 @@ import { boundaryLogDeduped } from 'uniswap/src/utils/boundaryLog'
 
 const useIsReviewButtonDisabled = (): boolean => {
   const isSubmitting = useSwapFormStore((s) => s.isSubmitting)
-  const { isTradeMissing, chainId } = useSwapFormStoreDerivedSwapInfo((s) => ({
+  const { isTradeMissing, chainId, onChainQuote } = useSwapFormStoreDerivedSwapInfo((s) => ({
     isTradeMissing: !s.trade.trade,
     chainId: s.chainId,
+    onChainQuote: s.onChainQuote,
   }))
 
   const activeAccountAddress = useActiveAddress(chainId)
@@ -25,6 +26,9 @@ const useIsReviewButtonDisabled = (): boolean => {
   const { blockingWarning } = useParsedSwapWarnings()
   const { isBlocked: isBlockedAccount, isBlockedLoading: isBlockedAccountLoading } = useIsBlocked(activeAccountAddress)
   const { walletNeedsRestore } = useTransactionModalContext()
+
+  // Check if swap quote is blocked (invalid slippage, etc.)
+  const isQuoteBlocked = onChainQuote?.data?.blockedReason !== undefined || onChainQuote?.data?.isValid === false
 
   // Build structured reasons array
   const reasons: string[] = []
@@ -35,6 +39,7 @@ const useIsReviewButtonDisabled = (): boolean => {
   if (isSubmitting) reasons.push('IS_SUBMITTING')
   if (isTradeMissing) reasons.push('NO_TRADE')
   if (isMissingPlatformWallet) reasons.push('MISSING_PLATFORM_WALLET')
+  if (isQuoteBlocked) reasons.push('INVALID_SLIPPAGE_OR_BLOCKED_QUOTE')
 
   const disabled = reasons.length > 0
   const reasonsString = reasons.join('|')

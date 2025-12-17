@@ -6,10 +6,16 @@
  */
 
 export {
+  type BuildSwapTxError,
+  type BuildSwapTxErrorCode,
+  type BuildSwapTxResult,
   buildSwapTx,
+  buildSwapTxStrict,
   calculateAmountOutMinimum,
   getDeadline,
   getDeadlineSecondsFromNow,
+  type InvalidSlippageTxBuildError,
+  type RouteResult,
   type SwapTransactionPayload,
 } from './buildSwapTx'
 export { chooseBestRoute, compareRoutes } from './chooseBestRoute'

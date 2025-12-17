@@ -38,6 +38,27 @@ export function createTradingApiDelegationRepository(ctx: {
       return result
     }
 
+    // AGROSWAP: Guardrail - ensure Base Sepolia never triggers Trading API calls
+    // This is a defensive check in case filteredChainIds still contains Base Sepolia
+    const hasBaseSepolia = filteredChainIds.includes(84532)
+    if (hasBaseSepolia) {
+      ctx.logger?.warn(
+        'createTradingApiDelegationRepository',
+        'getWalletDelegations',
+        '[AGROSWAP] Base Sepolia (84532) detected in filteredChainIds. This should have been filtered. Returning null for all chains.',
+        {
+          address: input.address,
+          originalChainIds: input.chainIds,
+          filteredChainIds,
+        },
+      )
+      // Return null for all chains to prevent API calls
+      for (const chainId of input.chainIds) {
+        result[String(chainId)] = null
+      }
+      return result
+    }
+
     try {
       const response = await ctx.tradingApiClient.checkWalletDelegation({
         walletAddresses: [input.address],
@@ -69,9 +90,10 @@ export function createTradingApiDelegationRepository(ctx: {
     } catch (error) {
       ctx.logger?.error(error, {
         tags: { file: 'createTradingApiDelegationRepository.ts', function: 'getWalletDelegations' },
-        extra: { address: input.address, chainIds: input.chainIds },
+        extra: { address: input.address, chainIds: input.chainIds, filteredChainIds },
       })
       // Return object with null values for all chains on error
+      // This ensures the app continues to work even if Trading API is unavailable
       for (const chainId of input.chainIds) {
         result[String(chainId)] = null
       }

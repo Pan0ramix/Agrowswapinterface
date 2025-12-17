@@ -11,10 +11,11 @@ import { Interface } from 'ethers/lib/utils'
 import { AGROSWAP_QUOTER_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 import { getQuoterV2Address } from 'uniswap/src/constants/v3Addresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { fetchV3PoolState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
 import { decodeQuoterRevert } from 'uniswap/src/features/transactions/swap/utils/decodeQuoterRevert'
+import { isValidHexString } from 'utilities/src/addresses/hex'
 import { logger } from 'utilities/src/logger/logger'
 import { PublicClient } from 'viem'
-import { fetchV3PoolState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
 
 /**
  * Quote result from Quoter contract
@@ -177,9 +178,23 @@ async function validatePoolBeforeQuote(
 export async function quoteExactInputSingle(params: QuoteExactInputSingleParams): Promise<V3QuoteResult> {
   const { tokenIn, tokenOut, fee, amountIn, sqrtPriceLimitX96, chainId, publicClient } = params
 
-  const quoterAddress = getQuoterAddress(chainId) as `0x${string}`
-  const tokenInAddress = tokenIn.wrapped.address as `0x${string}`
-  const tokenOutAddress = tokenOut.wrapped.address as `0x${string}`
+  const quoterAddressRaw = getQuoterAddress(chainId)
+  if (!isValidHexString(quoterAddressRaw)) {
+    throw new Error(`Invalid quoter address: ${quoterAddressRaw}`)
+  }
+  const quoterAddress = quoterAddressRaw
+
+  const tokenInAddressRaw = tokenIn.wrapped.address
+  if (!isValidHexString(tokenInAddressRaw)) {
+    throw new Error(`Invalid tokenIn address: ${tokenInAddressRaw}`)
+  }
+  const tokenInAddress = tokenInAddressRaw
+
+  const tokenOutAddressRaw = tokenOut.wrapped.address
+  if (!isValidHexString(tokenOutAddressRaw)) {
+    throw new Error(`Invalid tokenOut address: ${tokenOutAddressRaw}`)
+  }
+  const tokenOutAddress = tokenOutAddressRaw
   const amountInRaw = amountIn.quotient.toString()
   const priceLimit = sqrtPriceLimitX96 || '0'
 
@@ -194,7 +209,10 @@ export async function quoteExactInputSingle(params: QuoteExactInputSingleParams)
 
     // Get pool code length to verify pool exists
     try {
-      const poolCode = await publicClient.getBytecode({ address: poolState.poolAddress as `0x${string}` })
+      if (!isValidHexString(poolState.poolAddress)) {
+        throw new Error(`Invalid pool address: ${poolState.poolAddress}`)
+      }
+      const poolCode = await publicClient.getBytecode({ address: poolState.poolAddress })
       poolCodeLength = poolCode ? poolCode.length : 0
     } catch {
       poolCodeLength = 0
@@ -283,8 +301,16 @@ export async function quoteExactInputSingle(params: QuoteExactInputSingleParams)
     sqrtPriceLimitX96: priceLimit,
   }
 
-  const callData = quoterV2Interface.encodeFunctionData('quoteExactInputSingle', [quoteParams]) as `0x${string}`
-  const callDataSelector = callData.slice(0, 10) as `0x${string}`
+  const callDataRaw = quoterV2Interface.encodeFunctionData('quoteExactInputSingle', [quoteParams])
+  if (!isValidHexString(callDataRaw)) {
+    throw new Error(`Invalid callData: ${callDataRaw}`)
+  }
+  const callData = callDataRaw
+  const callDataSelectorRaw = callData.slice(0, 10)
+  if (!isValidHexString(callDataSelectorRaw)) {
+    throw new Error(`Invalid callDataSelector: ${callDataSelectorRaw}`)
+  }
+  const callDataSelector = callDataSelectorRaw
 
   // Step A: Log the exact quote call (before call) - comprehensive logging
   if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
@@ -334,7 +360,11 @@ export async function quoteExactInputSingle(params: QuoteExactInputSingleParams)
     // Step D: Confirm correct quoter + ABI + function usage
     const expectedQuoterAddress = '0x9B988c0B5720c3ab8a60a04e7C17126519AF64e4' // Base Sepolia QuoterV2
     const expectedFunctionSignature = 'quoteExactInputSingle((address,address,uint256,uint24,uint160))'
-    const expectedSelector = quoterV2Interface.getSighash('quoteExactInputSingle') as `0x${string}`
+    const expectedSelectorRaw = quoterV2Interface.getSighash('quoteExactInputSingle')
+    if (!isValidHexString(expectedSelectorRaw)) {
+      throw new Error(`Invalid expectedSelector: ${expectedSelectorRaw}`)
+    }
+    const expectedSelector = expectedSelectorRaw
 
     console.log('[QUOTER-DIAG] Step D: Quoter configuration verification', {
       chainId,
@@ -529,13 +559,17 @@ export async function quoteExactInputSingle(params: QuoteExactInputSingleParams)
       const quoterInterface = new Interface(QUOTER_ABI)
 
       try {
-        const legacyCallData = quoterInterface.encodeFunctionData('quoteExactInputSingle', [
+        const legacyCallDataRaw = quoterInterface.encodeFunctionData('quoteExactInputSingle', [
           tokenInAddress,
           tokenOutAddress,
           fee,
           amountInRaw,
           priceLimit,
-        ]) as `0x${string}`
+        ])
+        if (!isValidHexString(legacyCallDataRaw)) {
+          throw new Error(`Invalid legacyCallData: ${legacyCallDataRaw}`)
+        }
+        const legacyCallData = legacyCallDataRaw
 
         if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
           logger.debug('v3Quoter', 'quoteExactInputSingle', '[QUOTER-DIAG] Trying legacy Quoter', {

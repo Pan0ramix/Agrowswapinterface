@@ -13,8 +13,8 @@ import { Currency, Token } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
 import { WRAPPED_NATIVE_CURRENCY } from 'uniswap/src/constants/tokens'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
-import { PublicClient } from 'viem'
 import { getCarbonCounterpartToken } from 'uniswap/src/features/transactions/swap/services/onchainRouter/getCounterpartToken'
+import { PublicClient } from 'viem'
 
 /**
  * Represents a single hop in a route

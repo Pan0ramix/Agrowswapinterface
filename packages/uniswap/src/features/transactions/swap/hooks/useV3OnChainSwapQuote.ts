@@ -11,16 +11,19 @@ import { FeeAmount, Pool } from '@uniswap/v3-sdk'
 import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { logger } from 'utilities/src/logger/logger'
 import {
-  buildExactInputSingleSwapTx,
-  calculateAmountOutMinimum,
+  buildExactInputSingleSwapTxStrict,
   fetchV3PoolState,
   getDeadline,
   parseQuoteError,
   quoteExactInputSingle,
   type V3QuoteResult,
 } from 'uniswap/src/features/transactions/swap/services/v3OnChain'
+import {
+  calculateAmountOutMinimumStrict,
+  getSlippageToleranceOrError,
+} from 'uniswap/src/features/transactions/utils/slippage'
+import { logger } from 'utilities/src/logger/logger'
 
 // Using a string directly instead of enum to avoid adding to cache.ts
 const V3_ON_CHAIN_SWAP_QUOTE_CACHE_KEY = 'V3OnChainSwapQuote'
@@ -40,29 +43,42 @@ interface UseV3OnChainSwapQuoteParams {
 }
 
 /**
+ * Blocked reason for swap quote
+ */
+export interface SwapQuoteBlockedReason {
+  type: 'INVALID_SLIPPAGE' | 'POOL_NOT_EXISTS' | 'OTHER'
+  message: string
+  error?: Error | unknown
+}
+
+/**
  * Quote result
  */
 interface V3SwapQuoteResult {
   // Quote data
-  quoteAmountOut: CurrencyAmount<Currency>
-  quoteResult: V3QuoteResult
+  quoteAmountOut?: CurrencyAmount<Currency>
+  quoteResult?: V3QuoteResult
 
   // Pool state
-  pool: Pool
-  poolState: 'exists'
+  pool?: Pool
+  poolState: 'exists' | 'error'
 
   // Price impact (simplified calculation)
-  priceImpact: Percent | undefined
+  priceImpact?: Percent | undefined
 
   // Transaction payload
-  txPayload: {
+  txPayload?: {
     to: string
     data: string
     value: string
   }
 
   // Minimum amount out with slippage
-  amountOutMinimum: CurrencyAmount<Currency>
+  amountOutMinimum?: CurrencyAmount<Currency>
+
+  // Validation state
+  isValid: boolean
+  blockedReason?: SwapQuoteBlockedReason
 }
 
 /**
@@ -122,7 +138,29 @@ export function useV3OnChainSwapQuote(params: UseV3OnChainSwapQuoteParams): UseV
     return createViemClient({ chainId })
   }, [chainId])
 
-  // Build query key
+  // Build stable slippage key to prevent "sticky blocked" states
+  // Use normalized slippage numerator/denominator for stable cache key
+  const slippageKey = useMemo(() => {
+    try {
+      const normalized = getSlippageToleranceOrError(slippageTolerance)
+      if (normalized.ok) {
+        const num =
+          typeof normalized.value.numerator === 'bigint'
+            ? normalized.value.numerator.toString()
+            : String(normalized.value.numerator)
+        const den =
+          typeof normalized.value.denominator === 'bigint'
+            ? normalized.value.denominator.toString()
+            : String(normalized.value.denominator)
+        return `${num}/${den}`
+      }
+      return slippageTolerance.toFixed()
+    } catch {
+      return slippageTolerance.toFixed()
+    }
+  }, [slippageTolerance])
+
+  // Build query key with stable slippage representation
   const queryKey = useMemo(
     () => [
       V3_ON_CHAIN_SWAP_QUOTE_CACHE_KEY,
@@ -131,10 +169,10 @@ export function useV3OnChainSwapQuote(params: UseV3OnChainSwapQuoteParams): UseV
       tokenOut?.symbol,
       amountIn?.quotient.toString(),
       fee,
-      slippageTolerance.toFixed(),
+      slippageKey, // Use stable slippage key instead of toFixed()
       recipient,
     ],
-    [chainId, tokenIn?.symbol, tokenOut?.symbol, amountIn?.quotient.toString(), fee, slippageTolerance, recipient],
+    [chainId, tokenIn?.symbol, tokenOut?.symbol, amountIn?.quotient.toString(), fee, slippageKey, recipient],
   )
 
   // Query function
@@ -155,7 +193,21 @@ export function useV3OnChainSwapQuote(params: UseV3OnChainSwapQuoteParams): UseV
         })
 
         if (!poolState) {
-          throw new Error('Pool does not exist or has no liquidity')
+          // Pool does not exist - return blocked result (DO NOT throw)
+          return {
+            quoteAmountOut: undefined,
+            quoteResult: undefined,
+            pool: undefined,
+            poolState: 'error' as const,
+            priceImpact: undefined,
+            txPayload: undefined,
+            amountOutMinimum: undefined,
+            isValid: false,
+            blockedReason: {
+              type: 'POOL_NOT_EXISTS',
+              message: 'Pool does not exist or has no liquidity',
+            },
+          }
         }
 
         // Step 2: Get quote from Quoter contract
@@ -189,20 +241,69 @@ export function useV3OnChainSwapQuote(params: UseV3OnChainSwapQuoteParams): UseV
         }
 
         // Step 4: Calculate minimum amount out with slippage
-        const amountOutMinimum = calculateAmountOutMinimum(quoteAmountOut, slippageTolerance)
+        // Use strict mode: fail closed on invalid slippage (prevents building invalid transactions)
+        const minOutResult = calculateAmountOutMinimumStrict(quoteAmountOut, slippageTolerance)
+        if (!minOutResult.ok) {
+          // Invalid slippage - return blocked result (DO NOT throw - prevents UI crash)
+          return {
+            quoteAmountOut,
+            quoteResult,
+            pool: poolState.pool,
+            poolState: 'error' as const,
+            priceImpact,
+            txPayload: undefined, // No tx payload when blocked
+            amountOutMinimum: undefined,
+            isValid: false,
+            blockedReason: {
+              type: 'INVALID_SLIPPAGE',
+              message: 'Invalid slippage setting. Please reset your slippage tolerance to default.',
+              error: minOutResult.error,
+            },
+          }
+        }
+        const amountOutMinimum = minOutResult.value
 
-        // Step 5: Build transaction payload
+        // Step 5: Build transaction payload with strict validation (final security boundary)
         const deadline = getDeadline(20) // 20 minutes from now
-        const txPayload = buildExactInputSingleSwapTx({
+        const txPayloadResult = buildExactInputSingleSwapTxStrict({
           tokenIn,
           tokenOut,
           fee,
           amountIn,
           amountOutMinimum,
+          expectedAmountOut: quoteAmountOut, // Pass expected output for invariant validation
           recipient,
           deadline,
           chainId,
         })
+
+        if (!txPayloadResult.ok) {
+          // Tx build failed (shouldn't happen if hooks validated correctly, but fail-closed)
+          // Map error code to blocked reason type
+          const errorCode = txPayloadResult.error.code
+          let blockedType: 'INVALID_SLIPPAGE' | 'OTHER' = 'OTHER'
+          if (errorCode === 'INVALID_SLIPPAGE') {
+            blockedType = 'INVALID_SLIPPAGE'
+          }
+
+          return {
+            quoteAmountOut,
+            quoteResult,
+            pool: poolState.pool,
+            poolState: 'error' as const,
+            priceImpact,
+            txPayload: undefined,
+            amountOutMinimum: undefined,
+            isValid: false,
+            blockedReason: {
+              type: blockedType,
+              message: txPayloadResult.error.message || 'Transaction build failed',
+              error: txPayloadResult.error,
+            },
+          }
+        }
+
+        const txPayload = txPayloadResult.value
 
         return {
           quoteAmountOut,
@@ -212,8 +313,12 @@ export function useV3OnChainSwapQuote(params: UseV3OnChainSwapQuoteParams): UseV
           priceImpact,
           txPayload,
           amountOutMinimum,
+          isValid: true,
+          blockedReason: undefined,
         }
       } catch (error) {
+        // For unexpected errors, return blocked result instead of throwing
+        // This prevents UI crashes while still signaling failure
         const errorMessage = error instanceof Error ? error.message : String(error)
         const parsedError = parseQuoteError(error)
 
@@ -231,7 +336,22 @@ export function useV3OnChainSwapQuote(params: UseV3OnChainSwapQuoteParams): UseV
           },
         })
 
-        throw new Error(parsedError)
+        // Return blocked result instead of throwing (prevents UI crash)
+        return {
+          quoteAmountOut: undefined,
+          quoteResult: undefined,
+          pool: undefined,
+          poolState: 'error' as const,
+          priceImpact: undefined,
+          txPayload: undefined,
+          amountOutMinimum: undefined,
+          isValid: false,
+          blockedReason: {
+            type: 'OTHER',
+            message: parsedError,
+            error,
+          },
+        }
       }
     }
   }, [tokenIn, tokenOut, amountIn, fee, slippageTolerance, chainId, recipient, publicClient])

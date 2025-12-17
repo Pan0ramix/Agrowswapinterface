@@ -1,33 +1,108 @@
-/** biome-ignore-all lint/style/noRestrictedGlobals: need to reference chrome for test setup */
-import { DEFAULT_LANGUAGE_CODE, DEFAULT_LANGUAGE_TAG } from 'utilities/src/device/constants'
-import { getDeviceLocales } from 'utilities/src/device/locales.web'
-import { Mock, vi } from 'vitest'
+/**
+ * Unit tests for locales.web.ts
+ * 
+ * Tests to ensure getDeviceLocales handles missing chrome.i18n gracefully
+ */
 
-// Mock the chrome utilities to return the global chrome mock from vitest setup
-vi.mock('utilities/src/chrome/chrome', () => ({
-  getChromeWithThrow: (): typeof chrome => global.chrome,
-}))
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
-describe(getDeviceLocales, () => {
-  const MOCK_LANGUAGE = 'es-ES'
+// Mock chrome globally
+const mockChrome = {
+  i18n: {
+    getUILanguage: vi.fn(),
+  },
+}
 
+describe('getDeviceLocales (web)', () => {
   beforeEach(() => {
-    // eslint-disable-next-line no-extra-semi
-    ;(chrome.i18n.getUILanguage as Mock).mockImplementation(() => MOCK_LANGUAGE)
+    // @ts-expect-error - chrome is global in extension context
+    global.chrome = undefined
+    // @ts-expect-error - navigator mock
+    global.navigator = {
+      language: 'en-US',
+      languages: ['en-US', 'en'],
+    }
   })
 
-  it('should return the device locale', () => {
-    expect(getDeviceLocales).not.toThrow()
-    expect(getDeviceLocales()).toEqual([{ languageCode: MOCK_LANGUAGE, languageTag: MOCK_LANGUAGE }])
+  afterEach(() => {
+    // @ts-expect-error
+    delete global.chrome
+    vi.restoreAllMocks()
   })
 
-  it('should return the default locale if an error occurs', () => {
-    // eslint-disable-next-line no-extra-semi
-    ;(chrome.i18n.getUILanguage as Mock).mockImplementation(() => {
-      throw new Error('test error')
+  it('should fallback to navigator.language when chrome.i18n is undefined', async () => {
+    // @ts-expect-error
+    global.chrome = undefined
+
+    // Dynamic import to avoid module caching issues
+    const { getDeviceLocales } = await import('./locales.web')
+    const result = getDeviceLocales()
+
+    expect(result).toHaveLength(1)
+    expect(result[0].languageCode).toBe('en-US')
+  })
+
+  it('should fallback to navigator.language when chrome.i18n.getUILanguage is not a function', async () => {
+    // @ts-expect-error
+    global.chrome = { i18n: {} }
+
+    const { getDeviceLocales } = await import('./locales.web')
+    const result = getDeviceLocales()
+
+    expect(result).toHaveLength(1)
+    expect(result[0].languageCode).toBe('en-US')
+  })
+
+  it('should use chrome.i18n.getUILanguage when available', async () => {
+    const mockGetUILanguage = vi.fn(() => 'fr-FR')
+    // @ts-expect-error
+    global.chrome = {
+      i18n: {
+        getUILanguage: mockGetUILanguage,
+      },
+    }
+
+    const { getDeviceLocales } = await import('./locales.web')
+    const result = getDeviceLocales()
+
+    expect(result).toHaveLength(1)
+    expect(result[0].languageCode).toBe('fr-FR')
+    expect(mockGetUILanguage).toHaveBeenCalled()
+  })
+
+  it('should fallback to default when chrome.i18n.getUILanguage throws', async () => {
+    const mockGetUILanguage = vi.fn(() => {
+      throw new Error('Chrome API error')
     })
+    // @ts-expect-error
+    global.chrome = {
+      i18n: {
+        getUILanguage: mockGetUILanguage,
+      },
+    }
+    // @ts-expect-error
+    global.navigator = undefined
 
-    expect(getDeviceLocales).not.toThrow()
-    expect(getDeviceLocales()).toEqual([{ languageCode: DEFAULT_LANGUAGE_CODE, languageTag: DEFAULT_LANGUAGE_TAG }])
+    const { getDeviceLocales } = await import('./locales.web')
+    const result = getDeviceLocales()
+
+    expect(result).toHaveLength(1)
+    expect(result[0].languageCode).toBe('en')
+  })
+
+  it('should handle navigator.languages array', async () => {
+    // @ts-expect-error
+    global.chrome = undefined
+    // @ts-expect-error
+    global.navigator = {
+      languages: ['es-ES', 'es', 'en'],
+      language: 'en-US',
+    }
+
+    const { getDeviceLocales } = await import('./locales.web')
+    const result = getDeviceLocales()
+
+    expect(result).toHaveLength(1)
+    expect(result[0].languageCode).toBe('es-ES') // Should prefer first in languages array
   })
 })

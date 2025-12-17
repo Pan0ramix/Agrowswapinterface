@@ -10,6 +10,7 @@ import { computePoolAddress, FeeAmount, Pool } from '@uniswap/v3-sdk'
 import { Interface } from 'ethers/lib/utils'
 import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
+import { isValidHexString } from 'utilities/src/addresses/hex'
 import { PublicClient } from 'viem'
 
 /**
@@ -128,32 +129,50 @@ export async function fetchV3PoolState(params: FetchV3PoolStateParams): Promise<
 
   // Compute pool address
   const factoryAddress = getV3FactoryAddress(chainId)
-  const poolAddress = computePoolAddress({
+  const poolAddressRaw = computePoolAddress({
     factoryAddress,
     tokenA: token0,
     tokenB: token1,
     fee,
     chainId: chainId as number,
-  }) as `0x${string}`
+  })
+  if (!isValidHexString(poolAddressRaw)) {
+    throw new Error(`Invalid pool address: ${poolAddressRaw}`)
+  }
+  const poolAddress = poolAddressRaw
 
   // Create interface for encoding calls
   const poolInterface = new Interface(V3_POOL_ABI)
 
   try {
     // Fetch pool state in parallel (including tickSpacing for audit)
+    const slot0DataRaw = poolInterface.encodeFunctionData('slot0')
+    const liquidityDataRaw = poolInterface.encodeFunctionData('liquidity')
+    const tickSpacingDataRaw = poolInterface.encodeFunctionData('tickSpacing')
+
+    if (!isValidHexString(slot0DataRaw)) {
+      throw new Error(`Invalid slot0Data: ${slot0DataRaw}`)
+    }
+    if (!isValidHexString(liquidityDataRaw)) {
+      throw new Error(`Invalid liquidityData: ${liquidityDataRaw}`)
+    }
+    if (!isValidHexString(tickSpacingDataRaw)) {
+      throw new Error(`Invalid tickSpacingData: ${tickSpacingDataRaw}`)
+    }
+
     const [slot0Data, liquidityData, tickSpacingData] = await Promise.all([
       publicClient.call({
         to: poolAddress,
-        data: poolInterface.encodeFunctionData('slot0') as `0x${string}`,
+        data: slot0DataRaw,
       }),
       publicClient.call({
         to: poolAddress,
-        data: poolInterface.encodeFunctionData('liquidity') as `0x${string}`,
+        data: liquidityDataRaw,
       }),
       publicClient
         .call({
           to: poolAddress,
-          data: poolInterface.encodeFunctionData('tickSpacing') as `0x${string}`,
+          data: tickSpacingDataRaw,
         })
         .catch(() => ({ data: null })), // tickSpacing is optional for audit
     ])
@@ -222,29 +241,54 @@ export async function fetchV3PoolStateByAddress(params: FetchV3PoolStateByAddres
   const { poolAddress, publicClient } = params
 
   const poolInterface = new Interface(V3_POOL_ABI)
-  const address = poolAddress as `0x${string}`
+  if (!isValidHexString(poolAddress)) {
+    throw new Error(`Invalid pool address: ${poolAddress}`)
+  }
+  const address = poolAddress
 
   try {
+    const slot0DataRaw = poolInterface.encodeFunctionData('slot0')
+    const liquidityDataRaw = poolInterface.encodeFunctionData('liquidity')
+    const token0DataRaw = poolInterface.encodeFunctionData('token0')
+    const token1DataRaw = poolInterface.encodeFunctionData('token1')
+    const feeDataRaw = poolInterface.encodeFunctionData('fee')
+
+    if (!isValidHexString(slot0DataRaw)) {
+      throw new Error(`Invalid slot0Data: ${slot0DataRaw}`)
+    }
+    if (!isValidHexString(liquidityDataRaw)) {
+      throw new Error(`Invalid liquidityData: ${liquidityDataRaw}`)
+    }
+    if (!isValidHexString(token0DataRaw)) {
+      throw new Error(`Invalid token0Data: ${token0DataRaw}`)
+    }
+    if (!isValidHexString(token1DataRaw)) {
+      throw new Error(`Invalid token1Data: ${token1DataRaw}`)
+    }
+    if (!isValidHexString(feeDataRaw)) {
+      throw new Error(`Invalid feeData: ${feeDataRaw}`)
+    }
+
     const [slot0Data, liquidityData, token0Data, token1Data, feeData] = await Promise.all([
       publicClient.call({
         to: address,
-        data: poolInterface.encodeFunctionData('slot0') as `0x${string}`,
+        data: slot0DataRaw,
       }),
       publicClient.call({
         to: address,
-        data: poolInterface.encodeFunctionData('liquidity') as `0x${string}`,
+        data: liquidityDataRaw,
       }),
       publicClient.call({
         to: address,
-        data: poolInterface.encodeFunctionData('token0') as `0x${string}`,
+        data: token0DataRaw,
       }),
       publicClient.call({
         to: address,
-        data: poolInterface.encodeFunctionData('token1') as `0x${string}`,
+        data: token1DataRaw,
       }),
       publicClient.call({
         to: address,
-        data: poolInterface.encodeFunctionData('fee') as `0x${string}`,
+        data: feeDataRaw,
       }),
     ])
 

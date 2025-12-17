@@ -10,8 +10,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Flex, Text, TouchableArea } from 'ui/src'
 import { AlertTriangleFilled } from 'ui/src/components/icons/AlertTriangleFilled'
-import { setClipboard } from 'uniswap/src/utils/clipboard'
 import type { RestrictedTokenWarnings as RestrictedTokenWarningsType } from 'uniswap/src/features/transactions/hooks/useRestrictedTokenWarnings'
+import { setClipboard } from 'uniswap/src/utils/clipboard'
 
 interface RestrictedTokenWarningsProps {
   warnings: RestrictedTokenWarningsType

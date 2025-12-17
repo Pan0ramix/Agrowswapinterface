@@ -10,11 +10,17 @@
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
 import { FeeAmount } from '@uniswap/v3-sdk'
 import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
+import { chooseBestRoute } from 'uniswap/src/features/transactions/swap/services/onchainRouter/chooseBestRoute'
+import {
+  CandidateRoute,
+  generateCandidateRoutes,
+} from 'uniswap/src/features/transactions/swap/services/onchainRouter/generateCandidateRoutes'
+import {
+  ValidatedRoute,
+  validateRouteWithQuoter,
+} from 'uniswap/src/features/transactions/swap/services/onchainRouter/validateRouteWithQuoter'
 import { logger } from 'utilities/src/logger/logger'
 import { PublicClient } from 'viem'
-import { chooseBestRoute } from 'uniswap/src/features/transactions/swap/services/onchainRouter/chooseBestRoute'
-import { CandidateRoute, generateCandidateRoutes } from 'uniswap/src/features/transactions/swap/services/onchainRouter/generateCandidateRoutes'
-import { ValidatedRoute, validateRouteWithQuoter } from 'uniswap/src/features/transactions/swap/services/onchainRouter/validateRouteWithQuoter'
 
 /**
  * Complete route result

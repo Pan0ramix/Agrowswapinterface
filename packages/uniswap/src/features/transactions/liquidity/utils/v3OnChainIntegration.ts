@@ -112,3 +112,35 @@ export function convertOnChainTxToCreateLpResponse(
     sqrtRatioX96: txPayload.sqrtPriceX96,
   }
 }
+
+/**
+ * Helper to convert on-chain decrease liquidity transaction payload to DecreaseLPPositionResponse format
+ * This allows on-chain payloads to work with existing UI components
+ */
+export function convertOnChainTxToDecreaseLpResponse(
+  txPayload: {
+    to: string
+    data: string
+    value: string
+  },
+  chainId: EVMUniverseChainId,
+  sqrtRatioX96?: string,
+): {
+  decrease: {
+    to: string
+    data: string
+    value: string
+    chainId: number
+  }
+  sqrtRatioX96?: string
+} {
+  return {
+    decrease: {
+      to: txPayload.to,
+      data: txPayload.data,
+      value: txPayload.value,
+      chainId,
+    },
+    sqrtRatioX96,
+  }
+}

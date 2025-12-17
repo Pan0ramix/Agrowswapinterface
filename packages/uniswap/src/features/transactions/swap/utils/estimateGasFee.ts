@@ -198,7 +198,6 @@ export async function estimateGasFee({
 
     // Diagnostic log (temporary, minimal)
     if (chainId === 84532 && process.env.NODE_ENV !== 'production') {
-       
       console.log('[ESTIMATE FAIL]', {
         chainId,
         to: txTo,

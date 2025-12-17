@@ -71,7 +71,7 @@ function logInvalidSwapTxContext(validation: SwapTxContextValidation) {
 
   // Use debug level to avoid console spam
   // Log the first reason for quick diagnosis
-   
+
   console.debug('[SWAP-TX-CONTEXT] INVALID', {
     reason0: validation.reasons[0], // First reason for quick diagnosis
     reasons: validation.reasons,

@@ -11,8 +11,11 @@ import { validateTransactionRequest } from 'uniswap/src/features/transactions/sw
 import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 import { logContextUpdate } from 'utilities/src/logger/contextEnhancer'
 
+import type { RemoveLiqNetworkCost } from 'pages/RemoveLiquidity/hooks/useRemoveLiquidityNetworkCost'
+
 export type RemoveLiquidityTxInfo = {
   gasFeeEstimateUSD?: CurrencyAmount<Currency>
+  onChainNetworkCost?: RemoveLiqNetworkCost // On-chain network cost data (native + USD)
   v2LpTokenApproval?: TradingApi.CheckApprovalLPResponse
   decreaseCalldata?: TradingApi.DecreaseLPPositionResponse
   decreaseCalldataLoading: boolean

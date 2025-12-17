@@ -7,6 +7,15 @@ import { WrapType } from 'uniswap/src/features/transactions/types/wrap'
 import { CurrencyField } from 'uniswap/src/types/currency'
 
 /**
+ * Blocked reason for swap quote
+ */
+export interface SwapQuoteBlockedReason {
+  type: 'INVALID_SLIPPAGE' | 'ROUTE_NOT_FOUND' | 'POOL_NOT_EXISTS' | 'DECIMALS_SAFETY' | 'OTHER'
+  message: string
+  error?: Error | unknown
+}
+
+/**
  * On-chain quote data structure (matches useOnChainSwapQuote return type)
  */
 export type OnChainQuoteData = {
@@ -14,7 +23,7 @@ export type OnChainQuoteData = {
   quoteAmountOut?: CurrencyAmount<Currency> // For exact input
   route: any // Route result from findRoute
   priceImpact?: number
-  txPayload: {
+  txPayload?: {
     to: string
     data: string
     value: string
@@ -22,6 +31,10 @@ export type OnChainQuoteData = {
   }
   amountInMaximum?: CurrencyAmount<Currency> // For exact output
   amountOutMinimum?: CurrencyAmount<Currency> // For exact input
+
+  // Validation state
+  isValid: boolean
+  blockedReason?: SwapQuoteBlockedReason
 }
 
 export type DerivedSwapInfo<

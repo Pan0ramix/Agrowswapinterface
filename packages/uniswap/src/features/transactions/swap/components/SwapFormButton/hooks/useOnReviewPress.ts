@@ -48,7 +48,7 @@ export const useOnReviewPress: UseOnReviewPress = (source?: string) => {
       },
       chainId,
     )
-  }, [])  
+  }, [])
 
   const { handleHideTokenWarningModal, handleHideMaxNativeTransferModal, handleHideBridgedAssetModal } =
     useSwapFormWarningStoreActions()

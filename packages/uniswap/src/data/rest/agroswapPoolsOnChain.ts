@@ -4,16 +4,81 @@
  */
 
 import { UniverseChainId } from 'uniswap/src/features/chains/types'
-import { decodeEventLog, PublicClient } from 'viem'
+import { decodeEventLog, type Log, PublicClient } from 'viem'
 
 // Factory deployment blocks for each chain (optimization: start querying from deployment block)
 // These should be set to the block number when the factory was deployed
 // You can find this by checking the factory contract's creation transaction on a block explorer
+//
+// AGROSWAP: To find the deployment block for Base Sepolia factory (0xB1285002ce1173097A7E2A1a0aCa00fBb436370d):
+// 1. Visit https://sepolia.basescan.org/address/0xB1285002ce1173097A7E2A1a0aCa00fBb436370d
+// 2. Click on the "Contract Creation" transaction
+// 3. Note the block number from that transaction
+// 4. Set it below to improve query performance and avoid chunking
+//
+// If not set, chunking will handle large block ranges automatically (see getLogsChunked)
 const FACTORY_DEPLOYMENT_BLOCKS: Partial<Record<UniverseChainId, bigint>> = {
   // Base Sepolia factory: 0xB1285002ce1173097A7E2A1a0aCa00fBb436370d
-  // TODO: Query the factory contract's creation block or set manually from block explorer
-  // Example: [UniverseChainId.BaseSepolia]: 12345678n,
+  // Example: [UniverseChainId.BaseSepolia]: 12345678n, // Set actual deployment block here
 } as Partial<Record<UniverseChainId, bigint>>
+
+/**
+ * Maximum block range for eth_getLogs queries
+ * Most RPC providers limit this to 100,000 blocks
+ */
+const MAX_BLOCK_RANGE = 90000n // Use 90k to stay safely under 100k limit
+
+/**
+ * Chunk large block ranges into smaller requests to avoid RPC limits
+ * Most RPC providers limit eth_getLogs to ~100,000 blocks per request
+ */
+async function getLogsChunked(
+  publicClient: PublicClient,
+  params: {
+    address: `0x${string}`
+    event: (typeof V3_FACTORY_ABI)[0]
+    fromBlock: bigint
+    toBlock: bigint
+  },
+): Promise<Log[]> {
+  const { address, event, fromBlock, toBlock } = params
+  const range = toBlock - fromBlock
+
+  // If range is within limit, make single request
+  if (range <= MAX_BLOCK_RANGE) {
+    return await publicClient.getLogs({
+      address,
+      event,
+      fromBlock,
+      toBlock,
+    })
+  }
+
+  // Chunk the range into multiple requests
+  const chunks: Array<{ fromBlock: bigint; toBlock: bigint }> = []
+  let currentFrom = fromBlock
+
+  while (currentFrom <= toBlock) {
+    const currentTo = currentFrom + MAX_BLOCK_RANGE > toBlock ? toBlock : currentFrom + MAX_BLOCK_RANGE
+    chunks.push({ fromBlock: currentFrom, toBlock: currentTo })
+    currentFrom = currentTo + 1n
+  }
+
+  // Make parallel requests for all chunks
+  const chunkPromises = chunks.map((chunk) =>
+    publicClient.getLogs({
+      address,
+      event,
+      fromBlock: chunk.fromBlock,
+      toBlock: chunk.toBlock,
+    }),
+  )
+
+  const chunkResults = await Promise.all(chunkPromises)
+
+  // Merge all results
+  return chunkResults.flat()
+}
 
 /**
  * Query the factory contract's deployment block by checking its creation transaction
@@ -322,8 +387,16 @@ export async function queryFactoryPools(
     }
 
     // Query PoolCreated events from factory
-    // Performance: Only query new blocks since last query (or from deployment)
-    const logs = await publicClient.getLogs({
+    // AGROSWAP: Use chunked queries to avoid RPC "max block range" errors
+    // Most RPC providers limit eth_getLogs to ~100,000 blocks per request
+    const blockRange = currentBlock - fromBlock
+    if (process.env.NODE_ENV !== 'production' && blockRange > MAX_BLOCK_RANGE) {
+      console.log(
+        `[AGROSWAP] Large block range detected: ${blockRange} blocks. Using chunked queries (max ${MAX_BLOCK_RANGE} per chunk)`,
+      )
+    }
+
+    const logs = await getLogsChunked(publicClient, {
       address: factoryAddress,
       event: V3_FACTORY_ABI[0],
       fromBlock,
@@ -401,9 +474,26 @@ export async function queryFactoryPools(
       return BigInt(b.liquidity) > BigInt(a.liquidity) ? 1 : -1
     })
   } catch (error) {
+    // AGROSWAP: Enhanced error logging for debugging
+    const errorMessage = error instanceof Error ? error.message : String(error)
     if (process.env.NODE_ENV !== 'production') {
-      console.error('Error querying factory pools:', error)
+      console.error('[AGROSWAP] Error querying factory pools:', {
+        error: errorMessage,
+        chainId,
+        factoryAddress,
+        fromBlock: fromBlock?.toString(),
+        toBlock: currentBlock?.toString(),
+        blockRange: currentBlock && fromBlock ? (currentBlock - fromBlock).toString() : 'unknown',
+      })
     }
+
+    // If error is related to block range, log a helpful message
+    if (errorMessage.includes('max block range') || errorMessage.includes('query exceeds')) {
+      console.warn(
+        `[AGROSWAP] Block range error detected. Consider setting FACTORY_DEPLOYMENT_BLOCKS[${chainId}] to a more recent block number to reduce query range.`,
+      )
+    }
+
     return []
   }
 }
@@ -419,32 +509,83 @@ async function fetchPoolData(
   try {
     // Fetch pool state
     const [slot0Result, liquidityResult, token0Result, token1Result, feeResult] = await Promise.all([
-      publicClient.readContract({
-        address: poolAddress,
-        abi: V3_POOL_ABI,
-        functionName: 'slot0',
-      }),
-      publicClient.readContract({
-        address: poolAddress,
-        abi: V3_POOL_ABI,
-        functionName: 'liquidity',
-      }),
-      publicClient.readContract({
-        address: poolAddress,
-        abi: V3_POOL_ABI,
-        functionName: 'token0',
-      }),
-      publicClient.readContract({
-        address: poolAddress,
-        abi: V3_POOL_ABI,
-        functionName: 'token1',
-      }),
-      publicClient.readContract({
-        address: poolAddress,
-        abi: V3_POOL_ABI,
-        functionName: 'fee',
-      }),
+      publicClient
+        .readContract({
+          address: poolAddress,
+          abi: V3_POOL_ABI,
+          functionName: 'slot0',
+        })
+        .catch(() => null),
+      publicClient
+        .readContract({
+          address: poolAddress,
+          abi: V3_POOL_ABI,
+          functionName: 'liquidity',
+        })
+        .catch(() => null),
+      publicClient
+        .readContract({
+          address: poolAddress,
+          abi: V3_POOL_ABI,
+          functionName: 'token0',
+        })
+        .catch(() => null),
+      publicClient
+        .readContract({
+          address: poolAddress,
+          abi: V3_POOL_ABI,
+          functionName: 'token1',
+        })
+        .catch(() => null),
+      publicClient
+        .readContract({
+          address: poolAddress,
+          abi: V3_POOL_ABI,
+          functionName: 'fee',
+        })
+        .catch(() => null),
     ])
+
+    // Validate all required results are present
+    if (
+      !slot0Result ||
+      !liquidityResult ||
+      !token0Result ||
+      !token1Result ||
+      feeResult === null ||
+      feeResult === undefined
+    ) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[AGROSWAP] fetchPoolData: Missing required pool data', {
+          poolAddress,
+          hasSlot0: !!slot0Result,
+          hasLiquidity: liquidityResult !== null && liquidityResult !== undefined,
+          hasToken0: !!token0Result,
+          hasToken1: !!token1Result,
+          hasFee: feeResult !== null && feeResult !== undefined,
+        })
+      }
+      return null
+    }
+
+    // Validate slot0Result structure (must have sqrtPriceX96 and tick)
+    if (
+      typeof slot0Result !== 'object' ||
+      !('sqrtPriceX96' in slot0Result) ||
+      !('tick' in slot0Result) ||
+      slot0Result.sqrtPriceX96 === null ||
+      slot0Result.sqrtPriceX96 === undefined ||
+      slot0Result.tick === null ||
+      slot0Result.tick === undefined
+    ) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[AGROSWAP] fetchPoolData: Invalid slot0Result structure', {
+          poolAddress,
+          slot0Result,
+        })
+      }
+      return null
+    }
 
     // Check if pool has liquidity
     if (liquidityResult === 0n || slot0Result.sqrtPriceX96 === 0n) {
@@ -478,6 +619,34 @@ async function fetchPoolData(
     // For now, using 0 as placeholder. When subgraph is integrated, this will come from there
     const tvlUSD = 0
 
+    // Safely convert values with validation
+    const sqrtPriceX96Bigint = slot0Result.sqrtPriceX96
+    const tickNumber = slot0Result.tick
+    const feeNumber = typeof feeResult === 'bigint' || typeof feeResult === 'number' ? Number(feeResult) : null
+    const liquidityBigint = liquidityResult
+
+    // Final validation before returning
+    if (
+      sqrtPriceX96Bigint === null ||
+      sqrtPriceX96Bigint === undefined ||
+      tickNumber === null ||
+      tickNumber === undefined ||
+      feeNumber === null ||
+      liquidityBigint === null ||
+      liquidityBigint === undefined
+    ) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[AGROSWAP] fetchPoolData: Invalid values after conversion', {
+          poolAddress,
+          sqrtPriceX96: sqrtPriceX96Bigint,
+          tick: tickNumber,
+          fee: feeNumber,
+          liquidity: liquidityBigint,
+        })
+      }
+      return null
+    }
+
     return {
       poolAddress,
       token0: {
@@ -485,21 +654,21 @@ async function fetchPoolData(
         symbol: token0Metadata.symbol,
         name: token0Metadata.name,
         decimals: token0Metadata.decimals,
-        balance: token0Balance.toString(),
+        balance: typeof token0Balance === 'bigint' ? token0Balance.toString() : String(token0Balance ?? '0'),
       },
       token1: {
         address: token1Result,
         symbol: token1Metadata.symbol,
         name: token1Metadata.name,
         decimals: token1Metadata.decimals,
-        balance: token1Balance.toString(),
+        balance: typeof token1Balance === 'bigint' ? token1Balance.toString() : String(token1Balance ?? '0'),
       },
-      fee: Number(feeResult),
-      feeTier: Number(feeResult),
+      fee: feeNumber,
+      feeTier: feeNumber,
       tickSpacing: 60, // Default for V3, can be fetched if needed
-      sqrtPriceX96: slot0Result.sqrtPriceX96.toString(),
-      tick: Number(slot0Result.tick),
-      liquidity: liquidityResult.toString(),
+      sqrtPriceX96: typeof sqrtPriceX96Bigint === 'bigint' ? sqrtPriceX96Bigint.toString() : String(sqrtPriceX96Bigint),
+      tick: Number(tickNumber),
+      liquidity: typeof liquidityBigint === 'bigint' ? liquidityBigint.toString() : String(liquidityBigint),
       tvlUSD,
       volume24hUSD: 0, // TODO: Calculate from Swap events or use subgraph
     }

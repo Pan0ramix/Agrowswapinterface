@@ -7,6 +7,7 @@ import { DetailLineItem } from 'components/swap/DetailLineItem'
 import { useCurrencyInfo } from 'hooks/Tokens'
 import { useAccount } from 'hooks/useAccount'
 import useSelectChain from 'hooks/useSelectChain'
+import { getEstimatedSuffix } from 'pages/RemoveLiquidity/feeDisplay'
 import { useRemoveLiquidityModalContext } from 'pages/RemoveLiquidity/RemoveLiquidityModalContext'
 import { useRemoveLiquidityTxContext } from 'pages/RemoveLiquidity/RemoveLiquidityTxContext'
 import { useMemo, useState } from 'react'
@@ -20,8 +21,10 @@ import { ProgressIndicator } from 'uniswap/src/components/ConfirmSwapModal/Progr
 import { CurrencyLogo } from 'uniswap/src/components/CurrencyLogo/CurrencyLogo'
 import { NetworkLogo } from 'uniswap/src/components/CurrencyLogo/NetworkLogo'
 import { PollingInterval } from 'uniswap/src/constants/misc'
+import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { useLocalizationContext } from 'uniswap/src/features/language/LocalizationContext'
 import { useGetPasskeyAuthStatus } from 'uniswap/src/features/passkey/hooks/useGetPasskeyAuthStatus'
+import { usePositionFees } from 'uniswap/src/features/positions/fees'
 import { useUSDCValue } from 'uniswap/src/features/transactions/hooks/useUSDCPrice'
 import { isValidLiquidityTxContext } from 'uniswap/src/features/transactions/liquidity/types'
 import { TransactionStep } from 'uniswap/src/features/transactions/steps/types'
@@ -48,7 +51,7 @@ export function RemoveLiquidityReview({ onClose }: { onClose: () => void }) {
   const trace = useTrace()
   const { needsPasskeySignin } = useGetPasskeyAuthStatus(connectedAccount.connector?.id)
 
-  const { txContext, gasFeeEstimateUSD } = removeLiquidityTxContext
+  const { txContext, gasFeeEstimateUSD, onChainNetworkCost } = removeLiquidityTxContext
 
   const onSuccess = () => {
     setSteps([])
@@ -64,7 +67,91 @@ export function RemoveLiquidityReview({ onClose }: { onClose: () => void }) {
     throw new Error('RemoveLiquidityModal must have an initial state when opening')
   }
 
-  const { fee0Amount, fee1Amount } = positionInfo
+  // Get position manager address (for resolver hook)
+  // Resolve from config like useOnChainCollectableFees does
+  const positionManagerAddress = useMemo(() => {
+    const chainId = positionInfo.chainId as EVMUniverseChainId | undefined
+    if (!chainId) {
+      return undefined
+    }
+    try {
+      // Try Agroswap addresses first (Base Sepolia)
+      const { AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES } = require('uniswap/src/constants/agroswapAddresses')
+      if (chainId === 84532) {
+        const address =
+          AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[
+            chainId as keyof typeof AGROSWAP_NONFUNGIBLE_POSITION_MANAGER_ADDRESSES
+          ]
+        if (address) {
+          return address
+        }
+      }
+
+      // Try v3Addresses override
+      const { getPositionManagerAddress } = require('uniswap/src/constants/v3Addresses')
+      const v3Address = getPositionManagerAddress(chainId)
+      if (v3Address) {
+        return v3Address
+      }
+
+      // Fall back to SDK addresses
+      const { NONFUNGIBLE_POSITION_MANAGER_ADDRESSES } = require('@uniswap/sdk-core')
+      const sdkAddress =
+        NONFUNGIBLE_POSITION_MANAGER_ADDRESSES[chainId as keyof typeof NONFUNGIBLE_POSITION_MANAGER_ADDRESSES]
+      return sdkAddress || undefined
+    } catch {
+      return undefined
+    }
+  }, [positionInfo.chainId])
+
+  // Use position fees resolver hook (multiple providers with priority)
+  // Priority: collect_simulation (authoritative) > onchain_math (estimated) > graphql (estimated)
+  const feesQuery = usePositionFees({
+    chainId: positionInfo.chainId as EVMUniverseChainId | undefined,
+    tokenId: positionInfo.tokenId,
+    account: account?.address,
+    positionManagerAddress,
+    // Fallback data from positionInfo (GraphQL/indexer source)
+    positionInfoFee0Amount: positionInfo.fee0Amount,
+    positionInfoFee1Amount: positionInfo.fee1Amount,
+    positionInfoToken0: positionInfo.currency0Amount.currency,
+    positionInfoToken1: positionInfo.currency1Amount.currency,
+    enabled: positionInfo.version !== ProtocolVersion.V2 && !!positionInfo.tokenId && !!account?.address,
+  })
+
+  // Determine which fees to display based on resolver result
+  const { fee0Amount, fee1Amount, fee0Token, fee1Token, dataSource } = useMemo(() => {
+    // Priority 1: Resolver hook data (from collect_simulation, onchain_math, or graphql)
+    if (feesQuery.data !== undefined) {
+      return {
+        fee0Amount: feesQuery.data.amount0,
+        fee1Amount: feesQuery.data.amount1,
+        fee0Token: feesQuery.data.token0,
+        fee1Token: feesQuery.data.token1,
+        dataSource: feesQuery.data.source,
+      }
+    }
+
+    // Priority 2: No data available
+    return {
+      fee0Amount: undefined,
+      fee1Amount: undefined,
+      fee0Token: positionInfo.currency0Amount.currency,
+      fee1Token: positionInfo.currency1Amount.currency,
+      dataSource: 'none' as const,
+    }
+  }, [feesQuery.data, positionInfo.currency0Amount.currency, positionInfo.currency1Amount.currency])
+
+  // Compute estimated suffix once for reuse in both token fee displays
+  // Use isAuthoritative from resolver data to determine if estimated label is needed
+  const estimatedSuffix = useMemo(() => {
+    if (!feesQuery.data) {
+      return ''
+    }
+    return feesQuery.data.isAuthoritative ? '' : getEstimatedSuffix(feesQuery.data.source)
+  }, [feesQuery.data])
+
+  // Compute fiat values for fees (only if fees exist)
   const fiatFeeValue0 = useUSDCValue(fee0Amount, PollingInterval.Slow)
   const fiatFeeValue1 = useUSDCValue(fee1Amount, PollingInterval.Slow)
 
@@ -121,8 +208,9 @@ export function RemoveLiquidityReview({ onClose }: { onClose: () => void }) {
 
   const poolTokenPercentage = useGetPoolTokenPercentage(positionInfo)
 
-  const currency0CurrencyInfo = useCurrencyInfo(currency0Amount.currency)
-  const currency1CurrencyInfo = useCurrencyInfo(currency1Amount.currency)
+  // Use fee tokens if available (from on-chain data), otherwise use currency0Amount/currency1Amount currencies
+  const currency0CurrencyInfo = useCurrencyInfo(fee0Token ?? currency0Amount.currency)
+  const currency1CurrencyInfo = useCurrencyInfo(fee1Token ?? currency1Amount.currency)
 
   const onDecreaseLiquidity = () => {
     const isValidTx = isValidLiquidityTxContext(txContext)
@@ -178,33 +266,85 @@ export function RemoveLiquidityReview({ onClose }: { onClose: () => void }) {
         />
         {positionInfo.version !== ProtocolVersion.V2 && (
           <Flex p="$spacing16" gap="$gap12" background="$surface2" borderRadius="$rounded12">
-            <Text variant="body4" color="$neutral2">
-              {t('fee.uncollected')}
-            </Text>
+            <Flex row alignItems="center" justifyContent="space-between">
+              <Text variant="body4" color="$neutral2">
+                {t('fee.uncollected')}
+              </Text>
+              {/* Show estimated label if using non-authoritative data */}
+              {feesQuery.data && !feesQuery.data.isAuthoritative && (
+                <Text variant="body4" color="$neutral3">
+                  {t('pool.fees.estimated', { defaultValue: '(estimated)' })}
+                </Text>
+              )}
+              {/* Show error tooltip if all providers failed */}
+              {feesQuery.isError && !feesQuery.data && (
+                <Text variant="body4" color="$neutral3">
+                  {t('pool.fees.unavailable', { defaultValue: 'Unable to fetch from RPC' })}
+                </Text>
+              )}
+            </Flex>
 
+            {/* Token0 fees - Explicit data-source gating */}
             <Flex row alignItems="center" justifyContent="space-between">
               <Flex row gap="$gap8" alignItems="center">
                 <CurrencyLogo currencyInfo={currency0CurrencyInfo} size={24} />
-                <Text variant="body3">{currency0Amount.currency.symbol} fees</Text>
+                <Text variant="body3">{fee0Token.symbol ?? currency0Amount.currency.symbol} fees</Text>
               </Flex>
               <Flex row alignItems="center" gap="$spacing4">
-                <Text variant="body3">{formatCurrencyAmount({ value: fee0Amount })}</Text>{' '}
-                <Text variant="body3" color="$neutral2">
-                  ({convertFiatAmountFormatted(fiatFeeValue0?.toExact(), NumberType.FiatTokenPrice)})
-                </Text>
+                {feesQuery.isLoading ? (
+                  // Loading state
+                  <Text variant="body3" color="$neutral2">
+                    —
+                  </Text>
+                ) : feesQuery.data && fee0Amount !== undefined ? (
+                  // Fee data from resolver (may be authoritative or estimated)
+                  <>
+                    <Text variant="body3">
+                      {formatCurrencyAmount({ value: fee0Amount })}
+                      {estimatedSuffix}
+                    </Text>{' '}
+                    <Text variant="body3" color="$neutral2">
+                      ({convertFiatAmountFormatted(fiatFeeValue0?.toExact(), NumberType.FiatTokenPrice)})
+                    </Text>
+                  </>
+                ) : (
+                  // No data available
+                  <Text variant="body3" color="$neutral2">
+                    —
+                  </Text>
+                )}
               </Flex>
             </Flex>
 
+            {/* Token1 fees - Explicit data-source gating */}
             <Flex row alignItems="center" justifyContent="space-between">
               <Flex row gap="$gap8" alignItems="center">
                 <CurrencyLogo currencyInfo={currency1CurrencyInfo} size={24} />
-                <Text variant="body3">{currency1Amount.currency.symbol} fees</Text>
+                <Text variant="body3">{fee1Token.symbol ?? currency1Amount.currency.symbol} fees</Text>
               </Flex>
               <Flex row alignItems="center" gap="$spacing4">
-                <Text variant="body3">{formatCurrencyAmount({ value: fee1Amount })}</Text>{' '}
-                <Text variant="body3" color="$neutral2">
-                  ({convertFiatAmountFormatted(fiatFeeValue1?.toExact(), NumberType.FiatTokenPrice)})
-                </Text>
+                {feesQuery.isLoading ? (
+                  // Loading state
+                  <Text variant="body3" color="$neutral2">
+                    —
+                  </Text>
+                ) : feesQuery.data && fee1Amount !== undefined ? (
+                  // Fee data from resolver (may be authoritative or estimated)
+                  <>
+                    <Text variant="body3">
+                      {formatCurrencyAmount({ value: fee1Amount })}
+                      {estimatedSuffix}
+                    </Text>{' '}
+                    <Text variant="body3" color="$neutral2">
+                      ({convertFiatAmountFormatted(fiatFeeValue1?.toExact(), NumberType.FiatTokenPrice)})
+                    </Text>
+                  </>
+                ) : (
+                  // No data available
+                  <Text variant="body3" color="$neutral2">
+                    —
+                  </Text>
+                )}
               </Flex>
             </Flex>
           </Flex>
@@ -287,14 +427,27 @@ export function RemoveLiquidityReview({ onClose }: { onClose: () => void }) {
                     {t('common.networkCost')}
                   </Text>
                 ),
-                Value: () => (
-                  <Flex row gap="$gap4" alignItems="center">
-                    <NetworkLogo chainId={chainId} size={iconSizes.icon16} shape="square" />
-                    <Text variant="body3">
-                      {convertFiatAmountFormatted(gasFeeEstimateUSD?.toExact(), NumberType.FiatGasPrice)}
-                    </Text>
-                  </Flex>
-                ),
+                Value: () => {
+                  // Always show native fee if available (from on-chain estimation)
+                  const nativeFee = onChainNetworkCost?.nativeFormatted
+                  const usdFee = onChainNetworkCost?.usdFormatted || gasFeeEstimateUSD?.toExact()
+
+                  return (
+                    <Flex row gap="$gap4" alignItems="center">
+                      <NetworkLogo chainId={chainId} size={iconSizes.icon16} shape="square" />
+                      <Flex row gap="$gap2" alignItems="center">
+                        <Text variant="body3">
+                          {nativeFee ?? (usdFee ? convertFiatAmountFormatted(usdFee, NumberType.FiatGasPrice) : '—')}
+                        </Text>
+                        {nativeFee && usdFee && (
+                          <Text variant="body4" color="$neutral2">
+                            ({convertFiatAmountFormatted(usdFee, NumberType.FiatGasPrice)})
+                          </Text>
+                        )}
+                      </Flex>
+                    </Flex>
+                  )
+                },
               }}
             />
           </Flex>

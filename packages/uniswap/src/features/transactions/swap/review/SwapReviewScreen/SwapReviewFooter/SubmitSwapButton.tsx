@@ -60,7 +60,7 @@ export function SubmitSwapButton({ disabled, onSubmit, showPendingUI, warning }:
       },
       chainId,
     )
-  }, [])  
+  }, [])
 
   // Boundary log 0: Actual Swap button click (Base Sepolia only)
   const handleSubmit = useEvent(() => {

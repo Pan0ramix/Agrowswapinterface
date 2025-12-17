@@ -11,16 +11,14 @@ import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import {
-  calculateAmountOutMinimum,
-  getDeadline,
-} from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3SwapTxBuilder'
-import { logger } from 'utilities/src/logger/logger'
-import {
   buildCollectFeesTx,
   buildDecreaseLiquidityTx,
   buildIncreaseLiquidityTx,
   type LpTransactionPayload,
 } from 'uniswap/src/features/transactions/liquidity/services/v3OnChain'
+import { getDeadline } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3SwapTxBuilder'
+import { calculateAmountOutMinimumLenient } from 'uniswap/src/features/transactions/utils/slippage'
+import { logger } from 'utilities/src/logger/logger'
 
 /**
  * Increase Liquidity Parameters
@@ -97,8 +95,15 @@ export function useV3IncreaseLiquidity(params: UseV3IncreaseLiquidityParams): {
 
     return async (): Promise<LpTransactionPayload> => {
       try {
-        const amount0Min = calculateAmountOutMinimum(amount0Desired, slippageTolerance)
-        const amount1Min = calculateAmountOutMinimum(amount1Desired, slippageTolerance)
+        // Use lenient mode: resilient fallback that preserves protection (amountOut if invalid)
+        const amount0Min = calculateAmountOutMinimumLenient(amount0Desired, slippageTolerance, {
+          feature: 'liquidity',
+          chainId,
+        })
+        const amount1Min = calculateAmountOutMinimumLenient(amount1Desired, slippageTolerance, {
+          feature: 'liquidity',
+          chainId,
+        })
 
         // Note: buildIncreaseLiquidityTx currently needs liquidity calculation
         // This is a simplified version - in production you'd fetch position details first

@@ -5,7 +5,11 @@
  * Gated by isOnChainDebug(chainId).
  */
 
-import { debugOnChain, isOnChainDebug, makeOnChainDebugId } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
+import {
+  debugOnChain,
+  isOnChainDebug,
+  makeOnChainDebugId,
+} from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
 
 export interface OnChainDebugBundle {
   header: {

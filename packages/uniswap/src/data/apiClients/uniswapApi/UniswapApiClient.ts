@@ -88,6 +88,26 @@ export function createFetchGasFee({
   }
 
   const fetchGasFee: FetchGasFn = async ({ tx, fallbackGasLimit }) => {
+    // Gate: Check if Uniswap API is configured (not localhost/dev)
+    // If apiBaseUrl is not configured or points to localhost, skip the API call and use fallback
+    const apiBaseUrl = uniswapUrls.apiBaseUrl
+    const isApiConfigured =
+      apiBaseUrl &&
+      apiBaseUrl.trim() !== '' &&
+      !apiBaseUrl.includes('localhost') &&
+      !apiBaseUrl.includes('127.0.0.1') &&
+      config.uniswapApiKey &&
+      config.uniswapApiKey.trim() !== ''
+
+    if (!isApiConfigured) {
+      if (process.env.NODE_ENV !== 'production') {
+        // Use client-side fallback when API not configured (dev/localhost)
+        // This prevents 400 errors from /v1/gas-fee endpoint
+        return tryClientSideFallback({ tx, fallbackGasLimit })
+      }
+      // In production, still try API but fallback on error
+    }
+
     const body = JSON.stringify(injectGasStrategies(injectSmartContractDelegationAddress(tx)))
 
     try {

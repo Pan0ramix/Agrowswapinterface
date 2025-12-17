@@ -8,6 +8,7 @@
 import { Currency, CurrencyAmount, Percent, Price, TradeType } from '@uniswap/sdk-core'
 import { FeeAmount, Pool, Route } from '@uniswap/v3-sdk'
 import { TradingApi } from '@universe/api'
+import { calculateAmountOutMinimumLenient } from 'uniswap/src/features/transactions/utils/slippage'
 
 /**
  * Creates a trade-like object from on-chain V3 quote data
@@ -140,8 +141,11 @@ export function createV3OnChainTradeLike(
     tradeType,
     slippageTolerance,
     minimumAmountOut: (slippage: Percent) => {
-      // complement() = (1 - slippage), which is exactly what we need
-      return outputAmount.multiply(slippage.complement())
+      // Use lenient mode (never throw, display purposes)
+      // This is used for UI display, so we want resilient behavior
+      return calculateAmountOutMinimumLenient(outputAmount, slippage, {
+        feature: 'quote',
+      })
     },
     maximumAmountIn: (slippage: Percent) => {
       // For maximum amount in, we add slippage: (1 + slippage)

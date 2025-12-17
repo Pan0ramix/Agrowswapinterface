@@ -12,14 +12,22 @@ import { useMemo } from 'react'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import {
+  buildSwapTxStrict,
+  findRoute,
+  getDeadlineSecondsFromNow,
+} from 'uniswap/src/features/transactions/swap/services/onchainRouter'
+import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import {
   debugOnChain,
   isOnChainDebug,
   makeOnChainDebugId,
 } from 'uniswap/src/features/transactions/swap/utils/isOnChainDebug'
-import { logger } from 'utilities/src/logger/logger'
+import {
+  calculateAmountOutMinimumStrict,
+  getSlippageToleranceOrError,
+} from 'uniswap/src/features/transactions/utils/slippage'
 import { validateDecimalsSafetyMultiple } from 'uniswap/src/features/transactions/utils/validateDecimalsSafety'
-import { buildSwapTx, calculateAmountOutMinimum, findRoute, getDeadlineSecondsFromNow } from 'uniswap/src/features/transactions/swap/services/onchainRouter'
-import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
+import { logger } from 'utilities/src/logger/logger'
 
 /**
  * Hook parameters
@@ -36,17 +44,26 @@ interface UseOnChainSwapQuoteParams {
 }
 
 /**
+ * Blocked reason for swap quote
+ */
+export interface SwapQuoteBlockedReason {
+  type: 'INVALID_SLIPPAGE' | 'ROUTE_NOT_FOUND' | 'POOL_NOT_EXISTS' | 'DECIMALS_SAFETY' | 'OTHER'
+  message: string
+  error?: Error | unknown
+}
+
+/**
  * Quote result
  */
 interface OnChainSwapQuoteResult {
   // Quote data
   quoteAmountIn?: CurrencyAmount<Currency> // For exact output
   quoteAmountOut?: CurrencyAmount<Currency> // For exact input
-  route: ReturnType<typeof findRoute> extends Promise<infer T> ? T : never
+  route: Awaited<ReturnType<typeof findRoute>> | undefined // Route result or undefined if blocked
   priceImpact?: number
 
   // Transaction payload
-  txPayload: {
+  txPayload?: {
     to: string
     data: string
     value: string
@@ -54,6 +71,10 @@ interface OnChainSwapQuoteResult {
   }
   amountInMaximum?: CurrencyAmount<Currency> // For exact output
   amountOutMinimum?: CurrencyAmount<Currency> // For exact input
+
+  // Validation state
+  isValid: boolean
+  blockedReason?: SwapQuoteBlockedReason
 }
 
 /**
@@ -89,6 +110,32 @@ export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnCha
     return createViemClient({ chainId })
   }, [chainId])
 
+  // Build query key with stable slippage representation
+  // Use normalized slippage key to prevent "sticky blocked" states when slippage changes
+  const slippageKey = useMemo(() => {
+    try {
+      // Create stable key from slippage numerator/denominator
+      // This ensures query cache invalidates when slippage changes
+      const normalized = getSlippageToleranceOrError(slippageTolerance)
+      if (normalized.ok) {
+        // Use normalized slippage for stable key
+        const num =
+          typeof normalized.value.numerator === 'bigint'
+            ? normalized.value.numerator.toString()
+            : String(normalized.value.numerator)
+        const den =
+          typeof normalized.value.denominator === 'bigint'
+            ? normalized.value.denominator.toString()
+            : String(normalized.value.denominator)
+        return `${num}/${den}`
+      }
+      // Fallback to string representation if normalization fails
+      return slippageTolerance.toFixed()
+    } catch {
+      return slippageTolerance.toFixed()
+    }
+  }, [slippageTolerance])
+
   // Build query key
   const queryKey = useMemo(() => {
     if (!tokenIn || !tokenOut || !amount || !chainId || !publicClient) {
@@ -102,9 +149,9 @@ export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnCha
       tokenOut.address,
       isExactOut ? 'exactOut' : 'exactIn',
       amount.quotient.toString(),
-      slippageTolerance.toFixed(),
+      slippageKey, // Use stable slippage key
     ]
-  }, [tokenIn, tokenOut, amount, isExactOut, chainId, slippageTolerance, publicClient])
+  }, [tokenIn, tokenOut, amount, isExactOut, chainId, slippageKey, publicClient])
 
   // Check if on-chain router is enabled for this chain
   const routerEnabled = useMemo(() => {
@@ -167,7 +214,24 @@ export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnCha
         const routeResult = await findRoute(tokenIn, tokenOut, amountIn, amountOut, chainId, publicClient)
 
         if (!routeResult) {
-          throw new Error('No route found for swap')
+          // No route found - return blocked result (DO NOT throw)
+          // Note: route field is required but null route means blocked, so we need to satisfy type
+          // This is safe because isValid=false signals blocked state
+          const blockedResult: OnChainSwapQuoteResult = {
+            quoteAmountIn: undefined,
+            quoteAmountOut: undefined,
+            route: undefined as any, // Type assertion: blocked results have no valid route
+            priceImpact: undefined,
+            txPayload: undefined,
+            amountInMaximum: undefined,
+            amountOutMinimum: undefined,
+            isValid: false,
+            blockedReason: {
+              type: 'ROUTE_NOT_FOUND',
+              message: 'No route found for this swap',
+            },
+          }
+          return blockedResult
         }
 
         if (process.env.NODE_ENV !== 'production' && chainId === 84532) {
@@ -200,12 +264,33 @@ export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnCha
           if (!routeResult.amountIn) {
             throw new Error('Route result missing amountIn for exact output')
           }
+          // For exact output, validate slippage tolerance first
+          const slippageResult = getSlippageToleranceOrError(slippageTolerance)
+          if (!slippageResult.ok) {
+            // Invalid slippage for exact output - return blocked result (DO NOT throw)
+            return {
+              quoteAmountIn: routeResult.amountIn,
+              quoteAmountOut: undefined,
+              route: routeResult,
+              priceImpact: routeResult.priceImpact,
+              txPayload: undefined,
+              amountInMaximum: undefined,
+              amountOutMinimum: undefined,
+              isValid: false,
+              blockedReason: {
+                type: 'INVALID_SLIPPAGE',
+                message: 'Invalid slippage setting. Please reset your slippage tolerance to default.',
+                error: slippageResult.error,
+              },
+            }
+          }
+
           // For exact output, we want to allow more input (add slippage tolerance)
           // slippageTolerance is a Percent, e.g., 0.5% = 50/10000
           // We want: amountIn * (1 + slippage) = amountIn * (10000 + slippage.numerator) / 10000
           // Calculate: (amountIn.quotient * (10000 + slippage.numerator)) / 10000
-          const slippageNumerator = JSBI.BigInt(slippageTolerance.numerator.toString())
-          const slippageDenominator = JSBI.BigInt(slippageTolerance.denominator.toString())
+          const slippageNumerator = JSBI.BigInt(slippageResult.value.numerator.toString())
+          const slippageDenominator = JSBI.BigInt(slippageResult.value.denominator.toString())
           const multiplier = JSBI.add(slippageDenominator, slippageNumerator) // 1 + slippage
           const maxAmountInRaw = JSBI.divide(
             JSBI.multiply(routeResult.amountIn.quotient, multiplier),
@@ -217,7 +302,27 @@ export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnCha
           if (!routeResult.amountOut) {
             throw new Error('Route result missing amountOut for exact input')
           }
-          amountOutMinimum = calculateAmountOutMinimum(routeResult.amountOut, slippageTolerance)
+          // Use strict mode: fail closed on invalid slippage (prevents building invalid transactions)
+          const minOutResult = calculateAmountOutMinimumStrict(routeResult.amountOut, slippageTolerance)
+          if (!minOutResult.ok) {
+            // Invalid slippage - return blocked result (DO NOT throw - prevents UI crash)
+            return {
+              quoteAmountIn: undefined,
+              quoteAmountOut: routeResult.amountOut,
+              route: routeResult,
+              priceImpact: routeResult.priceImpact,
+              txPayload: undefined, // No tx payload when blocked
+              amountInMaximum: undefined,
+              amountOutMinimum: undefined,
+              isValid: false,
+              blockedReason: {
+                type: 'INVALID_SLIPPAGE',
+                message: 'Invalid slippage setting. Please reset your slippage tolerance to default.',
+                error: minOutResult.error,
+              },
+            }
+          }
+          amountOutMinimum = minOutResult.value
         }
 
         // Step 3: Validate decimals safety (on-chain-only chains)
@@ -228,7 +333,21 @@ export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnCha
             publicClient,
           )
           if (decimalsError) {
-            throw new Error(decimalsError)
+            // Decimals safety error - return blocked result (DO NOT throw)
+            return {
+              quoteAmountIn: isExactOut ? routeResult.amountIn : undefined,
+              quoteAmountOut: isExactOut ? undefined : routeResult.amountOut,
+              route: routeResult,
+              priceImpact: routeResult.priceImpact,
+              txPayload: undefined,
+              amountInMaximum: undefined,
+              amountOutMinimum: undefined,
+              isValid: false,
+              blockedReason: {
+                type: 'DECIMALS_SAFETY',
+                message: decimalsError,
+              },
+            }
           }
         }
 
@@ -257,14 +376,27 @@ export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnCha
               isExactOut,
               hasAmountIn: !!routeResult.amountIn,
               hasAmountOut: !!routeResult.amountOut,
-              amountInRaw: routeResult.amountIn.quotient.toString(),
-              amountOutRaw: routeResult.amountOut.quotient.toString(),
             })
           }
-          throw new Error('Route result missing required amounts')
+          // Missing amounts - return blocked result (DO NOT throw)
+          return {
+            quoteAmountIn: isExactOut ? routeResult.amountIn : undefined,
+            quoteAmountOut: isExactOut ? undefined : routeResult.amountOut,
+            route: routeResult,
+            priceImpact: routeResult.priceImpact,
+            txPayload: undefined,
+            amountInMaximum: undefined,
+            amountOutMinimum: undefined,
+            isValid: false,
+            blockedReason: {
+              type: 'ROUTE_NOT_FOUND',
+              message: 'Route result missing required amounts',
+            },
+          }
         }
 
-        const txPayload = buildSwapTx({
+        // Enforce strict validation in tx builder (final security boundary)
+        const txPayloadResult = buildSwapTxStrict({
           route: routeResult.route,
           amountIn: routeResult.amountIn,
           minAmountOut: amountOutMinimum,
@@ -273,6 +405,34 @@ export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnCha
           recipient,
           deadline,
         })
+
+        if (!txPayloadResult.ok) {
+          // Tx build failed (shouldn't happen if hooks validated correctly, but fail-closed)
+          // Map error code to blocked reason type
+          const errorCode = txPayloadResult.error.code
+          let blockedType: 'INVALID_SLIPPAGE' | 'OTHER' = 'OTHER'
+          if (errorCode === 'INVALID_SLIPPAGE') {
+            blockedType = 'INVALID_SLIPPAGE'
+          }
+
+          return {
+            quoteAmountIn: isExactOut ? routeResult.amountIn : undefined,
+            quoteAmountOut: isExactOut ? undefined : routeResult.amountOut,
+            route: routeResult,
+            priceImpact: routeResult.priceImpact,
+            txPayload: undefined,
+            amountInMaximum: undefined,
+            amountOutMinimum: undefined,
+            isValid: false,
+            blockedReason: {
+              type: blockedType,
+              message: txPayloadResult.error.message || 'Transaction build failed',
+              error: txPayloadResult.error,
+            },
+          }
+        }
+
+        const txPayload = txPayloadResult.value
 
         // Always log for Base Sepolia
         if (chainId === 84532) {
@@ -331,8 +491,12 @@ export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnCha
           },
           amountInMaximum,
           amountOutMinimum,
+          isValid: true,
+          blockedReason: undefined,
         }
       } catch (error) {
+        // For unexpected errors, return blocked result instead of throwing
+        // This prevents UI crashes while still signaling failure
         const errorMessage = error instanceof Error ? error.message : String(error)
         logger.error(error, {
           tags: {
@@ -347,7 +511,23 @@ export function useOnChainSwapQuote(params: UseOnChainSwapQuoteParams): UseOnCha
           },
         })
 
-        throw new Error(`Failed to get on-chain quote: ${errorMessage}`)
+        // Return blocked result instead of throwing (prevents UI crash)
+        const blockedResult: OnChainSwapQuoteResult = {
+          quoteAmountIn: undefined,
+          quoteAmountOut: undefined,
+          route: undefined as any, // Type assertion: blocked results have no valid route
+          priceImpact: undefined,
+          txPayload: undefined,
+          amountInMaximum: undefined,
+          amountOutMinimum: undefined,
+          isValid: false,
+          blockedReason: {
+            type: 'OTHER',
+            message: `Failed to get on-chain quote: ${errorMessage}`,
+            error,
+          },
+        }
+        return blockedResult
       }
     }
   }, [

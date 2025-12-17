@@ -25,8 +25,8 @@ import {
 import { getQuoterV2Address } from 'uniswap/src/constants/v3Addresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { Address, PublicClient } from 'viem'
 import { useTokenWhitelistStatus } from 'uniswap/src/features/transactions/hooks/useTokenWhitelistStatus'
+import { Address, PublicClient } from 'viem'
 
 // ABI for checking token restrictions (ERC20Restricted from OpenZeppelin)
 const RESTRICTION_ABI = [

@@ -6,10 +6,10 @@ import {
   PoolStats,
 } from '@uniswap/client-explore/dist/uniswap/explore/v1/service_pb'
 import { AGROSWAP_V3_CORE_FACTORY_ADDRESSES } from 'uniswap/src/constants/agroswapAddresses'
+import { OnChainPoolData, queryFactoryPools, queryPoolsFromSubgraph } from 'uniswap/src/data/rest/agroswapPoolsOnChain'
 import { RPCType, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { toGraphQLChain } from 'uniswap/src/features/chains/utils'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { OnChainPoolData, queryFactoryPools, queryPoolsFromSubgraph } from 'uniswap/src/data/rest/agroswapPoolsOnChain'
 
 /**
  * Configuration flag to switch between on-chain and subgraph queries

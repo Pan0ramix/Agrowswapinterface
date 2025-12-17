@@ -19,8 +19,8 @@ import {
 } from 'uniswap/src/constants/agroswapAddresses'
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
-import { Address, PublicClient } from 'viem'
 import { useTokenWhitelistStatus } from 'uniswap/src/features/transactions/hooks/useTokenWhitelistStatus'
+import { Address, PublicClient } from 'viem'
 
 // ABI for checking token restrictions (same as in useTokenWhitelistStatus)
 const RESTRICTION_ABI = [

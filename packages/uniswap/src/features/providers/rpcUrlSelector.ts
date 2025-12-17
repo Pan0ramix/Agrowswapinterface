@@ -93,6 +93,21 @@ export function selectRpcUrl(chainId: UniverseChainId, rpcType: RPCType = RPCTyp
     try {
       const publicRPCUrl = getChainInfo(chainId).rpcUrls[RPCType.Public]?.http[0]
       if (publicRPCUrl) {
+        // AGROSWAP: Guardrail for Base Sepolia - ensure only Base endpoints are used
+        if (chainId === UniverseChainId.BaseSepolia) {
+          const isValidBaseEndpoint = publicRPCUrl.includes('base') || publicRPCUrl.includes('sepolia.base.org')
+          if (!isValidBaseEndpoint) {
+            const error = new Error(
+              `[AGROSWAP] Invalid RPC endpoint for Base Sepolia (84532): ${publicRPCUrl}. Only Base endpoints are allowed.`,
+            )
+            logger.error(error, {
+              tags: { file: 'rpcUrlSelector', function: 'selectRpcUrl' },
+              extra: { chainId, rpcType, rpcUrl: publicRPCUrl },
+            })
+            throw error
+          }
+        }
+
         if (
           process.env.NODE_ENV !== 'production' &&
           chainId === UniverseChainId.BaseSepolia &&
@@ -121,6 +136,21 @@ export function selectRpcUrl(chainId: UniverseChainId, rpcType: RPCType = RPCTyp
       // Fall back to alternative public RPC URL if available
       const altPublicRPCUrl = getChainInfo(chainId).rpcUrls[RPCType.PublicAlt]?.http[0]
       if (altPublicRPCUrl) {
+        // AGROSWAP: Guardrail for Base Sepolia fallback
+        if (chainId === UniverseChainId.BaseSepolia) {
+          const isValidBaseEndpoint = altPublicRPCUrl.includes('base') || altPublicRPCUrl.includes('sepolia.base.org')
+          if (!isValidBaseEndpoint) {
+            const error = new Error(
+              `[AGROSWAP] Invalid fallback RPC endpoint for Base Sepolia (84532): ${altPublicRPCUrl}. Only Base endpoints are allowed.`,
+            )
+            logger.error(error, {
+              tags: { file: 'rpcUrlSelector', function: 'selectRpcUrl' },
+              extra: { chainId, rpcType, rpcUrl: altPublicRPCUrl },
+            })
+            throw error
+          }
+        }
+
         if (
           process.env.NODE_ENV !== 'production' &&
           chainId === UniverseChainId.BaseSepolia &&

@@ -7,14 +7,13 @@
 
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { Currency, CurrencyAmount } from '@uniswap/sdk-core'
-import { useMemo, useRef } from 'react'
-import { nativeOnChain } from 'uniswap/src/constants/tokens'
-import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
+import { useMemo } from 'react'
 import { getChainInfo } from 'uniswap/src/features/chains/chainInfo'
+import { EVMUniverseChainId, UniverseChainId } from 'uniswap/src/features/chains/types'
 import { useUSDCurrencyAmountOfGasFee } from 'uniswap/src/features/gas/hooks'
 import { createViemClient } from 'uniswap/src/features/providers/createViemClient'
 import { logger } from 'utilities/src/logger/logger'
-import { createPublicClient, defineChain, http, type PublicClient, formatEther } from 'viem'
+import { createPublicClient, defineChain, formatEther, http } from 'viem'
 
 interface UseRemoveLiquidityNetworkCostParams {
   chainId: EVMUniverseChainId | undefined
@@ -216,7 +215,12 @@ export function useRemoveLiquidityNetworkCost({
     }
   }, [chainId, account, txRequest, publicClient])
 
-  const { data: estimateData, isLoading, isError, error } = useQuery({
+  const {
+    data: estimateData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey,
     queryFn,
     enabled: enabled && queryFn !== skipToken && !!txRequest && !!account && !!chainId,
@@ -247,4 +251,3 @@ export function useRemoveLiquidityNetworkCost({
     data,
   }
 }
-

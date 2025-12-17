@@ -5,9 +5,7 @@ import { TokenCarousel } from 'components/NavBar/DownloadApp/Modal/TokenCarousel
 import { DownloadWalletRow } from 'components/WalletModal/DownloadWalletRow'
 import { Dispatch, SetStateAction } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Button, Flex, Image } from 'ui/src'
-import { UNISWAP_MONO_LOGO_LARGE } from 'ui/src/assets'
-import { iconSizes } from 'ui/src/theme'
+import { Button, Flex } from 'ui/src'
 import { ElementName, ModalName } from 'uniswap/src/features/telemetry/constants'
 import { Trace } from 'uniswap/src/features/telemetry/Trace'
 import { TestID } from 'uniswap/src/test/fixtures/testIDs'
@@ -32,7 +30,7 @@ function Header() {
           backdropFilter: 'blur(10.799999237060547px)',
         }}
       >
-        <Image source={UNISWAP_MONO_LOGO_LARGE} height={iconSizes.icon48} width={iconSizes.icon48} />
+        {/* <Image source={UNISWAP_MONO_LOGO_LARGE} height={iconSizes.icon48} width={iconSizes.icon48} /> */}
       </Flex>
     </Flex>
   )

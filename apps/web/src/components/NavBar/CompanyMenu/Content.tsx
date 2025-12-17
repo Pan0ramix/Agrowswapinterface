@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LayerGroup } from 'ui/src/components/icons/LayerGroup'
 import { Unichain } from 'ui/src/components/icons/Unichain'
-import { UniswapLogo } from 'ui/src/components/icons/UniswapLogo'
 import { UniswapXGeneric } from 'ui/src/components/icons/UniswapXGeneric'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
 
@@ -12,7 +11,7 @@ export interface MenuItem {
   internal?: boolean
   overflow?: boolean
   closeMenu?: () => void
-  icon?: React.ReactNode
+  icon?: React.ReactNode | null
   body?: string
 }
 
@@ -30,7 +29,7 @@ export enum MenuSectionTitle {
 }
 
 const MENU_ICONS = {
-  wallet: <UniswapLogo size="$icon.20" color="$accent1" />,
+  wallet: null, // <UniswapLogo size="$icon.20" color="$accent1" />,
   uniswapX: <UniswapXGeneric size="$icon.20" color="$accent1" />,
   tradingApi: <LayerGroup size="$icon.20" color="$accent1" />,
   unichain: <Unichain size="$icon.20" color="$accent1" />,

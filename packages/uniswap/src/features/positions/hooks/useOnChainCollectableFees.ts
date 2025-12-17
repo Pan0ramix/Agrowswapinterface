@@ -642,4 +642,3 @@ export function useOnChainCollectableFees(params: UseOnChainCollectableFeesParam
     refetch,
   }
 }
-

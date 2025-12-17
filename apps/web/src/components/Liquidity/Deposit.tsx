@@ -163,6 +163,7 @@ export const DepositStep = () => {
   const {
     txInfo,
     gasFeeEstimateUSD,
+    onChainNetworkCost,
     dependentAmount,
     transactionError,
     setTransactionError,
@@ -495,6 +496,7 @@ export const DepositStep = () => {
         currencyAmounts={updatedCurrencyAmounts ?? currencyAmounts}
         currencyAmountsUSDValue={updatedUSDAmounts}
         gasFeeEstimateUSD={gasFeeEstimateUSD}
+        onChainNetworkCost={onChainNetworkCost}
         txInfo={txInfo}
         isOpen={isReviewModalOpen}
         transactionError={transactionError}

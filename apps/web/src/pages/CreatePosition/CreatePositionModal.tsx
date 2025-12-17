@@ -55,6 +55,7 @@ export function CreatePositionModal({
   currencyAmountsUSDValue,
   txInfo,
   gasFeeEstimateUSD,
+  onChainNetworkCost,
   transactionError,
   setTransactionError,
   isOpen,
@@ -65,6 +66,7 @@ export function CreatePositionModal({
   currencyAmountsUSDValue?: { [field in PositionField]?: Maybe<CurrencyAmount<Currency>> }
   txInfo?: CreatePositionTxAndGasInfo
   gasFeeEstimateUSD?: Maybe<CurrencyAmount<Currency>>
+  onChainNetworkCost?: import('pages/CreatePosition/hooks/useCreatePositionNetworkCost').CreatePositionNetworkCost
   transactionError: string | boolean
   setTransactionError: (error: string | boolean) => void
   isOpen: boolean
@@ -466,14 +468,29 @@ export function CreatePositionModal({
                       <Trans i18nKey="common.networkCost" />
                     </Text>
                   ),
-                  Value: () => (
-                    <Flex row gap="$gap4" alignItems="center">
-                      <NetworkLogo chainId={chainId ?? null} size={iconSizes.icon16} shape="square" />
-                      <Text variant="body3">
-                        {formatCurrencyAmount({ value: gasFeeEstimateUSD, type: NumberType.FiatGasPrice })}
-                      </Text>
-                    </Flex>
-                  ),
+                  Value: () => {
+                    const nativeFee = onChainNetworkCost?.nativeFormatted
+                    const usdFee = onChainNetworkCost?.usdFormatted || gasFeeEstimateUSD?.toExact()
+
+                    return (
+                      <Flex row gap="$gap4" alignItems="center">
+                        <NetworkLogo chainId={chainId ?? null} size={iconSizes.icon16} shape="square" />
+                        <Flex row gap="$gap2" alignItems="center">
+                          <Text variant="body3">
+                            {nativeFee ??
+                              (usdFee && gasFeeEstimateUSD
+                                ? formatCurrencyAmount({ value: gasFeeEstimateUSD, type: NumberType.FiatGasPrice })
+                                : '—')}
+                          </Text>
+                          {nativeFee && usdFee && gasFeeEstimateUSD && (
+                            <Text variant="body4" color="$neutral2">
+                              ({formatCurrencyAmount({ value: gasFeeEstimateUSD, type: NumberType.FiatGasPrice })})
+                            </Text>
+                          )}
+                        </Flex>
+                      </Flex>
+                    )
+                  },
                 }}
               />
             </Flex>

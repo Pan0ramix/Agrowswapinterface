@@ -34,6 +34,7 @@ import { useCreateLpPositionCalldataQuery } from 'uniswap/src/data/apiClients/tr
 import { EVMUniverseChainId } from 'uniswap/src/features/chains/types'
 import { toSupportedChainId } from 'uniswap/src/features/chains/utils'
 import { useTransactionGasFee, useUSDCurrencyAmountOfGasFee } from 'uniswap/src/features/gas/hooks'
+import { useCreatePositionNetworkCost } from 'pages/CreatePosition/hooks/useCreatePositionNetworkCost'
 import { InterfaceEventName } from 'uniswap/src/features/telemetry/constants'
 import { sendAnalyticsEvent } from 'uniswap/src/features/telemetry/send'
 import { useTransactionSettingsStore } from 'uniswap/src/features/transactions/components/settings/stores/transactionSettingsStore/useTransactionSettingsStore'
@@ -338,6 +339,7 @@ export function generateCreatePositionTxRequest({
 interface CreatePositionTxContextType {
   txInfo?: CreatePositionTxAndGasInfo
   gasFeeEstimateUSD?: Maybe<CurrencyAmount<Currency>>
+  onChainNetworkCost?: import('pages/CreatePosition/hooks/useCreatePositionNetworkCost').CreatePositionNetworkCost
   transactionError: boolean | string
   setTransactionError: Dispatch<SetStateAction<string | boolean>>
   dependentAmount?: string
@@ -1196,24 +1198,98 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
         approvalCalldata?.token0PermitTransaction ||
         approvalCalldata?.token1PermitTransaction
       )
+
+  // Build on-chain tx request for network cost estimation
+  const onChainTxRequest = useMemo(() => {
+    if (!useOnChainV3 || !onChainMintPosition.txPayload || !account) return undefined
+    const payload = onChainMintPosition.txPayload
+    if (!payload.to || !payload.data) {
+      if (process.env.NODE_ENV !== 'production') {
+        logger.debug('CreatePositionTxContext', 'onChainTxRequest missing required fields', {
+          hasTo: !!payload.to,
+          hasData: !!payload.data,
+        })
+      }
+      return undefined
+    }
+
+    let valueBigint: bigint | undefined
+    if (payload.value) {
+      try {
+        const valueStr = typeof payload.value === 'string' ? payload.value : String(payload.value)
+        if (valueStr === '0x0' || valueStr === '0x00' || valueStr === '0') {
+          valueBigint = undefined
+        } else {
+          valueBigint = BigInt(valueStr)
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          logger.debug('CreatePositionTxContext', 'Failed to parse value, treating as undefined', {
+            value: payload.value,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+        valueBigint = undefined
+      }
+    }
+
+    return {
+      to: payload.to as `0x${string}`,
+      data: payload.data as `0x${string}`,
+      value: payload.value, // Keep as string for the hook
+    }
+  }, [useOnChainV3, onChainMintPosition.txPayload, account])
+
+  // Use on-chain network cost hook for on-chain paths
+  const {
+    data: onChainNetworkCost,
+    isLoading: onChainGasLoading,
+    error: onChainGasError,
+  } = useCreatePositionNetworkCost({
+    chainId: TOKEN0?.chainId as EVMUniverseChainId | undefined,
+    account,
+    txRequest: onChainTxRequest,
+    enabled: useOnChainV3 && !!onChainTxRequest && !!account && !!TOKEN0?.chainId,
+  })
+
+  // Use Trading API/Uniswap API gas estimation ONLY for non-on-chain paths
   const { value: calculatedGasFee } = useTransactionGasFee({
-    tx: finalCreateCalldata?.create,
-    skip: !!actualGasFee || needsApprovals,
+    tx: useOnChainV3 ? undefined : finalCreateCalldata?.create, // Skip for on-chain paths
+    skip: !!actualGasFee || needsApprovals || useOnChainV3, // Explicitly skip when on-chain
   })
   const increaseGasFeeUsd = useUSDCurrencyAmountOfGasFee(
     toSupportedChainId(finalCreateCalldata?.create?.chainId) ?? undefined,
-    actualGasFee || calculatedGasFee,
+    useOnChainV3 ? undefined : actualGasFee || calculatedGasFee, // Skip for on-chain paths
   )
 
   const totalGasFee = useMemo(() => {
-    const fees = [gasFeeToken0USD, gasFeeToken1USD, increaseGasFeeUsd, gasFeeToken0PermitUSD, gasFeeToken1PermitUSD]
+    // For on-chain paths, prioritize on-chain network cost
+    const createGasFee = useOnChainV3
+      ? onChainNetworkCost?.usdAmount // Use on-chain USD if available
+      : increaseGasFeeUsd // Use Trading API gas fee for non-on-chain paths
+
+    const fees = [
+      gasFeeToken0USD,
+      gasFeeToken1USD,
+      createGasFee,
+      gasFeeToken0PermitUSD,
+      gasFeeToken1PermitUSD,
+    ]
     return fees.reduce((total, fee) => {
       if (fee && total) {
         return total.add(fee)
       }
       return total || fee
     })
-  }, [gasFeeToken0USD, gasFeeToken1USD, increaseGasFeeUsd, gasFeeToken0PermitUSD, gasFeeToken1PermitUSD])
+  }, [
+    useOnChainV3,
+    onChainNetworkCost?.usdAmount,
+    gasFeeToken0USD,
+    gasFeeToken1USD,
+    increaseGasFeeUsd,
+    gasFeeToken0PermitUSD,
+    gasFeeToken1PermitUSD,
+  ])
 
   const txInfo = useMemo(() => {
     // Early return if tokens are not properly set - this is expected when user hasn't selected both tokens yet
@@ -1306,6 +1382,7 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     (): CreatePositionTxContextType => ({
       txInfo,
       gasFeeEstimateUSD: totalGasFee,
+      onChainNetworkCost: useOnChainV3 ? onChainNetworkCost : undefined,
       transactionError,
       setTransactionError,
       dependentAmount:
@@ -1319,6 +1396,8 @@ export function CreatePositionTxContextProvider({ children }: PropsWithChildren)
     [
       txInfo,
       totalGasFee,
+      useOnChainV3,
+      onChainNetworkCost,
       transactionError,
       createError,
       dependentAmountFallback,

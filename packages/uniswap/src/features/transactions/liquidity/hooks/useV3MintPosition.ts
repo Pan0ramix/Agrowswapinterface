@@ -22,7 +22,10 @@ import { simulateTransaction } from 'uniswap/src/features/transactions/liquidity
 import { isOnChainRouterEnabled } from 'uniswap/src/features/transactions/swap/services/onchainRouter/config'
 import { fetchV3PoolState } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3PoolOnChain'
 import { getDeadline } from 'uniswap/src/features/transactions/swap/services/v3OnChain/v3SwapTxBuilder'
-import { calculateAmountOutMinimumLenient } from 'uniswap/src/features/transactions/utils/slippage'
+import {
+  calculateAmountOutMinimumLenient,
+  getComplement,
+} from 'uniswap/src/features/transactions/utils/slippage'
 import { validateDecimalsSafetyMultiple } from 'uniswap/src/features/transactions/utils/validateDecimalsSafety'
 import { logger } from 'utilities/src/logger/logger'
 
@@ -582,6 +585,7 @@ export function useV3MintPosition(params: UseV3MintPositionParams): UseV3MintPos
 
           // Dev-only: log amounts for new pool (after slippage)
           if (process.env.NODE_ENV !== 'production') {
+            const slippageComplement = getComplement(slippage)
             console.log('[useV3MintPosition] New pool amounts (after slippage)', {
               amount0Desired: {
                 raw: amount0Desired.quotient.toString(),

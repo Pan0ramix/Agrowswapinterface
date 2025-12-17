@@ -31,4 +31,3 @@ describe('getEstimatedSuffix', () => {
     expect(getEstimatedSuffix('none')).toBe('')
   })
 })
-

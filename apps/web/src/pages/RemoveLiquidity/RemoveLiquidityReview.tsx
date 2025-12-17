@@ -267,9 +267,9 @@ export function RemoveLiquidityReview({ onClose }: { onClose: () => void }) {
         {positionInfo.version !== ProtocolVersion.V2 && (
           <Flex p="$spacing16" gap="$gap12" background="$surface2" borderRadius="$rounded12">
             <Flex row alignItems="center" justifyContent="space-between">
-              <Text variant="body4" color="$neutral2">
-                {t('fee.uncollected')}
-              </Text>
+            <Text variant="body4" color="$neutral2">
+              {t('fee.uncollected')}
+            </Text>
               {/* Show estimated label if using non-authoritative data */}
               {feesQuery.data && !feesQuery.data.isAuthoritative && (
                 <Text variant="body4" color="$neutral3">
@@ -303,9 +303,9 @@ export function RemoveLiquidityReview({ onClose }: { onClose: () => void }) {
                       {formatCurrencyAmount({ value: fee0Amount })}
                       {estimatedSuffix}
                     </Text>{' '}
-                    <Text variant="body3" color="$neutral2">
-                      ({convertFiatAmountFormatted(fiatFeeValue0?.toExact(), NumberType.FiatTokenPrice)})
-                    </Text>
+                <Text variant="body3" color="$neutral2">
+                  ({convertFiatAmountFormatted(fiatFeeValue0?.toExact(), NumberType.FiatTokenPrice)})
+                </Text>
                   </>
                 ) : (
                   // No data available
@@ -335,9 +335,9 @@ export function RemoveLiquidityReview({ onClose }: { onClose: () => void }) {
                       {formatCurrencyAmount({ value: fee1Amount })}
                       {estimatedSuffix}
                     </Text>{' '}
-                    <Text variant="body3" color="$neutral2">
-                      ({convertFiatAmountFormatted(fiatFeeValue1?.toExact(), NumberType.FiatTokenPrice)})
-                    </Text>
+                <Text variant="body3" color="$neutral2">
+                  ({convertFiatAmountFormatted(fiatFeeValue1?.toExact(), NumberType.FiatTokenPrice)})
+                </Text>
                   </>
                 ) : (
                   // No data available
@@ -433,19 +433,19 @@ export function RemoveLiquidityReview({ onClose }: { onClose: () => void }) {
                   const usdFee = onChainNetworkCost?.usdFormatted || gasFeeEstimateUSD?.toExact()
 
                   return (
-                    <Flex row gap="$gap4" alignItems="center">
-                      <NetworkLogo chainId={chainId} size={iconSizes.icon16} shape="square" />
+                  <Flex row gap="$gap4" alignItems="center">
+                    <NetworkLogo chainId={chainId} size={iconSizes.icon16} shape="square" />
                       <Flex row gap="$gap2" alignItems="center">
-                        <Text variant="body3">
+                    <Text variant="body3">
                           {nativeFee ?? (usdFee ? convertFiatAmountFormatted(usdFee, NumberType.FiatGasPrice) : '—')}
                         </Text>
                         {nativeFee && usdFee && (
                           <Text variant="body4" color="$neutral2">
                             ({convertFiatAmountFormatted(usdFee, NumberType.FiatGasPrice)})
-                          </Text>
+                    </Text>
                         )}
                       </Flex>
-                    </Flex>
+                  </Flex>
                   )
                 },
               }}

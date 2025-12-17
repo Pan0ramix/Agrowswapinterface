@@ -1,5 +1,4 @@
 import { ArrowChangeDown } from 'components/Icons/ArrowChangeDown'
-import { NavIcon } from 'components/Logo/NavIcon'
 import { MenuDropdown } from 'components/NavBar/CompanyMenu/MenuDropdown'
 import { MobileMenuDrawer } from 'components/NavBar/CompanyMenu/MobileMenuDrawer'
 import { useIsMobileDrawer } from 'components/NavBar/ScreenSizes'
@@ -54,12 +53,12 @@ export function CompanyMenu() {
         >
           <Link to="/?intro=true" style={{ textDecoration: 'none' }}>
             <Flex row alignItems="center" gap="$gap4" data-testid={TestID.NavUniswapLogo}>
-              <NavIcon />
-              {isLargeScreen && (
+              {/* <NavIcon /> */}
+              {/* {isLargeScreen && (
                 <Text variant="subheading1" color="$accent1" userSelect="none">
                   Uniswap
                 </Text>
-              )}
+              )} */}
             </Flex>
           </Link>
           {(media.md || isTouchDevice) && <Hamburger size={22} color="$neutral2" cursor="pointer" ml="16px" />}

@@ -14,4 +14,3 @@ export function getEstimatedSuffix(dataSource: FeeDataSource): string {
   // Only collect_simulation is authoritative; all others are estimated
   return dataSource === 'collect_simulation' ? '' : dataSource !== 'none' ? ' (estimated)' : ''
 }
-

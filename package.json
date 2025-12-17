@@ -191,7 +191,8 @@
     "wallet:release:generate-cherry-pick-commit-command": "bunx tsx ./scripts/wallet-releases/generate-cherry-pick-commit-command.ts",
     "gating": "bun run --cwd packages/gating",
     "notifications": "bun run --cwd packages/notifications",
-    "cli": "bun run --cwd apps/cli"
+    "cli": "bun run --cwd apps/cli",
+    "sync:abis": "node scripts/sync-goldsky-abis.mjs"
   },
   "workspaces": ["apps/*", "packages/*", "config/*", "tools/uniswap-nx"],
   "patchedDependencies": {

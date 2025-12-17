@@ -45,6 +45,27 @@ Before setting up Goldsky, ensure you have:
 - **Chain ID**: `84532` (Base Sepolia)
 - **Network RPC**: Base Sepolia RPC endpoint
 
+## ABI Management
+
+**Important:** The ABIs in `agroswap-subgraph/abis/` are automatically synced from the contracts repository to prevent ABI drift.
+
+### Syncing ABIs
+
+Before deploying or updating the subgraph, sync ABIs from the contracts repo:
+
+```bash
+CONTRACTS_REPO=/absolute/path/to/DexAgroswapSmartContracts/Agroswap pnpm sync:abis
+```
+
+**Important:** Always use an absolute path for `CONTRACTS_REPO`.
+
+The sync script:
+- Extracts ABIs from Hardhat artifacts in the contracts repo
+- Validates that required events exist
+- Writes only the ABI array (Goldsky-friendly format) to `agroswap-subgraph/abis/`
+
+See `agroswap-subgraph/GOLDSKY_SETUP.md` for detailed ABI sync documentation.
+
 ---
 
 ## Setting Up Goldsky

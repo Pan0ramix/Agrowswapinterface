@@ -5,8 +5,12 @@
  */
 
 import JSBI from 'jsbi'
+import {
+  formatProviderError,
+  isIntegerString,
+  toCurrencyAmountRaw,
+} from 'uniswap/src/features/positions/fees/utils/currencyAmountRaw'
 import { describe, expect, it } from 'vitest'
-import { formatProviderError, isIntegerString, toCurrencyAmountRaw } from 'uniswap/src/features/positions/fees/utils/currencyAmountRaw'
 
 describe('isIntegerString', () => {
   it('should accept valid integer strings', () => {
@@ -98,4 +102,3 @@ describe('formatProviderError', () => {
     expect(formatProviderError(null)).toBe('null')
   })
 })
-

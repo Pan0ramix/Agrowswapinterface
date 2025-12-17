@@ -5,7 +5,6 @@ import { useSearchParams } from 'react-router'
 import { Anchor, Button, Flex, SpinningLoader, Text } from 'ui/src'
 import { EnvelopeHeart } from 'ui/src/components/icons/EnvelopeHeart'
 import { Passkey } from 'ui/src/components/icons/Passkey'
-import { UniswapLogo } from 'ui/src/components/icons/UniswapLogo'
 import { uniswapUrls } from 'uniswap/src/constants/urls'
 import { parseMessage } from 'uniswap/src/extension/messagePassing/platform'
 import {
@@ -176,9 +175,7 @@ export default function ExtensionPasskeyAuthPopUp() {
             </Flex>
           </Flex>
 
-          <Flex alignItems="center">
-            <UniswapLogo size="$icon.40" color="$accent1" />
-          </Flex>
+          <Flex alignItems="center">{/* <UniswapLogo size="$icon.40" color="$accent1" /> */}</Flex>
 
           {signInAttemptStatus === ReferrerVerification.Denied ? (
             <Flex alignItems="center" px="$spacing60">

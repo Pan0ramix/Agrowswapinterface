@@ -242,4 +242,3 @@ describe('UI data-source logic (documentation)', () => {
     })
   })
 })
-

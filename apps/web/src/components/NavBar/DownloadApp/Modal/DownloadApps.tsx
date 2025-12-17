@@ -25,7 +25,6 @@ import {
   TouchableArea,
   useSporeColors,
 } from 'ui/src'
-import { UNISWAP_LOGO } from 'ui/src/assets'
 import { BackArrow } from 'ui/src/components/icons/BackArrow'
 import { GoogleChromeLogo } from 'ui/src/components/logos/GoogleChromeLogo'
 import { iconSizes, zIndexes } from 'ui/src/theme'
@@ -172,7 +171,7 @@ function DownloadApps({ setPage }: { setPage: (page: Page) => void }) {
       <ModalContent
         title={t('downloadApp.modal.getTheApp.title')}
         subtext={t('downloadApp.modal.uniswapProducts.subtitle')}
-        header={<Image height={iconSizes.icon64} source={UNISWAP_LOGO} width={iconSizes.icon64} />}
+        header={null /* <Image height={iconSizes.icon64} source={UNISWAP_LOGO} width={iconSizes.icon64} /> */}
         maxWidth="620px"
       >
         <Flex row gap="$spacing12" width="100%" alignItems="flex-start">

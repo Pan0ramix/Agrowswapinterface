@@ -26,4 +26,3 @@ export {
   isIntegerString,
   toCurrencyAmountRaw,
 } from './utils/currencyAmountRaw'
-

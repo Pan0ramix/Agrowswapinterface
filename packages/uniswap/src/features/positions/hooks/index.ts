@@ -3,4 +3,3 @@ export type {
   UseOnChainCollectableFeesReturn,
 } from './useOnChainCollectableFees'
 export { useOnChainCollectableFees } from './useOnChainCollectableFees'
-

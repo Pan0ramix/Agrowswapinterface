@@ -1,8 +1,6 @@
 import { ConnectingViewWrapper } from 'pages/Swap/Buy/shared'
 import { Trans } from 'react-i18next'
-import { Button, Flex, Image, Text, useIsDarkMode } from 'ui/src'
-import { UNISWAP_LOGO_LARGE } from 'ui/src/assets'
-import { iconSizes } from 'ui/src/theme'
+import { Button, Flex, Text, useIsDarkMode } from 'ui/src'
 import { ServiceProviderLogoStyles } from 'uniswap/src/features/fiatOnRamp/constants'
 import { FORServiceProvider } from 'uniswap/src/features/fiatOnRamp/types'
 import { getOptionalServiceProviderLogo } from 'uniswap/src/features/fiatOnRamp/utils'
@@ -20,9 +18,9 @@ export function ProviderConnectionError({ onBack, closeModal, selectedServicePro
     <ConnectingViewWrapper closeModal={closeModal} onBack={onBack}>
       <Flex alignItems="center" gap="$spacing36">
         <Flex row gap="$spacing16">
-          <Flex alignItems="center" justifyContent="center" style={ServiceProviderLogoStyles.uniswapLogoWrapper}>
+          {/* <Flex alignItems="center" justifyContent="center" style={ServiceProviderLogoStyles.uniswapLogoWrapper}>
             <Image height={iconSizes.icon64} source={UNISWAP_LOGO_LARGE} width={iconSizes.icon64} />
-          </Flex>
+          </Flex> */}
           <img
             style={ServiceProviderLogoStyles.uniswapLogoWrapper}
             height={120}

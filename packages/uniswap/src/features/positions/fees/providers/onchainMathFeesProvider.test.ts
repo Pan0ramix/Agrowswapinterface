@@ -245,4 +245,3 @@ describe('computeFeesOwed', () => {
     expect(result).toBe(expectedFeesFromGrowth)
   })
 })
-

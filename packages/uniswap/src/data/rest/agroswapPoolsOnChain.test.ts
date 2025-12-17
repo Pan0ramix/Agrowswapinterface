@@ -1,6 +1,6 @@
 /**
  * Unit tests for agroswapPoolsOnChain.ts parsing logic
- * 
+ *
  * Tests to ensure fetchPoolData handles missing/undefined multicall results gracefully
  */
 
@@ -75,4 +75,3 @@ describe('fetchPoolData parsing', () => {
     expect(result).toBe('0')
   })
 })
-

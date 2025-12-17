@@ -22,10 +22,8 @@ import { useModalState } from 'hooks/useModalState'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useUserHasAvailableClaim, useUserUnclaimedAmount } from 'state/claim/hooks'
-import { Button, Flex, IconButton, Image, useSporeColors } from 'ui/src'
-import { UNISWAP_LOGO } from 'ui/src/assets'
+import { Button, Flex, IconButton, useSporeColors } from 'ui/src'
 import { Shine } from 'ui/src/loading/Shine'
-import { iconSizes } from 'ui/src/theme'
 import AnimatedNumber, {
   BALANCE_CHANGE_INDICATION_DURATION,
 } from 'uniswap/src/components/AnimatedNumber/AnimatedNumber'
@@ -127,7 +125,7 @@ export default function AuthenticatedHeader({
               <IconButton
                 size="small"
                 emphasis="text-only"
-                icon={<Image height={iconSizes.icon24} source={UNISWAP_LOGO} width={iconSizes.icon24} />}
+                icon={null} // <Image height={iconSizes.icon24} source={UNISWAP_LOGO} width={iconSizes.icon24} />}
                 borderRadius="$rounded32"
                 hoverStyle={{
                   backgroundColor: '$surface2',

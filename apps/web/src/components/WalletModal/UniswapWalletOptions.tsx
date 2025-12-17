@@ -9,8 +9,7 @@ import { useAtom } from 'jotai'
 import { PropsWithChildren } from 'react'
 import { Trans } from 'react-i18next'
 import { persistHideMobileAppPromoBannerAtom } from 'state/application/atoms'
-import { Flex, Image, Text } from 'ui/src'
-import { UNISWAP_LOGO } from 'ui/src/assets'
+import { Flex, Text } from 'ui/src'
 import { AppStoreLogo } from 'ui/src/components/icons/AppStoreLogo'
 import { PhoneDownload } from 'ui/src/components/icons/PhoneDownload'
 import { ScanQr } from 'ui/src/components/icons/ScanQr'
@@ -79,7 +78,7 @@ export function UniswapWalletOptions() {
           >
             <Flex row grow justifyContent="space-between" alignItems="center">
               <Flex row gap="$gap12" alignItems="center">
-                <Image height={iconSizes.icon40} source={UNISWAP_LOGO} width={iconSizes.icon40} />
+                {/* <Image height={iconSizes.icon40} source={UNISWAP_LOGO} width={iconSizes.icon40} /> */}
                 <Text variant="buttonLabel2" color="$neutral1" whiteSpace="nowrap">
                   <Trans i18nKey="common.extension" />
                 </Text>
@@ -93,10 +92,8 @@ export function UniswapWalletOptions() {
         <OptionContainer
           onPress={() => (uniswapMobileWallet ? connectWallet({ wallet: uniswapMobileWallet, onSuccess }) : undefined)}
         >
-          {isMobileWeb ? (
-            <Image height={iconSizes.icon40} source={UNISWAP_LOGO} width={iconSizes.icon40} />
-          ) : (
-            <ScanQr
+          {isMobileWeb ? // <Image height={iconSizes.icon40} source={UNISWAP_LOGO} width={iconSizes.icon40} />
+          null : (
               size={iconSizes.icon40}
               minWidth={iconSizes.icon40}
               color="$accent1"

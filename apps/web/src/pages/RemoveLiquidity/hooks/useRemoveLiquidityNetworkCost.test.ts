@@ -4,7 +4,7 @@
  * Tests to ensure on-chain gas estimation works correctly
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock viem and other dependencies
 vi.mock('uniswap/src/features/providers/createViemClient', () => ({

@@ -1,10 +1,10 @@
 /**
  * Unit tests for locales.web.ts
- * 
+ *
  * Tests to ensure getDeviceLocales handles missing chrome.i18n gracefully
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock chrome globally
 const mockChrome = {

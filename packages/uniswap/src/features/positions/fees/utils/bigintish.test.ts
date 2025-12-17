@@ -53,4 +53,3 @@ describe('zeroBigInt', () => {
     expect(typeof zeroBigInt()).toBe('bigint')
   })
 })
-

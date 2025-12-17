@@ -1,10 +1,10 @@
 /**
  * Unit tests for useGasFeeQuery gating logic
- * 
+ *
  * Tests to ensure gas fee query is disabled when API not configured
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock the dependencies
 vi.mock('uniswap/src/config', () => ({

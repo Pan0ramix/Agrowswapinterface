@@ -129,6 +129,7 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
             lineHeight={76}
             textAlign="center"
             fontWeight="$book"
+            color="$white"
             $md={{ fontSize: 52 }}
             $sm={{ variant: 'heading2', fontSize: 36 }}
             $short={{ variant: 'heading2', fontSize: 36 }}
@@ -191,10 +192,10 @@ export function Hero({ scrollToRef, transition }: HeroProps) {
           >
             <Hover>
               <ColumnCenter>
-                <Text variant="body2">
+                <Text variant="body2" color="$white">
                   <Trans i18nKey="hero.scroll" />
                 </Text>
-                <ChevronDown />
+                <ChevronDown color="white" />
               </ColumnCenter>
             </Hover>
           </Flex>

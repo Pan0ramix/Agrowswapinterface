@@ -45,4 +45,3 @@ export function toBigintIshSafe(x: unknown): bigint {
 export function zeroBigInt(): bigint {
   return 0n
 }
-

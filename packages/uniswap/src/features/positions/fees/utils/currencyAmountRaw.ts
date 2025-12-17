@@ -100,4 +100,3 @@ export function toCurrencyAmountRaw(value: unknown): string {
     `Cannot convert value to CurrencyAmount raw value: expected bigint|string|JSBI, got ${typeof value} (value: ${String(value)})`,
   )
 }
-

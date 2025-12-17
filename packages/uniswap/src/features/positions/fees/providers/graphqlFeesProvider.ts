@@ -72,4 +72,3 @@ export function positionInfoToPositionFees(
     updatedAt: Date.now(),
   }
 }
-

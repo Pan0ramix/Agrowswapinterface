@@ -118,4 +118,3 @@ describe('parseCollectResult', () => {
     expect(() => parseCollectResult(null)).toThrow('expected array or object')
   })
 })
-

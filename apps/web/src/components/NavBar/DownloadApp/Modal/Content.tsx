@@ -45,7 +45,8 @@ export function ModalContent({
         </Flex>
         <Flex alignItems="center" gap="$spacing32" maxWidth="480px" {...rest}>
           <Flex alignItems="center" gap="$spacing12">
-            {header ?? <Image height={iconSizes.icon64} source={UNISWAP_LOGO} width={iconSizes.icon64} />}
+            {/* Logo commented out: {header ?? <Image height={iconSizes.icon64} source={UNISWAP_LOGO} width={iconSizes.icon64} />} */}
+            {header}
             <Flex alignItems="center" gap="$spacing12" px="$spacing40">
               <Text variant="heading3" color="$neutral1">
                 {title}

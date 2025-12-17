@@ -6,7 +6,6 @@ import { tradingApiVersionPrefix, uniswapUrls } from 'uniswap/src/constants/urls
 import { createUniswapFetchClient } from 'uniswap/src/data/apiClients/createUniswapFetchClient'
 import { filterChainIdsByPlatform } from 'uniswap/src/features/chains/utils'
 import { Platform } from 'uniswap/src/features/platforms/types/Platform'
-import { logger } from 'utilities/src/logger/logger'
 
 const TradingFetchClient = createUniswapFetchClient({
   baseUrl: uniswapUrls.tradingApiUrl,

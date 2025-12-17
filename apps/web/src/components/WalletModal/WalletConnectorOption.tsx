@@ -10,7 +10,7 @@ import { useConnectWallet } from 'features/wallet/connection/hooks/useConnectWal
 import { Trans, useTranslation } from 'react-i18next'
 import { ThemedText } from 'theme/components'
 import { Flex, Image, Text, useSporeColors } from 'ui/src'
-import { BINANCE_WALLET_ICON, UNISWAP_LOGO } from 'ui/src/assets'
+import { BINANCE_WALLET_ICON } from 'ui/src/assets'
 import { Chevron } from 'ui/src/components/icons/Chevron'
 import { Passkey } from 'ui/src/components/icons/Passkey'
 import { ScanQr } from 'ui/src/components/icons/ScanQr'
@@ -45,9 +45,7 @@ function EmbeddedWalletIcon() {
 }
 
 function UniswapMobileIcon({ iconSize }: { iconSize: number }) {
-  return isMobileWeb ? (
-    <Image height={iconSize} source={UNISWAP_LOGO} width={iconSize} />
-  ) : (
+  return isMobileWeb ? null : ( // <Image height={iconSize} source={UNISWAP_LOGO} width={iconSize} />
     <ScanQr size={iconSize} minWidth={iconSize} color="$accent1" backgroundColor="$accent2" borderRadius={8} p={7} />
   )
 }
@@ -210,7 +208,7 @@ function WalletConnectorOptionBase({
   isDisabled,
   analyticsProperties,
 }: {
-  icon: JSX.Element
+  icon: JSX.Element | null
   text: string | undefined
   rightSideDetail: JSX.Element | null
   onPress: () => void

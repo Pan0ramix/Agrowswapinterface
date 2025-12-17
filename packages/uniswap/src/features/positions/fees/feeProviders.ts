@@ -54,4 +54,3 @@ export type FeeProviderParams = {
  * Providers should never throw; return { ok: false } on failure
  */
 export type FeeProvider = (params: FeeProviderParams) => Promise<FeeProviderResult> | FeeProviderResult
-

@@ -6,12 +6,10 @@ import { Pool } from 'components/Icons/Pool'
 import { ExtensionRequestMethods, useUniswapExtensionRequest } from 'components/WalletModal/useWagmiConnectorWithId'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Button, Flex, Image, useSporeColors } from 'ui/src'
-import { UNISWAP_LOGO } from 'ui/src/assets'
+import { Button, Flex, useSporeColors } from 'ui/src'
 import { ArrowRightToLine } from 'ui/src/components/icons/ArrowRightToLine'
 import { RotatableChevron } from 'ui/src/components/icons/RotatableChevron'
 import { TimePast } from 'ui/src/components/icons/TimePast'
-import { iconSizes } from 'ui/src/theme/iconSizes'
 import { useGetPositionsQuery } from 'uniswap/src/data/rest/getPositions'
 
 const UnreadIndicator = () => {
@@ -70,7 +68,7 @@ export function ExtensionDeeplinks({ account }: { account: string }) {
   return (
     <Flex gap="$spacing8">
       <DeepLinkButton
-        Icon={<Image height={iconSizes.icon20} source={UNISWAP_LOGO} width={iconSizes.icon20} />}
+        Icon={null} // <Image height={iconSizes.icon20} source={UNISWAP_LOGO} width={iconSizes.icon20} />}
         Label={t('extension.open')}
         onPress={() => {
           uniswapExtensionRequest(ExtensionRequestMethods.OPEN_SIDEBAR, 'Tokens')

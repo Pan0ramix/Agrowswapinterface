@@ -1,6 +1,7 @@
 import type { Currency } from '@uniswap/sdk-core'
 import { CurrencyAmount } from '@uniswap/sdk-core'
 import { TradingApi } from '@universe/api'
+import type { RemoveLiqNetworkCost } from 'pages/RemoveLiquidity/hooks/useRemoveLiquidityNetworkCost'
 import { useRemoveLiquidityTxAndGasInfo } from 'pages/RemoveLiquidity/hooks/useRemoveLiquidityTxAndGasInfo'
 import { useRemoveLiquidityModalContext } from 'pages/RemoveLiquidity/RemoveLiquidityModalContext'
 import type { PropsWithChildren } from 'react'
@@ -10,8 +11,6 @@ import { LiquidityTransactionType } from 'uniswap/src/features/transactions/liqu
 import { validateTransactionRequest } from 'uniswap/src/features/transactions/swap/utils/trade'
 import { useWallet } from 'uniswap/src/features/wallet/hooks/useWallet'
 import { logContextUpdate } from 'utilities/src/logger/contextEnhancer'
-
-import type { RemoveLiqNetworkCost } from 'pages/RemoveLiquidity/hooks/useRemoveLiquidityNetworkCost'
 
 export type RemoveLiquidityTxInfo = {
   gasFeeEstimateUSD?: CurrencyAmount<Currency>

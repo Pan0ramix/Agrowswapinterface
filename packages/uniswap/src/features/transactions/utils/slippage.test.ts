@@ -402,4 +402,3 @@ describe('MAX_SLIPPAGE_TOLERANCE_BPS constant', () => {
     expect(MAX_SLIPPAGE_TOLERANCE_BPS).toBe(5_000)
   })
 })
-

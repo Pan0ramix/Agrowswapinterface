@@ -374,13 +374,16 @@ export function useRemoveLiquidityTxAndGasInfo({ account }: { account?: string }
   }, [useOnChainV3, onChainDecreaseLiquidity.txPayload, account])
 
   // Use on-chain network cost hook for Base Sepolia (Alchemy RPC)
-  const { data: onChainNetworkCost, isLoading: onChainGasLoading, error: onChainGasError } =
-    useRemoveLiquidityNetworkCost({
-      chainId: chainId as EVMUniverseChainId | undefined,
-      account,
-      txRequest: onChainTxRequest,
-      enabled: useOnChainV3 && !!onChainTxRequest && !!account && !!chainId,
-    })
+  const {
+    data: onChainNetworkCost,
+    isLoading: onChainGasLoading,
+    error: onChainGasError,
+  } = useRemoveLiquidityNetworkCost({
+    chainId: chainId as EVMUniverseChainId | undefined,
+    account,
+    txRequest: onChainTxRequest,
+    enabled: useOnChainV3 && !!onChainTxRequest && !!account && !!chainId,
+  })
 
   // Use Trading API/Uniswap API gas estimation ONLY for non-on-chain paths
   // IMPORTANT: Skip entirely when useOnChainV3 is true to prevent /v1/gas-fee calls
